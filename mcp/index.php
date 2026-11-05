@@ -2,7 +2,7 @@
 declare(strict_types=1);
 /**
  * wedo board – Connector für Claude (MCP, Streamable HTTP, zustandslos).
- * Adresse: https://board.wedo.science/mcp/<api-token>
+ * Adresse: https://nablet.top/mcp/<api-token>
  */
 require dirname(__DIR__) . '/lib/bootstrap.php';
 require WB_ROOT . '/lib/qr.php';

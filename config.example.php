@@ -10,7 +10,7 @@ return [
         'charset' => 'utf8mb4',
     ],
     // Öffentliche Adresse ohne Schrägstrich am Ende.
-    'base_url' => 'https://board.wedo.science',
+    'base_url' => 'https://nablet.top',
     // Standardsprache für neue Boards: 'de' oder 'en'.
     'default_lang' => 'de',
     // Zeitzone für Zeitangaben.

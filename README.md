@@ -8,15 +8,15 @@ PHP 8.1 oder neuer mit den Erweiterungen PDO MySQL, GD und mbstring, dazu eine M
 
 ## Installation auf cyon
 
-Lege im Kundencenter die Subdomain `board.wedo.science` mit eigenem Ordner und SSL an sowie eine MySQL-Datenbank mit Benutzer. Hole den Code in diesen Ordner, am einfachsten per SSH:
+Lege im Kundencenter die Domain `nablet.top` mit eigenem Ordner und SSL an sowie eine MySQL-Datenbank mit Benutzer. Hole den Code in diesen Ordner, am einfachsten per SSH:
 
 ```
-cd ~/public_html/board.wedo.science   # Pfad des Subdomain-Ordners
+cd ~/public_html/nablet.top
 git clone https://github.com/raphael303/wedo-board.git .
 cp config.example.php config.php
 ```
 
-Trage in `config.php` Datenbankname, Benutzer und Passwort ein und prüfe `base_url`. Rufe danach `https://board.wedo.science/install.php` auf, wähle ein Admin-Passwort und notiere den angezeigten API-Token (er ist später auch in der Bibliothek unter Einstellungen sichtbar). Die Installationsseite sperrt sich danach selbst. Die Bibliothek liegt unter `https://board.wedo.science/admin/`.
+Trage in `config.php` Datenbankname, Benutzer und Passwort ein und prüfe `base_url`. Rufe danach `https://nablet.top/install.php` auf, wähle ein Admin-Passwort und notiere den angezeigten API-Token (er ist später auch in der Bibliothek unter Einstellungen sichtbar). Die Installationsseite sperrt sich danach selbst. Die Bibliothek liegt unter `https://nablet.top/admin/`.
 
 Ohne SSH geht es auch mit dem Dateimanager oder FTP: Repository als ZIP von GitHub laden, in den Subdomain-Ordner entpacken, `config.php` anlegen, `install.php` aufrufen.
 
@@ -25,7 +25,7 @@ Für ein privates Repository braucht `git clone` auf dem Server ein Zugangstoken
 ## Aktualisieren
 
 ```
-cd ~/public_html/board.wedo.science
+cd ~/public_html/nablet.top
 git pull
 ```
 
@@ -33,7 +33,7 @@ git pull
 
 ## Connector für Claude
 
-In der Bibliothek unter Einstellungen steht die Connector-Adresse `https://board.wedo.science/mcp/<token>`. Sie wird in den Claude-Einstellungen unter Connectoren als eigener Connector ohne Anmeldung hinzugefügt; danach kann Claude Boards anlegen, suchen, lesen, leeren, archivieren und QR-Codes liefern.
+In der Bibliothek unter Einstellungen steht die Connector-Adresse `https://nablet.top/mcp/<token>`. Sie wird in den Claude-Einstellungen unter Connectoren als eigener Connector ohne Anmeldung hinzugefügt; danach kann Claude Boards anlegen, suchen, lesen, leeren, archivieren und QR-Codes liefern.
 
 ## Lokale Entwicklung
 
@@ -46,3 +46,7 @@ php -S localhost:8080 dev-router.php
 ## Aufbau
 
 `board.php` ist die Gästeseite, `admin/` die Bibliothek, `api/index.php` die Schnittstelle, `mcp/index.php` der Connector, `lib/` die gemeinsame Logik, `lang/` die Sprachdateien, `assets/` CSS und JavaScript ohne Abhängigkeiten, `vendor/qrcode.php` der QR-Generator (MIT-Lizenz), `uploads/` die hochgeladenen Bilder (nicht im Repository).
+
+## Domain
+
+Die App lief zuerst unter `board.wedo.science`; diese Adresse leitet per `.htaccess` dauerhaft auf `nablet.top` um, sodass alte Links und QR-Codes weiter funktionieren.

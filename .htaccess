@@ -6,6 +6,10 @@ AddDefaultCharset utf-8
 RewriteEngine On
 RewriteBase /
 
+# Alte Adresse und www auf die Hauptdomain umleiten
+RewriteCond %{HTTP_HOST} ^(www\.nablet\.top|board\.wedo\.science)$ [NC]
+RewriteRule ^(.*)$ https://nablet.top/$1 [R=301,L]
+
 # Authorization-Header an PHP durchreichen (für Bearer-Token)
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

@@ -1,6 +1,6 @@
 # wedo board – Schnittstelle
 
-Basis: `https://board.wedo.science/api/`. Alle Antworten sind JSON mit `ok: true` oder `ok: false` und `error`. Zeitstempel sind UTC im Format `YYYY-MM-DD HH:MM:SS.ffffff`; in Exporten stehen sie in lokaler Zeit (`Europe/Zurich`).
+Basis: `https://nablet.top/api/`. Alle Antworten sind JSON mit `ok: true` oder `ok: false` und `error`. Zeitstempel sind UTC im Format `YYYY-MM-DD HH:MM:SS.ffffff`; in Exporten stehen sie in lokaler Zeit (`Europe/Zurich`).
 
 ## Authentifizierung
 
@@ -33,7 +33,7 @@ Prüfung des Tokens: `GET /api/me` → `{ok, owner: true, version, base_url}`.
 
 `POST /api/boards/{key}/clear` entfernt alle Beiträge, Kommentare und Reaktionen (weich, 30 Tage wiederherstellbar in der Datenbank). `POST /api/boards/{key}/close` und `.../open` schalten das Schreiben aus und ein. `POST /api/boards/{key}/archive` versteckt das Board vor Gästen. `POST /api/boards/{key}/duplicate` mit optionalem `{name}` kopiert die Struktur ohne Inhalte und gibt das neue Board zurück. `DELETE /api/boards/{key}` (oder `POST .../delete`) löscht endgültig inklusive Bilder.
 
-Ein `Board`-Objekt enthält `id, key, slug, name, type, columns, background, lang, settings, status, note, tags, url, qr_svg, qr_png, post_count, comment_count, created_at, updated_at, last_activity_at`. `url` ist der Kurzlink für die Klasse (`https://board.wedo.science/<slug>`), `long_url` der lange Link über den Schlüssel.
+Ein `Board`-Objekt enthält `id, key, slug, name, type, columns, background, lang, settings, status, note, tags, url, qr_svg, qr_png, post_count, comment_count, created_at, updated_at, last_activity_at`. `url` ist der Kurzlink für die Klasse (`https://nablet.top/<slug>`), `long_url` der lange Link über den Schlüssel.
 
 ## Besitzer: Inhalte
 
@@ -51,7 +51,7 @@ Ein `Board`-Objekt enthält `id, key, slug, name, type, columns, background, lan
 
 ## Connector
 
-`POST https://board.wedo.science/mcp/<token>` ist ein MCP-Server (Streamable HTTP, zustandslos, JSON-Antworten). Er bietet die Werkzeuge `list_boards`, `get_board`, `create_board`, `update_board`, `clear_board`, `duplicate_board`, `delete_board`, `read_board`, `delete_post` und `get_board_qr`; die Beschreibungen und Parameter liefert `tools/list`. Die Adresse steht in der Bibliothek unter Einstellungen und wird in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen.
+`POST https://nablet.top/mcp/<token>` ist ein MCP-Server (Streamable HTTP, zustandslos, JSON-Antworten). Er bietet die Werkzeuge `list_boards`, `get_board`, `create_board`, `update_board`, `clear_board`, `duplicate_board`, `delete_board`, `read_board`, `delete_post` und `get_board_qr`; die Beschreibungen und Parameter liefert `tools/list`. Die Adresse steht in der Bibliothek unter Einstellungen und wird in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen.
 
 ## Beispiel für Claude
 

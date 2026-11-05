@@ -20,8 +20,29 @@ function wb_base_url(): string {
     return rtrim((string)wb_config('base_url', ''), '/');
 }
 
-function wb_board_url(string $key): string {
-    return wb_base_url() . '/b/' . $key;
+function wb_board_url(string $key, ?string $slug = null): string {
+    return wb_base_url() . '/' . ($slug !== null && $slug !== '' ? $slug : 'b/' . $key);
+}
+
+/**
+ * Aussprechbares Kurzwort (Konsonant-Vokal-Konsonant-Vokal-Konsonant) ohne verwechselbare Buchstaben.
+ */
+function wb_short_word(): string {
+    $c = 'bdfghkmnprstvwz';
+    $v = 'aeiou';
+    return $c[random_int(0, 14)] . $v[random_int(0, 4)] . $c[random_int(0, 14)] . $v[random_int(0, 4)] . $c[random_int(0, 14)];
+}
+
+function wb_reserved_slugs(): array {
+    return ['admin', 'api', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about'];
+}
+
+function wb_valid_slug(?string $s): ?string {
+    $s = strtolower(trim((string)$s));
+    if ($s === '') return null;
+    if (!preg_match('/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/', $s)) return null;
+    if (in_array($s, wb_reserved_slugs(), true)) return null;
+    return $s;
 }
 
 function wb_now(): string {

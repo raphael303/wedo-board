@@ -25,6 +25,7 @@ try {
         owner_boards_api($method, $parts);
     } elseif ($head === 'me' && $method === 'GET') {
         wb_require_owner();
+        db_migrate();
         wb_json(['ok' => true, 'owner' => true, 'version' => WB_VERSION, 'base_url' => wb_base_url()]);
     } elseif ($head === 'maintenance' && ($parts[1] ?? '') === 'purge' && $method === 'POST') {
         wb_require_owner();
@@ -221,7 +222,7 @@ function owner_boards_api(string $method, array $p): never {
 
     // QR-Codes sind öffentlich: wer den Schlüssel kennt, kennt bereits den Link.
     if ($key !== '' && in_array($action, ['qr.svg', 'qr.png'], true) && $method === 'GET') {
-        $board = board_by_key($key);
+        $board = board_find($key);
         if (!$board) wb_error('Board nicht gefunden.', 404);
         header('Cache-Control: public, max-age=86400');
         if ($action === 'qr.svg') {
@@ -236,6 +237,7 @@ function owner_boards_api(string $method, array $p): never {
     }
 
     wb_require_owner();
+    db_migrate();
     $in = wb_read_json_body();
 
     if ($key === '') {
@@ -251,7 +253,7 @@ function owner_boards_api(string $method, array $p): never {
         wb_error('Unbekannter Aufruf.', 404);
     }
 
-    $board = board_by_key($key);
+    $board = board_find($key);
     if (!$board) wb_error('Board nicht gefunden.', 404);
 
     if ($action === '') {

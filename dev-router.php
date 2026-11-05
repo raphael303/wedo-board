@@ -12,6 +12,16 @@ if (preg_match('~^/api/(.*)$~', $uri, $m)) {
     require __DIR__ . '/api/index.php';
     return true;
 }
+if (preg_match('~^/mcp/([a-f0-9]{48})/?$~', $uri, $m)) {
+    $_GET['token'] = $m[1];
+    require __DIR__ . '/mcp/index.php';
+    return true;
+}
+if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$~', $uri, $m) && !is_dir(__DIR__ . '/' . $m[1]) && !file_exists(__DIR__ . '/' . $m[1])) {
+    $_GET['slug'] = $m[1];
+    require __DIR__ . '/board.php';
+    return true;
+}
 if (preg_match('~^/(lib|lang|vendor|\.git)(/|$)~', $uri) || preg_match('~^/(config.*\.php|.*\.md)$~', $uri)) {
     http_response_code(404);
     return true;

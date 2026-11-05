@@ -29,7 +29,11 @@ cd ~/public_html/board.wedo.science
 git pull
 ```
 
-Änderungen am Datenbankschema werden in künftigen Versionen über `install.php` oder eine Migrationsseite nachgezogen; das steht dann in den Versionshinweisen.
+Änderungen am Datenbankschema laufen beim nächsten Öffnen der Bibliothek oder beim nächsten Besitzer-Aufruf automatisch (`lib/migrate.php`).
+
+## Connector für Claude
+
+In der Bibliothek unter Einstellungen steht die Connector-Adresse `https://board.wedo.science/mcp/<token>`. Sie wird in den Claude-Einstellungen unter Connectoren als eigener Connector ohne Anmeldung hinzugefügt; danach kann Claude Boards anlegen, suchen, lesen, leeren, archivieren und QR-Codes liefern.
 
 ## Lokale Entwicklung
 
@@ -41,4 +45,4 @@ php -S localhost:8080 dev-router.php
 
 ## Aufbau
 
-`board.php` ist die Gästeseite, `admin/` die Bibliothek, `api/index.php` die Schnittstelle, `lib/` die gemeinsame Logik, `lang/` die Sprachdateien, `assets/` CSS und JavaScript ohne Abhängigkeiten, `vendor/qrcode.php` der QR-Generator (MIT-Lizenz), `uploads/` die hochgeladenen Bilder (nicht im Repository).
+`board.php` ist die Gästeseite, `admin/` die Bibliothek, `api/index.php` die Schnittstelle, `mcp/index.php` der Connector, `lib/` die gemeinsame Logik, `lang/` die Sprachdateien, `assets/` CSS und JavaScript ohne Abhängigkeiten, `vendor/qrcode.php` der QR-Generator (MIT-Lizenz), `uploads/` die hochgeladenen Bilder (nicht im Repository).

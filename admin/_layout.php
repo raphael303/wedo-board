@@ -7,6 +7,9 @@ if (!db_is_installed()) {
     exit;
 }
 wb_session_start();
+if (wb_is_admin_session()) {
+    db_migrate();
+}
 
 $adminLang = 'de';
 

@@ -47,6 +47,9 @@ admin_header('Einstellungen', 'settings');
   <p class="muted">Mit diesem Token darf Claude (oder jedes andere Programm) Boards anlegen, lesen, leeren und löschen. Behandle ihn wie ein Passwort.</p>
   <p><code class="token" id="token"><?= e($token) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e($token) ?>">Kopieren</button></p>
   <p class="muted">Basis‑Adresse der Schnittstelle: <code><?= e(wb_base_url()) ?>/api/</code>. Beschreibung in <code>API.md</code> im Repository.</p>
+  <h3>Connector für die Claude‑App</h3>
+  <p class="muted">Diese Adresse in den Claude‑Einstellungen unter «Connectoren» als eigenen Connector eintragen (ohne Anmeldung). Wer die Adresse kennt, kann Boards verwalten; bei einem neuen Token ändert sie sich.</p>
+  <p><code class="token"><?= e(wb_base_url()) ?>/mcp/<?= e($token) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e(wb_base_url()) ?>/mcp/<?= e($token) ?>">Kopieren</button></p>
   <form method="post" data-confirm="Neuen Token erzeugen? Der bisherige funktioniert danach nicht mehr."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="token"><button class="btn-ghost" type="submit">Neuen Token erzeugen</button></form>
 </section>
 

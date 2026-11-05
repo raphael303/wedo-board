@@ -2,7 +2,10 @@
 declare(strict_types=1);
 require __DIR__ . '/lib/bootstrap.php';
 
-$board = db_is_installed() ? board_by_key((string)($_GET['key'] ?? '')) : null;
+$board = null;
+if (db_is_installed()) {
+    $board = isset($_GET['slug']) ? board_by_slug((string)$_GET['slug']) : board_by_key((string)($_GET['key'] ?? ''));
+}
 $lang = wb_resolve_lang($board['lang'] ?? (string)wb_config('default_lang', 'de'));
 $uid = wb_client_uid();
 $owner = wb_is_owner();

@@ -22,6 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'save') {
             $in = [
                 'name' => $_POST['name'] ?? '',
+                'slug' => $_POST['slug'] ?? '',
                 'type' => $_POST['type'] ?? 'wall',
                 'columns' => $_POST['columns'] ?? '',
                 'background' => $_POST['background'] ?? 'morgen',
@@ -95,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $v = $board ?: [
-    'name' => '', 'type' => 'wall', 'columns' => [], 'background' => 'morgen', 'lang' => (string)wb_config('default_lang', 'de'),
+    'name' => '', 'slug' => '', 'type' => 'wall', 'columns' => [], 'background' => 'morgen', 'lang' => (string)wb_config('default_lang', 'de'),
     'settings' => wb_default_settings(), 'note' => '', 'tags' => [], 'status' => 'open',
 ];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error) {
@@ -124,7 +125,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
     <div class="qr-box">
       <img src="/api/boards/<?= e($board['bkey']) ?>/qr.svg" alt="QR-Code zum Board" width="180" height="180">
       <div>
-        <p class="muted">Für Folien und Arbeitsblätter. Beide Formate enthalten den Link <code><?= e($board['url']) ?></code>.</p>
+        <p class="muted">Für Folien und Arbeitsblätter. Beide Formate enthalten den Link <code><?= e($board['url']) ?></code>. Der lange Link <code><?= e($board['long_url']) ?></code> funktioniert ebenfalls.</p>
         <p><a class="btn-ghost" href="/api/boards/<?= e($board['bkey']) ?>/qr.png?px=20" download="<?= e(preg_replace('/[^a-z0-9]+/i', '-', $board['name'])) ?>-qr.png">PNG laden</a>
            <a class="btn-ghost" href="/api/boards/<?= e($board['bkey']) ?>/qr.svg" download="<?= e(preg_replace('/[^a-z0-9]+/i', '-', $board['name'])) ?>-qr.svg">SVG laden</a></p>
       </div>
@@ -163,6 +164,11 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
     <div class="row">
       <label for="name">Name</label>
       <input id="name" name="name" value="<?= e($v['name']) ?>" maxlength="200" required autofocus>
+    </div>
+    <div class="row">
+      <label for="slug">Kurzwort für den Link</label>
+      <div class="slug-row"><span class="muted"><?= e(wb_base_url()) ?>/</span><input id="slug" name="slug" value="<?= e((string)$v['slug']) ?>" maxlength="32" pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]" placeholder="leer lassen für ein automatisches Wort"></div>
+      <p class="hint">Kleinbuchstaben, Ziffern und Bindestrich. Leer lassen, dann entsteht ein aussprechbares Wort wie «tamok». Nach dem Archivieren wird das Wort wieder frei.</p>
     </div>
     <div class="row two">
       <div>

@@ -1,6 +1,6 @@
 # wedo board – Konzept
 
-Stand: 2026-11-05 (Etappe 1 umgesetzt). Diese Datei ist die verbindliche Wahrheit für das Projekt. Jede Änderung am Datenmodell, an der Schnittstelle oder an den Grundentscheiden wird hier nachgeführt, bevor sie im Code umgesetzt wird.
+Stand: 2026-11-05 (Etappen 1 und 2 umgesetzt, Version 0.2.0). Diese Datei ist die verbindliche Wahrheit für das Projekt. Jede Änderung am Datenmodell, an der Schnittstelle oder an den Grundentscheiden wird hier nachgeführt, bevor sie im Code umgesetzt wird.
 
 ## 1. Zweck
 
@@ -16,7 +16,7 @@ Der Besitzer meldet sich mit einem Passwort in der Bibliothek an und hat alle Re
 
 ## 4. Datenmodell
 
-Ein Board hat eine interne Nummer, einen öffentlichen Schlüssel (16 zufällige Zeichen, Teil der URL), einen Namen, einen Typ (`wall` für frei verteilt oder `columns` für Spalten), eine Liste von Spalten mit Überschrift und Reihenfolge, einen Hintergrund (Name eines von wenigen vordefinierten Farbverläufen), eine Sprache, Einstellungen (Kommentare erlaubt, Reaktionen erlaubt, Bilder erlaubt, Beiträge werden neu zuoberst oder zuunterst eingefügt), einen Status (`open`, `closed`, `archived`), eine Notiz (freier Text, von Besitzer und Claude lesbar und schreibbar, gedacht für Klasse, Fach, Thema, Datum, Lektionsbezug), Tags (freie Schlagwörter), sowie Zeitstempel für Erstellung, letzte Änderung und letzte Aktivität. Ein geschlossenes Board ist sichtbar, aber nicht mehr beschreibbar; ein archiviertes Board ist für Gäste nicht mehr erreichbar, bleibt aber in der Bibliothek.
+Ein Board hat eine interne Nummer, einen öffentlichen Schlüssel (16 zufällige Zeichen, Teil der langen URL `/b/<schlüssel>`), ein Kurzwort (`slug`, Standard ein aussprechbares Fünf-Buchstaben-Wort wie «tamok» aus Konsonant-Vokal-Wechsel ohne verwechselbare Buchstaben, vom Besitzer frei änderbar auf 3 bis 32 Zeichen aus Kleinbuchstaben, Ziffern und Bindestrich, nicht aus der Liste reservierter Pfade), einen Namen, einen Typ (`wall` für frei verteilt oder `columns` für Spalten), eine Liste von Spalten mit Überschrift und Reihenfolge, einen Hintergrund (Name eines von wenigen vordefinierten Farbverläufen), eine Sprache, Einstellungen (Kommentare erlaubt, Reaktionen erlaubt, Bilder erlaubt, Beiträge werden neu zuoberst oder zuunterst eingefügt), einen Status (`open`, `closed`, `archived`), eine Notiz (freier Text, von Besitzer und Claude lesbar und schreibbar, gedacht für Klasse, Fach, Thema, Datum, Lektionsbezug), Tags (freie Schlagwörter), sowie Zeitstempel für Erstellung, letzte Änderung und letzte Aktivität. Ein geschlossenes Board ist sichtbar, aber nicht mehr beschreibbar; ein archiviertes Board ist für Gäste nicht mehr erreichbar, bleibt aber in der Bibliothek. Der offizielle Link eines Boards ist der Kurzlink `https://board.wedo.science/<kurzwort>`; der lange Link funktioniert weiterhin, und der QR-Code enthält den Kurzlink. Kurzwörter sind nur unter nicht archivierten Boards eindeutig; mit dem Archivieren wird ein Kurzwort wieder frei, und ein aus dem Archiv geholtes Board erhält bei Konflikt ein neues Wort. Fünf Buchstaben sind erratbar; das ist für Klassen-Boards bewusst in Kauf genommen.
 
 Ein Beitrag gehört zu einem Board und optional zu einer Spalte. Er hat einen optionalen Titel, einen Text, optional ein Bild (Dateiname im Upload-Ordner) und optional einen Link, den Fantasienamen und den Browser-Schlüssel des Verfassers, eine Sortierposition, Zeitstempel sowie ein Feld für weiches Löschen. Ein Kommentar gehört zu einem Beitrag und hat Text, Fantasienamen, Browser-Schlüssel, Zeitstempel und ein Feld für weiches Löschen. Eine Reaktion gehört entweder zu einem Beitrag oder zu einem Kommentar und speichert Emoji und Browser-Schlüssel; pro Element, Emoji und Browser gibt es höchstens eine Reaktion, ein zweiter Klick nimmt sie zurück. Die erlaubten Emojis sind eine feste kleine Auswahl (zum Beispiel 👍 ❤️ 😂 🤔 👏 ⭐), die pro Board eingeschränkt werden kann.
 
@@ -40,9 +40,9 @@ Die Bibliothek liegt unter `/admin/` hinter einem Passwort-Login mit Sitzungscoo
 
 Alle Funktionen der Bibliothek stehen auch als JSON-Schnittstelle unter `/api/` bereit, authentifiziert mit dem Token im Header `Authorization: Bearer …`. Die Gäste-Funktionen (Beiträge, Kommentare, Reaktionen lesen und schreiben) benutzen dieselbe Schnittstelle ohne Token, mit dem Board-Schlüssel in der URL und dem Browser-Schlüssel im Cookie. Die wichtigsten Besitzer-Aufrufe sind: Boards auflisten und suchen, Board anlegen, Board lesen (Struktur und Notiz), Board ändern, Board leeren, schliessen, archivieren, löschen, Inhalte als strukturierten Text oder JSON auslesen, QR-Code als PNG oder SVG holen. Die Schnittstelle ist in `API.md` im Repository dokumentiert, damit Claude sie in jedem Chat nachlesen kann.
 
-## 9. Connector (Etappe 2)
+## 9. Connector
 
-Ein kleiner MCP-Server, der die Besitzer-Aufrufe der Schnittstelle als Werkzeuge anbietet, wird nach dem Board gebaut. Vorgesehener Weg: ein PHP-Endpunkt `/mcp/` mit Streamable HTTP, der direkt in den Claude-Einstellungen als eigener Connector eingetragen wird. Da die Werkzeuge nur dünne Hüllen um die Schnittstelle aus Abschnitt 8 sind, entsteht kein Mehraufwand durch die Reihenfolge; die Schnittstelle wird von Anfang an so gebaut, dass der Connector nichts Neues braucht. Falls cyon den Endpunkt nicht sauber bedienen kann, ist die Rückfalllösung, dass Claude die Bibliothek über den eingebauten Browser der Desktop-App bedient.
+`mcp/index.php` ist ein zustandsloser MCP-Server (Streamable HTTP, nur POST mit JSON-Antworten, kein Server-Stream) unter `https://board.wedo.science/mcp/<api-token>`. Weil Claude-Connectoren für eigene Dienste keinen Bearer-Token kennen, steckt der Token in der Adresse; ein falscher Token ergibt 404. Die Adresse wird einmal in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen und steht in der Bibliothek unter Einstellungen. Werkzeuge: `list_boards`, `get_board`, `create_board` (verlangt Notiz und Tags), `update_board` (auch Status und Kurzwort), `clear_board`, `duplicate_board`, `delete_board` (nur mit `confirm=true`), `read_board` (Markdown oder JSON), `delete_post` (Beitrag oder Kommentar), `get_board_qr` (PNG als Bildinhalt plus Adressen). Alle Werkzeuge rufen dieselben Funktionen in `lib/boards.php` wie Bibliothek und Schnittstelle; Boards werden über Kurzwort oder Schlüssel angesprochen.
 
 ## 10. Betrieb und Sicherheit
 
@@ -50,7 +50,9 @@ Der Code liegt in einem privaten GitHub-Repository; auf dem Server wird er per S
 
 ## 11. Etappen
 
-Etappe 1 umfasst Datenbank, Installationsseite, Gäste-Board (beide Typen, Beiträge, Kommentare, Reaktionen, Bilder, Fantasienamen, Bearbeiten und Löschen eigener Inhalte, Polling, Beamer-Modus, zwei Sprachen), Bibliothek mit allen Besitzerfunktionen, QR-Codes und Export sowie die dokumentierte Schnittstelle. Etappe 2 ist der Connector. Etappe 3 sind Erweiterungen nach Bedarf, zum Beispiel Server-Sent Events, weitere Hintergründe, Moderation vor Veröffentlichung oder Abstimmungen.
+Etappe 1 (umgesetzt) umfasst Datenbank, Installationsseite, Gäste-Board (beide Typen, Beiträge, Kommentare, Reaktionen, Bilder, Fantasienamen, Bearbeiten und Löschen eigener Inhalte, Polling, Beamer-Modus, zwei Sprachen), Bibliothek mit allen Besitzerfunktionen, QR-Codes und Export sowie die dokumentierte Schnittstelle. Etappe 2 (umgesetzt) sind Kurzwörter und der Connector. Etappe 3 sind Erweiterungen nach Bedarf, zum Beispiel Server-Sent Events, weitere Hintergründe, Moderation vor Veröffentlichung oder Abstimmungen. Ein allgemeiner Link-Kürzer für andere Inhalte ist ein eigenes, separates Projekt.
+
+Schema-Änderungen laufen über `lib/migrate.php` (nummerierte Migrationen, Stand in `settings.schema_version`); sie werden beim Öffnen der Bibliothek, bei Besitzer-Aufrufen der Schnittstelle und im Connector automatisch ausgeführt, sodass nach `git pull` nichts von Hand zu tun ist.
 
 ## 12. Umsetzungsnotizen
 

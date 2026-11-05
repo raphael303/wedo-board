@@ -50,6 +50,7 @@ function db_schema(): array {
         "CREATE TABLE IF NOT EXISTS boards (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             bkey CHAR(16) NOT NULL,
+            slug VARCHAR(32) NULL,
             name VARCHAR(200) NOT NULL,
             type ENUM('wall','columns') NOT NULL DEFAULT 'wall',
             columns_json TEXT NULL,
@@ -63,6 +64,7 @@ function db_schema(): array {
             updated_at DATETIME(6) NOT NULL,
             last_activity_at DATETIME(6) NOT NULL,
             UNIQUE KEY uk_bkey (bkey),
+            KEY ix_slug (slug),
             KEY ix_status (status),
             KEY ix_activity (last_activity_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",

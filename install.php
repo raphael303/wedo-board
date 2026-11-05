@@ -30,6 +30,7 @@ if (!$errors && $_SERVER['REQUEST_METHOD'] === 'POST') {
             setting_set('api_token', $token);
             setting_set('admin_password_hash', password_hash($pw, PASSWORD_DEFAULT));
             setting_set('installed_at', date('c'));
+            setting_set('schema_version', (string)WB_SCHEMA_VERSION);
             if (!is_dir(__DIR__ . '/uploads')) @mkdir(__DIR__ . '/uploads', 0755);
             $done = true;
         } catch (Throwable $e) {

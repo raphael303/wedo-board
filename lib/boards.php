@@ -9,6 +9,32 @@ function board_by_key(string $key): ?array {
     return $b ? board_normalize($b) : null;
 }
 
+function board_by_slug(string $slug): ?array {
+    $slug = wb_valid_slug($slug);
+    if ($slug === null) return null;
+    $b = db_row("SELECT * FROM boards WHERE slug = ? AND status <> 'archived' ORDER BY id DESC LIMIT 1", [$slug]);
+    return $b ? board_normalize($b) : null;
+}
+
+/** Findet ein Board über Schlüssel oder Kurzwort (für Bibliothek, API und Connector). */
+function board_find(string $ref): ?array {
+    $ref = trim($ref);
+    return board_by_key($ref) ?? board_by_slug($ref);
+}
+
+function board_slug_taken(string $slug, ?int $exceptId = null): bool {
+    $row = db_row("SELECT id FROM boards WHERE slug = ? AND status <> 'archived'" . ($exceptId ? ' AND id <> ?' : ''), $exceptId ? [$slug, $exceptId] : [$slug]);
+    return $row !== null;
+}
+
+function board_free_slug(): string {
+    for ($i = 0; $i < 50; $i++) {
+        $w = wb_short_word();
+        if (!in_array($w, wb_reserved_slugs(), true) && !board_slug_taken($w)) return $w;
+    }
+    return wb_short_word() . random_int(2, 9);
+}
+
 function board_by_id(int $id): ?array {
     $b = db_row('SELECT * FROM boards WHERE id = ?', [$id]);
     return $b ? board_normalize($b) : null;
@@ -20,7 +46,9 @@ function board_normalize(array $b): array {
     $b['settings'] = array_merge(wb_default_settings(), json_decode($b['settings_json'] ?? '{}', true) ?: []);
     $b['tags'] = wb_parse_tags($b['tags'] ?? '');
     unset($b['columns_json'], $b['settings_json']);
-    $b['url'] = wb_board_url($b['bkey']);
+    $b['slug'] = $b['slug'] ?? null;
+    $b['url'] = wb_board_url($b['bkey'], $b['status'] === 'archived' ? null : $b['slug']);
+    $b['long_url'] = wb_board_url($b['bkey']);
     return $b;
 }
 
@@ -44,6 +72,7 @@ function board_owner_view(array $b): array {
     return [
         'id' => $b['id'],
         'key' => $b['bkey'],
+        'slug' => $b['slug'],
         'name' => $b['name'],
         'type' => $b['type'],
         'columns' => $b['columns'],
@@ -54,6 +83,7 @@ function board_owner_view(array $b): array {
         'note' => (string)($b['note'] ?? ''),
         'tags' => $b['tags'],
         'url' => $b['url'],
+        'long_url' => $b['long_url'],
         'qr_svg' => wb_base_url() . '/api/boards/' . $b['bkey'] . '/qr.svg',
         'qr_png' => wb_base_url() . '/api/boards/' . $b['bkey'] . '/qr.png',
         'post_count' => (int)$counts['posts'],
@@ -118,12 +148,20 @@ function board_create(array $in): array {
     $settings = board_normalize_settings($in['settings'] ?? [], wb_default_settings());
     $note = wb_clean_text($in['note'] ?? '', 5000);
     $tags = wb_parse_tags($in['tags'] ?? '');
+    $slug = null;
+    if (isset($in['slug']) && trim((string)$in['slug']) !== '') {
+        $slug = wb_valid_slug((string)$in['slug']);
+        if ($slug === null) throw new InvalidArgumentException('Kurzwort ungültig: 3 bis 32 Zeichen, nur Kleinbuchstaben, Ziffern und Bindestrich, keine reservierten Wörter.');
+        if (board_slug_taken($slug)) throw new InvalidArgumentException('Kurzwort bereits vergeben.');
+    } else {
+        $slug = board_free_slug();
+    }
     $now = wb_now();
     $key = wb_random_key(16);
     $id = db_insert(
-        'INSERT INTO boards (bkey, name, type, columns_json, background, lang, settings_json, status, note, tags, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [$key, $name, $type, json_encode($columns, JSON_UNESCAPED_UNICODE), $bg, $lang,
+        'INSERT INTO boards (bkey, slug, name, type, columns_json, background, lang, settings_json, status, note, tags, created_at, updated_at, last_activity_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [$key, $slug, $name, $type, json_encode($columns, JSON_UNESCAPED_UNICODE), $bg, $lang,
          json_encode($settings, JSON_UNESCAPED_UNICODE), 'open', $note, implode(', ', $tags), $now, $now, $now]
     );
     return board_by_id($id);
@@ -152,8 +190,21 @@ function board_update(array $b, array $in): array {
     if (array_key_exists('settings', $in)) {
         $fields[] = 'settings_json = ?'; $params[] = json_encode(board_normalize_settings($in['settings'], $b['settings']), JSON_UNESCAPED_UNICODE);
     }
+    $newStatus = $b['status'];
     if (array_key_exists('status', $in) && in_array($in['status'], ['open', 'closed', 'archived'], true)) {
-        $fields[] = 'status = ?'; $params[] = $in['status'];
+        $newStatus = $in['status'];
+        $fields[] = 'status = ?'; $params[] = $newStatus;
+    }
+    if (array_key_exists('slug', $in)) {
+        $slug = trim((string)$in['slug']) === '' ? board_free_slug() : wb_valid_slug((string)$in['slug']);
+        if ($slug === null) throw new InvalidArgumentException('Kurzwort ungültig: 3 bis 32 Zeichen, nur Kleinbuchstaben, Ziffern und Bindestrich, keine reservierten Wörter.');
+        if ($slug !== $b['slug'] && board_slug_taken($slug, $b['id'])) throw new InvalidArgumentException('Kurzwort bereits vergeben.');
+        $fields[] = 'slug = ?'; $params[] = $slug;
+        $b['slug'] = $slug;
+    }
+    if ($newStatus !== 'archived' && $b['status'] === 'archived' && $b['slug'] && board_slug_taken($b['slug'], $b['id'])) {
+        // Beim Zurückholen aus dem Archiv ist das alte Kurzwort inzwischen vergeben.
+        $fields[] = 'slug = ?'; $params[] = board_free_slug();
     }
     if (array_key_exists('note', $in)) {
         $fields[] = 'note = ?'; $params[] = wb_clean_text($in['note'], 5000);

@@ -111,3 +111,6 @@ code { background: #eef0f3; padding: 2px 6px; border-radius: 5px; font-size: 0.9
 .commentlist .inline { display: inline; margin-left: 8px; }
 .inline { display: inline; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.slug-row { display: flex; align-items: center; gap: 4px; }
+.slug-row input { flex: 1; }
+h3 { font-size: 0.95rem; margin: 18px 0 6px; }

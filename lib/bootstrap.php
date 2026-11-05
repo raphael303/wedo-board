@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.1.0');
+define('WB_VERSION', '0.2.0');
+define('WB_SCHEMA_VERSION', 1);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {
@@ -21,6 +22,7 @@ require WB_ROOT . '/lib/auth.php';
 require WB_ROOT . '/lib/i18n.php';
 require WB_ROOT . '/lib/names.php';
 require WB_ROOT . '/lib/boards.php';
+require WB_ROOT . '/lib/migrate.php';
 
 function wb_config(string $key, $default = null) {
     return $GLOBALS['wb_config'][$key] ?? $default;

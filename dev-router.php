@@ -1,0 +1,23 @@
+<?php
+// Nur für die lokale Entwicklung: php -S localhost:8080 dev-router.php
+// Bildet die Regeln aus .htaccess nach.
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+if (preg_match('~^/b/([a-z0-9]{16})/?$~', $uri, $m)) {
+    $_GET['key'] = $m[1];
+    require __DIR__ . '/board.php';
+    return true;
+}
+if (preg_match('~^/api/(.*)$~', $uri, $m)) {
+    $_GET['route'] = $m[1];
+    require __DIR__ . '/api/index.php';
+    return true;
+}
+if (preg_match('~^/(lib|lang|vendor|\.git)(/|$)~', $uri) || preg_match('~^/(config.*\.php|.*\.md)$~', $uri)) {
+    http_response_code(404);
+    return true;
+}
+if (is_dir(__DIR__ . $uri) && file_exists(__DIR__ . rtrim($uri, '/') . '/index.php')) {
+    require __DIR__ . rtrim($uri, '/') . '/index.php';
+    return true;
+}
+return false;

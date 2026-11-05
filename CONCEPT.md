@@ -1,6 +1,6 @@
 # wedo board – Konzept
 
-Stand: 2026-11-05. Diese Datei ist die verbindliche Wahrheit für das Projekt. Jede Änderung am Datenmodell, an der Schnittstelle oder an den Grundentscheiden wird hier nachgeführt, bevor sie im Code umgesetzt wird.
+Stand: 2026-11-05 (Etappe 1 umgesetzt). Diese Datei ist die verbindliche Wahrheit für das Projekt. Jede Änderung am Datenmodell, an der Schnittstelle oder an den Grundentscheiden wird hier nachgeführt, bevor sie im Code umgesetzt wird.
 
 ## 1. Zweck
 
@@ -34,7 +34,7 @@ Das Design ist minimalistisch und modern: eine Sans-Serif-Schrift mit Systemschr
 
 ## 7. Bibliothek (Admin)
 
-Die Bibliothek liegt unter `/admin/` hinter einem Passwort-Login mit Sitzungscookie. Sie zeigt alle Boards als Liste mit Name, Typ, Status, Zahl der Beiträge, letzter Aktivität, Tags und gekürzter Notiz; eine Suche filtert über Name, Notiz und Tags, Sortierung nach Name, Erstellung oder Aktivität, Filter nach Status. Pro Board stehen bereit: öffnen, Link kopieren, QR-Code anzeigen und als PNG oder SVG herunterladen, Name, Notiz, Tags, Spalten, Hintergrund und Einstellungen bearbeiten, schliessen oder öffnen, leeren, archivieren, duplizieren (Struktur ohne Inhalte), Inhalte als Markdown oder PDF exportieren, einzelne Beiträge und Kommentare löschen (auch direkt auf der Board-Seite, wenn als Besitzer angemeldet), endgültig löschen. Ein Formular legt neue Boards an. Eine Einstellungsseite verwaltet das Admin-Passwort und den API-Token.
+Die Bibliothek liegt unter `/admin/` hinter einem Passwort-Login mit Sitzungscookie. Sie zeigt alle Boards als Liste mit Name, Typ, Status, Zahl der Beiträge, letzter Aktivität, Tags und gekürzter Notiz; eine Suche filtert über Name, Notiz und Tags, Sortierung nach Name, Erstellung oder Aktivität, Filter nach Status. Pro Board stehen bereit: öffnen, Link kopieren, QR-Code anzeigen und als PNG oder SVG herunterladen, Name, Notiz, Tags, Spalten, Hintergrund und Einstellungen bearbeiten, schliessen oder öffnen, leeren, archivieren, duplizieren (Struktur ohne Inhalte), Inhalte als Markdown exportieren oder als Druckansicht öffnen (daraus PDF über den Browser), einzelne Beiträge und Kommentare löschen (auch direkt auf der Board-Seite, wenn als Besitzer angemeldet), endgültig löschen. Ein Formular legt neue Boards an. Eine Einstellungsseite verwaltet das Admin-Passwort und den API-Token.
 
 ## 8. Schnittstelle (API)
 
@@ -52,6 +52,10 @@ Der Code liegt in einem privaten GitHub-Repository; auf dem Server wird er per S
 
 Etappe 1 umfasst Datenbank, Installationsseite, Gäste-Board (beide Typen, Beiträge, Kommentare, Reaktionen, Bilder, Fantasienamen, Bearbeiten und Löschen eigener Inhalte, Polling, Beamer-Modus, zwei Sprachen), Bibliothek mit allen Besitzerfunktionen, QR-Codes und Export sowie die dokumentierte Schnittstelle. Etappe 2 ist der Connector. Etappe 3 sind Erweiterungen nach Bedarf, zum Beispiel Server-Sent Events, weitere Hintergründe, Moderation vor Veröffentlichung oder Abstimmungen.
 
-## 12. Offene Punkte
+## 12. Umsetzungsnotizen
+
+Die lokale Entwicklung läuft mit `php -S localhost:8080 dev-router.php`; `dev-router.php` bildet die Regeln aus `.htaccess` nach. Das freie Layout ist mit CSS-Spalten (`column-width`) umgesetzt; neue Beiträge erscheinen oben links, die Zuordnung zu Spalten ergibt sich aus der Fensterbreite. Bilder werden als WebP gespeichert, wenn GD das unterstützt, sonst als JPEG oder PNG. Admin-Passwort-Hash und API-Token liegen in der Tabelle `settings`, nicht in `config.php`; `config.php` enthält nur Datenbankzugang, `base_url`, Standardsprache und Zeitzone.
+
+## 13. Offene Punkte
 
 Die PHP-Version und die verfügbaren Erweiterungen (GD oder Imagick für Bilder, PDO für MySQL) auf dem cyon-Paket sind beim ersten Deployment zu prüfen. Die Domain `board.wedo.science` muss im cyon-Kundencenter als Subdomain mit eigenem Ordner und SSL-Zertifikat angelegt werden.

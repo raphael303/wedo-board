@@ -1,0 +1,30 @@
+# wedo board
+Options -Indexes
+AddDefaultCharset utf-8
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+
+# Authorization-Header an PHP durchreichen (für Bearer-Token)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Board-Links: /b/<key>
+RewriteRule ^b/([a-z0-9]{16})/?$ board.php?key=$1 [L,QSA]
+
+# Schnittstelle: /api/...
+RewriteRule ^api/(.*)$ api/index.php?route=$1 [L,QSA]
+</IfModule>
+
+# Interne Dateien sperren
+<FilesMatch "^(config\.php|config\.example\.php|CONCEPT\.md|API\.md|README\.md|\.gitignore)$">
+  Require all denied
+</FilesMatch>
+RedirectMatch 404 ^/(lib|lang|vendor|\.git)(/|$)
+
+# Uploads: 10 MB
+<IfModule mod_php.c>
+php_value upload_max_filesize 10M
+php_value post_max_size 12M
+</IfModule>

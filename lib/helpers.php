@@ -1,0 +1,129 @@
+<?php
+declare(strict_types=1);
+
+function e(?string $s): string {
+    return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function wb_random_key(int $length = 16): string {
+    // Nur Zeichen, die sich nicht verwechseln lassen und in URLs sicher sind.
+    $alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+    $out = '';
+    $max = strlen($alphabet) - 1;
+    for ($i = 0; $i < $length; $i++) {
+        $out .= $alphabet[random_int(0, $max)];
+    }
+    return $out;
+}
+
+function wb_base_url(): string {
+    return rtrim((string)wb_config('base_url', ''), '/');
+}
+
+function wb_board_url(string $key): string {
+    return wb_base_url() . '/b/' . $key;
+}
+
+function wb_now(): string {
+    // DATETIME(6) als Versionsstempel.
+    return (new DateTime('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+}
+
+function wb_json(mixed $data, int $status = 200): never {
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function wb_error(string $message, int $status = 400, array $extra = []): never {
+    wb_json(['ok' => false, 'error' => $message] + $extra, $status);
+}
+
+function wb_read_json_body(): array {
+    $raw = file_get_contents('php://input');
+    if ($raw === false || $raw === '') {
+        return $_POST;
+    }
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : [];
+}
+
+function wb_client_uid(): string {
+    // Jeder Browser erhält einen zufälligen Schlüssel in einem Cookie.
+    $uid = $_COOKIE['wb_uid'] ?? '';
+    if (!preg_match('/^[a-f0-9]{32}$/', $uid)) {
+        $uid = bin2hex(random_bytes(16));
+        $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        setcookie('wb_uid', $uid, [
+            'expires' => time() + 60 * 60 * 24 * 365 * 2,
+            'path' => '/',
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+        $_COOKIE['wb_uid'] = $uid;
+    }
+    return $uid;
+}
+
+function wb_clean_text(?string $s, int $max): string {
+    $s = trim((string)$s);
+    $s = preg_replace('/\r\n?/', "\n", $s) ?? $s;
+    $s = preg_replace('/[^\P{C}\n\t]/u', '', $s) ?? $s; // Steuerzeichen entfernen
+    if (mb_strlen($s) > $max) {
+        $s = mb_substr($s, 0, $max);
+    }
+    return $s;
+}
+
+function wb_clean_url(?string $s): ?string {
+    $s = trim((string)$s);
+    if ($s === '') return null;
+    if (!preg_match('~^https?://~i', $s)) {
+        $s = 'https://' . $s;
+    }
+    if (mb_strlen($s) > 1000) return null;
+    return filter_var($s, FILTER_VALIDATE_URL) ? $s : null;
+}
+
+function wb_backgrounds(): array {
+    return ['morgen', 'meer', 'wald', 'daemmerung', 'graphit', 'papier'];
+}
+
+function wb_emojis(): array {
+    return ['👍', '❤️', '😂', '🤔', '👏', '⭐'];
+}
+
+function wb_default_settings(): array {
+    return [
+        'comments' => true,
+        'reactions' => true,
+        'images' => true,
+        'links' => true,
+        'new_on_top' => true,
+        'emojis' => wb_emojis(),
+    ];
+}
+
+function wb_parse_tags(string|array|null $tags): array {
+    if (is_array($tags)) {
+        $list = $tags;
+    } else {
+        $list = preg_split('/[,\n]+/', (string)$tags) ?: [];
+    }
+    $out = [];
+    foreach ($list as $t) {
+        $t = trim((string)$t);
+        $t = preg_replace('/\s+/', ' ', $t) ?? $t;
+        if ($t !== '' && mb_strlen($t) <= 40 && !in_array($t, $out, true)) {
+            $out[] = $t;
+        }
+    }
+    return array_slice($out, 0, 20);
+}
+
+function wb_author_hue(string $name): int {
+    return crc32($name) % 360;
+}

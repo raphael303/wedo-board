@@ -1,0 +1,4 @@
+/*
+qrcode.php from https://github.com/kazuhikoarase/qrcode-generator
+MIT License, Copyright (c) 2009 Kazuhiko Arase
+*/

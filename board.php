@@ -59,7 +59,16 @@ $boot = [
 <dialog id="composer" class="sheet">
   <form id="composer-form" method="dialog" novalidate>
     <input type="hidden" name="post_id" value="">
+    <?php if ($board['type'] === 'columns'): ?>
+    <fieldset class="column-choice">
+      <legend><?= e(t('column_choice', $lang)) ?></legend>
+      <?php foreach ($board['columns'] as $i => $col): ?>
+        <label class="choice"><input type="radio" name="column" value="<?= e($col['id']) ?>" <?= $i === 0 ? 'checked' : '' ?>><span><?= e($col['title']) ?></span></label>
+      <?php endforeach; ?>
+    </fieldset>
+    <?php else: ?>
     <input type="hidden" name="column" value="">
+    <?php endif; ?>
     <input class="field field-title" name="title" maxlength="200" placeholder="<?= e(t('post_title', $lang)) ?>" autocomplete="off">
     <textarea class="field field-body" name="body" maxlength="5000" rows="5" placeholder="<?= e(t('post_body', $lang)) ?>"></textarea>
     <div class="composer-extras">

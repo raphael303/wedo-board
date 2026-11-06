@@ -42,5 +42,6 @@ return [
     'untitled' => 'Post',
     'close' => 'Close',
     'drag_hint' => 'Drag to move to another column',
+    'column_choice' => 'Column',
     'react' => 'React',
 ];

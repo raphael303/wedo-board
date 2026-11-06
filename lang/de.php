@@ -42,5 +42,6 @@ return [
     'untitled' => 'Beitrag',
     'close' => 'Schliessen',
     'drag_hint' => 'Ziehen, um in eine andere Spalte zu verschieben',
+    'column_choice' => 'Spalte',
     'react' => 'Reagieren',
 ];

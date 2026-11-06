@@ -344,7 +344,7 @@
     pendingFile = null; removeImage = false;
     form.reset();
     form.post_id.value = post ? post.id : '';
-    form.column.value = post ? (post.column || '') : (columnId || state.activeColumn || '');
+    setColumnChoice(post ? (post.column || '') : (columnId || state.activeColumn || ''));
     form.title.value = post ? (post.title || '') : '';
     form.body.value = post ? post.body : '';
     form.link.value = post ? (post.link || '') : '';
@@ -355,6 +355,17 @@
     $('#composer-submit').textContent = post ? t('save') : t('publish');
     dlg.showModal();
     setTimeout(() => (post && post.title ? form.title : form.body).focus(), 30);
+  }
+  function setColumnChoice(id) {
+    const radios = form.querySelectorAll('input[name="column"][type="radio"]');
+    if (!radios.length) { if (form.column) form.column.value = id; return; }
+    let hit = false;
+    radios.forEach(r => { r.checked = r.value === id; if (r.checked) hit = true; });
+    if (!hit) radios[0].checked = true;
+  }
+  function columnChoice() {
+    const r = form.querySelector('input[name="column"]:checked');
+    return r ? r.value : (form.column && form.column.value ? form.column.value : '');
   }
   function setPreview(src) {
     const img = $('#image-preview');
@@ -378,7 +389,8 @@
     fd.append('title', form.title.value);
     fd.append('body', form.body.value);
     fd.append('link', form.link.value);
-    if (form.column.value) fd.append('column', form.column.value);
+    const col = columnChoice();
+    if (col) fd.append('column', col);
     if (pendingFile) fd.append('image', pendingFile);
     if (removeImage) fd.append('remove_image', '1');
     const hasImage = pendingFile || (editing && editing.image && !removeImage);

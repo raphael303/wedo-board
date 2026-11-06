@@ -250,6 +250,14 @@ img { display: block; max-width: 100%; }
 }
 @media (min-width: 641px) and (max-width: 900px) { .wall { column-count: 2; column-width: auto; } }
 
+/* Spaltenwahl im Eingabedialog */
+.column-choice { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.column-choice legend { font-size: 0.85rem; color: var(--muted); padding: 0; margin-bottom: 6px; width: 100%; }
+.choice input { position: absolute; opacity: 0; pointer-events: none; }
+.choice span { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }
+.choice:has(input:checked) span { background: var(--ink); color: #fff; border-color: var(--ink); }
+.choice:has(input:focus-visible) span { outline: 2px solid var(--ink); outline-offset: 2px; }
+
 /* Eingabe-Dialog */
 .sheet {
   border: 0; border-radius: var(--radius); padding: 0; width: min(560px, calc(100vw - 24px));

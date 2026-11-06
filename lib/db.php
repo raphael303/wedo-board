@@ -73,6 +73,7 @@ function db_schema(): array {
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             board_id INT UNSIGNED NOT NULL,
             column_id VARCHAR(32) NULL,
+            bundle_id INT UNSIGNED NULL,
             title VARCHAR(200) NULL,
             body TEXT NOT NULL,
             image VARCHAR(120) NULL,
@@ -82,9 +83,25 @@ function db_schema(): array {
             position INT NOT NULL DEFAULT 0,
             created_at DATETIME(6) NOT NULL,
             updated_at DATETIME(6) NOT NULL,
+            edited_at DATETIME(6) NULL,
             deleted_at DATETIME(6) NULL,
             KEY ix_board_updated (board_id, updated_at),
-            KEY ix_board_deleted (board_id, deleted_at)
+            KEY ix_board_deleted (board_id, deleted_at),
+            KEY ix_bundle (bundle_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+        "CREATE TABLE IF NOT EXISTS bundles (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            board_id INT UNSIGNED NOT NULL,
+            column_id VARCHAR(32) NULL,
+            title VARCHAR(200) NOT NULL,
+            summary TEXT NULL,
+            author_name VARCHAR(80) NOT NULL DEFAULT '',
+            position INT NOT NULL DEFAULT 0,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            deleted_at DATETIME(6) NULL,
+            KEY ix_board_updated (board_id, updated_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
         "CREATE TABLE IF NOT EXISTS comments (
@@ -96,6 +113,7 @@ function db_schema(): array {
             author_key CHAR(32) NOT NULL,
             created_at DATETIME(6) NOT NULL,
             updated_at DATETIME(6) NOT NULL,
+            edited_at DATETIME(6) NULL,
             deleted_at DATETIME(6) NULL,
             KEY ix_post (post_id),
             KEY ix_board_updated (board_id, updated_at)

@@ -232,6 +232,7 @@ function board_clear(array $b): void {
     db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
     db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
     db_exec('DELETE FROM reactions WHERE board_id = ?', [$b['id']]);
+    db_exec('UPDATE bundles SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
     board_touch($b['id']);
 }
 
@@ -239,6 +240,7 @@ function board_delete_forever(array $b): void {
     db_exec('DELETE FROM reactions WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM comments WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM posts WHERE board_id = ?', [$b['id']]);
+    db_exec('DELETE FROM bundles WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM boards WHERE id = ?', [$b['id']]);
     $dir = WB_ROOT . '/uploads/' . $b['bkey'];
     if (is_dir($dir)) {
@@ -272,6 +274,7 @@ function board_purge_deleted(int $days = 30): int {
         $n++;
     }
     $n += db_exec('DELETE FROM comments WHERE deleted_at IS NOT NULL AND deleted_at < ?', [$limit]);
+    $n += db_exec('DELETE FROM bundles WHERE deleted_at IS NOT NULL AND deleted_at < ?', [$limit]);
     return $n;
 }
 
@@ -331,12 +334,16 @@ function board_state(array $b, string $uid, ?string $since, bool $owner): array 
         ? db_all('SELECT * FROM comments WHERE board_id = ? AND updated_at > ? ORDER BY id ASC', [$bid, $since])
         : db_all('SELECT * FROM comments WHERE board_id = ? AND deleted_at IS NULL ORDER BY id ASC', [$bid]);
     $reactions = db_all('SELECT target_type, target_id, emoji, COUNT(*) AS n, SUM(author_key = ?) AS mine FROM reactions WHERE board_id = ? GROUP BY target_type, target_id, emoji', [$uid, $bid]);
+    $bundles = $incremental
+        ? db_all('SELECT * FROM bundles WHERE board_id = ? AND updated_at > ? ORDER BY position ASC, id ASC', [$bid, $since])
+        : db_all('SELECT * FROM bundles WHERE board_id = ? AND deleted_at IS NULL ORDER BY position ASC, id ASC', [$bid]);
 
     $out = [
         'version' => $version,
         'changed' => true,
         'full' => !$incremental,
         'status' => $b['status'],
+        'bundles' => array_map('bundle_public', $bundles),
         'posts' => array_map(fn($p) => post_public($b, $p, $uid, $owner), $posts),
         'comments' => array_map(fn($c) => comment_public($c, $uid, $owner), $comments),
         'reactions' => array_map(fn($r) => [
@@ -350,6 +357,7 @@ function post_public(array $b, array $p, string $uid, bool $owner): array {
     return [
         'id' => (int)$p['id'],
         'column' => $p['column_id'],
+        'bundle' => $p['bundle_id'] !== null ? (int)$p['bundle_id'] : null,
         'title' => $p['title'],
         'body' => $p['body'],
         'image' => board_image_url($b['bkey'], $p['image']),
@@ -362,7 +370,22 @@ function post_public(array $b, array $p, string $uid, bool $owner): array {
         'position' => (int)$p['position'],
         'created_at' => $p['created_at'],
         'updated_at' => $p['updated_at'],
+        'edited' => ($p['edited_at'] ?? null) !== null,
         'deleted' => $p['deleted_at'] !== null,
+    ];
+}
+
+function bundle_public(array $g): array {
+    return [
+        'id' => (int)$g['id'],
+        'column' => $g['column_id'],
+        'title' => $g['title'],
+        'summary' => $g['summary'],
+        'author' => $g['author_name'],
+        'position' => (int)$g['position'],
+        'created_at' => $g['created_at'],
+        'updated_at' => $g['updated_at'],
+        'deleted' => $g['deleted_at'] !== null,
     ];
 }
 
@@ -377,6 +400,7 @@ function comment_public(array $c, string $uid, bool $owner): array {
         'editable' => $owner || $c['author_key'] === $uid,
         'created_at' => $c['created_at'],
         'updated_at' => $c['updated_at'],
+        'edited' => ($c['edited_at'] ?? null) !== null,
         'deleted' => $c['deleted_at'] !== null,
     ];
 }
@@ -400,11 +424,29 @@ function board_export_data(array $b): array {
     foreach ($reactions as $r) $rx[$r['target_type']][(int)$r['target_id']][] = $r['emoji'] . ' ' . $r['n'];
     $columns = [];
     foreach ($b['columns'] as $c) $columns[$c['id']] = $c['title'];
+    $bundles = db_all('SELECT * FROM bundles WHERE board_id = ? AND deleted_at IS NULL ORDER BY position ASC, id ASC', [$b['id']]);
+    $bundleOut = [];
+    foreach ($bundles as $g) {
+        $bundleOut[] = [
+            'id' => (int)$g['id'],
+            'column' => $b['type'] === 'columns' ? ($columns[$g['column_id']] ?? (reset($columns) ?: null)) : null,
+            'title' => $g['title'],
+            'summary' => $g['summary'],
+            'author' => $g['author_name'],
+            'post_ids' => [],
+        ];
+    }
+    $bundleIndex = array_column($bundleOut, null, 'id');
     $out = [];
     foreach ($posts as $p) {
+        if ($p['bundle_id'] !== null && isset($bundleIndex[(int)$p['bundle_id']])) {
+            foreach ($bundleOut as &$bo) { if ($bo['id'] === (int)$p['bundle_id']) $bo['post_ids'][] = (int)$p['id']; }
+            unset($bo);
+        }
         $out[] = [
             'id' => (int)$p['id'],
             'column' => $b['type'] === 'columns' ? ($columns[$p['column_id']] ?? (reset($columns) ?: null)) : null,
+            'bundle_id' => $p['bundle_id'] !== null && isset($bundleIndex[(int)$p['bundle_id']]) ? (int)$p['bundle_id'] : null,
             'title' => $p['title'],
             'body' => $p['body'],
             'image' => board_image_url($b['bkey'], $p['image']),
@@ -421,7 +463,7 @@ function board_export_data(array $b): array {
             ], $byPost[(int)$p['id']] ?? []),
         ];
     }
-    return ['board' => board_owner_view($b), 'posts' => $out];
+    return ['board' => board_owner_view($b), 'bundles' => $bundleOut, 'posts' => $out];
 }
 
 function board_export_markdown(array $b): string {
@@ -429,28 +471,34 @@ function board_export_markdown(array $b): string {
     $md = '# ' . $b['name'] . "\n\n";
     if ($b['note']) $md .= '> ' . str_replace("\n", "\n> ", $b['note']) . "\n\n";
     $md .= '_' . $b['url'] . " — exportiert am " . date('d.m.Y H:i') . "_\n\n";
-    $groups = [];
-    foreach ($data['posts'] as $p) $groups[$p['column'] ?? ''][] = $p;
-    if ($b['type'] === 'columns') {
-        $order = array_map(fn($c) => $c['title'], $b['columns']);
-        uksort($groups, fn($a, $z) => (array_search($a, $order, true) ?: 0) <=> (array_search($z, $order, true) ?: 0));
-    }
-    foreach ($groups as $col => $posts) {
-        if ($col !== '') $md .= '## ' . $col . "\n\n";
-        foreach ($posts as $p) {
-            $md .= '### ' . ($p['title'] ?: 'Beitrag') . "\n";
-            $md .= '_' . $p['author'] . ', ' . $p['created_at'] . '_';
-            if ($p['reactions']) $md .= ' · ' . implode(' ', $p['reactions']);
-            $md .= "\n\n" . $p['body'] . "\n\n";
-            if ($p['image']) $md .= '![Bild](' . $p['image'] . ")\n\n";
-            if ($p['link']) $md .= '<' . $p['link'] . ">\n\n";
-            foreach ($p['comments'] as $c) {
-                $md .= '- **' . $c['author'] . ':** ' . str_replace("\n", ' ', $c['body']);
-                if ($c['reactions']) $md .= ' · ' . implode(' ', $c['reactions']);
-                $md .= "\n";
-            }
-            if ($p['comments']) $md .= "\n";
+    $renderPost = function (array $p, string $h) use (&$md): void {
+        $md .= $h . ' ' . ($p['title'] ?: 'Beitrag') . ' (#' . $p['id'] . ")\n";
+        $md .= '_' . $p['author'] . ', ' . $p['created_at'] . '_';
+        if ($p['reactions']) $md .= ' · ' . implode(' ', $p['reactions']);
+        $md .= "\n\n" . $p['body'] . "\n\n";
+        if ($p['image']) $md .= '![Bild](' . $p['image'] . ")\n\n";
+        if ($p['link']) $md .= '<' . $p['link'] . ">\n\n";
+        foreach ($p['comments'] as $c) {
+            $md .= '- **' . $c['author'] . ':** ' . str_replace("\n", ' ', $c['body']) . ' (Kommentar #' . $c['id'] . ')';
+            if ($c['reactions']) $md .= ' · ' . implode(' ', $c['reactions']);
+            $md .= "\n";
         }
+        if ($p['comments']) $md .= "\n";
+    };
+    $columnsOrder = $b['type'] === 'columns' ? array_map(fn($c) => $c['title'], $b['columns']) : [''];
+    foreach ($columnsOrder as $col) {
+        if ($col !== '') $md .= '## ' . $col . "\n\n";
+        $inCol = fn($x) => ($x['column'] ?? '') === $col || $col === '';
+        foreach (array_filter($data['bundles'], $inCol) as $g) {
+            $md .= '### Bündel: ' . $g['title'] . ' (Bündel #' . $g['id'] . ', ' . count($g['post_ids']) . " Beiträge)\n\n";
+            if ($g['summary']) $md .= $g['summary'] . "\n\n";
+            foreach ($data['posts'] as $p) {
+                if ($p['bundle_id'] === $g['id']) $renderPost($p, '####');
+            }
+        }
+        $loose = array_filter($data['posts'], fn($p) => $inCol($p) && $p['bundle_id'] === null);
+        if ($loose && $data['bundles']) $md .= "### Nicht gebündelt\n\n";
+        foreach ($loose as $p) $renderPost($p, $data['bundles'] ? '####' : '###');
     }
     return $md;
 }

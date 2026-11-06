@@ -11,6 +11,8 @@
     version: W.state.version,
     status: W.state.status,
     posts: new Map(),
+    bundles: new Map(),
+    openBundles: new Set(),
     comments: new Map(),
     reactions: new Map(), // "post:12" -> Map(emoji -> {n, mine})
     collapsedComments: new Set(),
@@ -44,6 +46,8 @@
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
     comment: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>',
+    bundle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M6 12h12"/><path d="M8 17h8"/></svg>',
+    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
     react: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="12" r="8"/><path d="M7 14.5s1 1.5 3 1.5 3-1.5 3-1.5"/><path d="M7.5 10h.01M12.5 10h.01"/><path d="M19 3v6M16 6h6"/></svg>',
     link: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>',
   };
@@ -51,7 +55,10 @@
 
   /* ---------- Zustand einpflegen ---------- */
   function applyState(st) {
-    if (st.full) { state.posts.clear(); state.comments.clear(); }
+    if (st.full) { state.posts.clear(); state.comments.clear(); state.bundles.clear(); }
+    for (const g of st.bundles || []) {
+      if (g.deleted) state.bundles.delete(g.id); else state.bundles.set(g.id, g);
+    }
     for (const p of st.posts || []) {
       if (p.deleted) state.posts.delete(p.id); else state.posts.set(p.id, p);
     }
@@ -113,6 +120,16 @@
 
   /* ---------- Rendern ---------- */
   const sortedPosts = () => [...state.posts.values()].sort((a, b) => a.position - b.position || a.id - b.id);
+  const sortedBundles = () => [...state.bundles.values()].sort((a, b) => a.position - b.position || a.id - b.id);
+  const postsInBundle = (gid) => sortedPosts().filter(p => p.bundle === gid);
+  // Lose Beiträge und Bündel als gemischte Liste; lose Beiträge je nach Einstellung oben oder unten.
+  function items(posts, bundles) {
+    const loose = posts.filter(p => !p.bundle || !state.bundles.has(p.bundle));
+    const looseItems = loose.map(p => ({ kind: 'post', post: p }));
+    const bundleItems = bundles.map(g => ({ kind: 'bundle', bundle: g }));
+    return board.settings.new_on_top ? looseItems.concat(bundleItems) : bundleItems.concat(looseItems);
+  }
+  function renderItem(it) { return it.kind === 'bundle' ? renderBundle(it.bundle) : renderPost(it.post); }
 
   function render() {
     const root = $('#board');
@@ -123,10 +140,21 @@
   }
 
   function renderWall(root, posts) {
-    if (!posts.length) { root.append(el('p', { class: 'board-empty', text: canWrite() ? t('board_empty') : '' })); return; }
-    const wall = el('div', { class: 'wall' });
-    for (const p of posts) wall.append(renderPost(p));
-    root.append(wall);
+    if (!posts.length && !state.bundles.size) { root.append(el('p', { class: 'board-empty', text: canWrite() ? t('board_empty') : '' })); return; }
+    // Geschlossene Karten fliessen im Raster; ein offenes Bündel nimmt die ganze Breite und zeigt seine Beiträge im eigenen Raster.
+    const container = el('div', { class: 'wall-flow' });
+    let wall = null;
+    for (const it of items(posts, sortedBundles())) {
+      if (it.kind === 'bundle' && state.openBundles.has(it.bundle.id)) {
+        wall = null;
+        container.append(renderBundle(it.bundle, true));
+      } else {
+        if (!wall) { wall = el('div', { class: 'wall' }); container.append(wall); }
+        wall.append(renderItem(it));
+      }
+    }
+    if (me.owner) enableDropZone(container, null);
+    root.append(container);
   }
 
   function renderColumns(root, posts) {
@@ -141,35 +169,22 @@
     if (!board.columns.some(c => c.id === state.activeColumn)) state.activeColumn = board.columns[0] ? board.columns[0].id : null;
     for (const c of board.columns) {
       const list = byCol.get(c.id);
+      const gList = sortedBundles().filter(g => (board.columns.some(x => x.id === g.column) ? g.column : board.columns[0].id) === c.id);
       tabs.append(el('button', {
         class: 'column-tab', role: 'tab', 'aria-selected': String(c.id === state.activeColumn),
         text: c.title + (list.length ? ' · ' + list.length : ''),
         onclick: () => { state.activeColumn = c.id; render(); },
       }));
       const body = el('div', { class: 'column-body' });
-      if (!list.length) body.append(el('p', { class: 'column-empty', text: t('column_empty') }));
-      for (const p of list) body.append(renderPost(p));
+      if (!list.length && !gList.length) body.append(el('p', { class: 'column-empty', text: t('column_empty') }));
+      for (const it of items(list, gList)) body.append(renderItem(it));
       const section = el('section', { class: 'column' + (c.id === state.activeColumn ? ' active' : ''), 'data-column': c.id },
         el('header', { class: 'column-head' },
           el('h2', { class: 'column-title', text: c.title }),
           el('span', { class: 'column-count', text: list.length ? String(list.length) : '' }),
           canWrite() ? el('button', { class: 'column-add', type: 'button', title: t('new_post'), 'aria-label': t('new_post'), text: '+', onclick: () => openComposer(null, c.id) }) : null),
         body);
-      if (me.owner) {
-        section.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; section.classList.add('drop-target'); });
-        section.addEventListener('dragleave', (ev) => { if (!section.contains(ev.relatedTarget)) section.classList.remove('drop-target'); });
-        section.addEventListener('drop', async (ev) => {
-          ev.preventDefault();
-          section.classList.remove('drop-target');
-          const id = parseInt(ev.dataTransfer.getData('text/plain'), 10);
-          const post = state.posts.get(id);
-          if (!post || post.column === c.id) return;
-          const prev = post.column;
-          post.column = c.id; render();
-          try { const r = await call('/posts/' + id, { json: { column: c.id } }); state.posts.set(id, r.post); state.version = r.version; render(); }
-          catch (e) { post.column = prev; render(); showError(e); }
-        });
-      }
+      if (me.owner) enableDropZone(section, c.id);
       wrap.append(section);
     }
     root.append(tabs, wrap);
@@ -177,15 +192,15 @@
 
   function renderPost(p) {
     const art = el('article', { class: 'post', 'data-id': p.id, style: '--hue:' + p.hue });
-    if (me.owner && board.type === 'columns') {
+    if (me.owner) {
       art.draggable = true;
       art.title = t('drag_hint');
-      art.addEventListener('dragstart', (ev) => { ev.dataTransfer.setData('text/plain', String(p.id)); ev.dataTransfer.effectAllowed = 'move'; art.classList.add('dragging'); });
+      art.addEventListener('dragstart', (ev) => { ev.stopPropagation(); ev.dataTransfer.setData('text/plain', 'post:' + p.id); ev.dataTransfer.effectAllowed = 'move'; art.classList.add('dragging'); });
       art.addEventListener('dragend', () => art.classList.remove('dragging'));
     }
     const head = el('header', { class: 'post-head' },
       el('span', { class: 'author' }, el('i', { class: 'dot' }), el('span', { class: 'name', text: p.author })),
-      el('time', { text: timeLabel(p.created_at) + (p.updated_at > p.created_at ? ' · ' + t('edited') : ''), title: p.created_at }));
+      el('time', { text: timeLabel(p.created_at) + (p.edited ? ' · ' + t('edited') : ''), title: p.created_at }));
     if (p.editable && canWrite()) {
       head.append(el('div', { class: 'post-menu' },
         el('button', { class: 'icon-btn', type: 'button', title: t('edit'), 'aria-label': t('edit'), onclick: () => openComposer(p) }, svg('edit')),
@@ -224,6 +239,120 @@
     art.append(foot);
     if (open) art.append(renderComments(p));
     return art;
+  }
+
+  /* ---------- Bündel ---------- */
+  function renderBundle(g, wide) {
+    const posts = postsInBundle(g.id);
+    const open = state.openBundles.has(g.id);
+    const art = el('article', { class: 'bundle' + (open ? ' open' : '') + (wide ? ' wide' : ''), 'data-bundle': g.id });
+    if (me.owner) {
+      art.draggable = true;
+      art.addEventListener('dragstart', (ev) => { ev.stopPropagation(); ev.dataTransfer.setData('text/plain', 'bundle:' + g.id); ev.dataTransfer.effectAllowed = 'move'; art.classList.add('dragging'); });
+      art.addEventListener('dragend', () => art.classList.remove('dragging'));
+      enableDropZone(art, null, g.id);
+    }
+    const head = el('header', { class: 'bundle-head' },
+      el('span', { class: 'bundle-icon' }, svg('bundle')),
+      el('h3', { class: 'bundle-title', text: g.title }),
+      el('span', { class: 'bundle-count', text: String(posts.length) }));
+    if (me.owner && canWrite()) {
+      head.append(el('div', { class: 'post-menu' },
+        el('button', { class: 'icon-btn', type: 'button', title: t('edit'), 'aria-label': t('edit'), onclick: () => openBundleDialog(g) }, svg('edit')),
+        el('button', { class: 'icon-btn', type: 'button', title: t('bundle_dissolve'), 'aria-label': t('bundle_dissolve'), onclick: () => deleteBundle(g) }, svg('trash'))));
+    }
+    art.append(head);
+    if (g.summary) art.append(el('p', { class: 'bundle-summary', text: g.summary }));
+    if (g.author) art.append(el('p', { class: 'bundle-author', text: g.author }));
+    art.append(el('button', { class: 'bundle-toggle', type: 'button', 'aria-expanded': String(open),
+      onclick: () => { open ? state.openBundles.delete(g.id) : state.openBundles.add(g.id); render(); } },
+      svg('chevron'), el('span', { text: open ? t('bundle_hide') : t('bundle_show', { n: posts.length }) })));
+    if (open) {
+      const list = el('div', { class: 'bundle-posts' + (wide ? ' wall' : '') });
+      if (!posts.length) list.append(el('p', { class: 'column-empty', text: t('bundle_empty') }));
+      for (const p of posts) list.append(renderPost(p));
+      art.append(list);
+    }
+    return art;
+  }
+
+  // Ablagefläche: Spalte (columnId), Bündel (bundleId) oder freie Fläche (beides null = aus Bündel lösen).
+  function enableDropZone(node, columnId, bundleId) {
+    node.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.stopPropagation(); ev.dataTransfer.dropEffect = 'move'; node.classList.add('drop-target'); });
+    node.addEventListener('dragleave', (ev) => { if (!node.contains(ev.relatedTarget)) node.classList.remove('drop-target'); });
+    node.addEventListener('drop', async (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      node.classList.remove('drop-target');
+      const data = ev.dataTransfer.getData('text/plain') || '';
+      const [kind, idStr] = data.split(':');
+      const id = parseInt(idStr, 10);
+      if (kind === 'post') {
+        const post = state.posts.get(id);
+        if (!post) return;
+        const target = bundleId !== undefined && bundleId !== null ? state.bundles.get(bundleId) : null;
+        const newBundle = target ? target.id : null;
+        const newColumn = target ? (target.column || post.column) : (columnId || post.column);
+        if (post.bundle === newBundle && post.column === newColumn) return;
+        const prev = { bundle: post.bundle, column: post.column };
+        post.bundle = newBundle; post.column = newColumn; render();
+        try { const r = await call('/posts/' + id, { json: { bundle_id: newBundle || 0, column: newColumn } }); state.posts.set(id, r.post); state.version = r.version; render(); }
+        catch (e) { Object.assign(post, prev); render(); showError(e); }
+      } else if (kind === 'bundle' && columnId) {
+        const g = state.bundles.get(id);
+        if (!g || g.column === columnId) return;
+        const prev = g.column;
+        g.column = columnId; postsInBundle(g.id).forEach(p => { p.column = columnId; }); render();
+        try { const r = await call('/bundles/' + id, { json: { column: columnId } }); state.bundles.set(id, r.bundle); state.version = r.version; poll(); }
+        catch (e) { g.column = prev; render(); showError(e); }
+      }
+    });
+  }
+
+  async function deleteBundle(g) {
+    if (!confirm(t('bundle_dissolve_confirm'))) return;
+    try {
+      const r = await call('/bundles/' + g.id, { method: 'DELETE' });
+      state.bundles.delete(g.id); postsInBundle(g.id).forEach(p => { p.bundle = null; });
+      state.version = r.version; render(); poll();
+    } catch (e) { showError(e); }
+  }
+
+  const bdlg = $('#bundle-dialog');
+  let editingBundle = null;
+  function openBundleDialog(g, columnId) {
+    if (!bdlg) return;
+    editingBundle = g || null;
+    const f = $('#bundle-form');
+    f.reset();
+    f.title.value = g ? g.title : '';
+    f.summary.value = g ? (g.summary || '') : '';
+    const radios = f.querySelectorAll('input[name="column"]');
+    const col = g ? g.column : (columnId || state.activeColumn || '');
+    let hit = false; radios.forEach(r => { r.checked = r.value === col; if (r.checked) hit = true; });
+    if (!hit && radios[0]) radios[0].checked = true;
+    $('#bundle-submit').textContent = g ? t('save') : t('bundle_create');
+    bdlg.showModal();
+    setTimeout(() => f.title.focus(), 30);
+  }
+  if (bdlg) {
+    $('#bundle-cancel').addEventListener('click', () => bdlg.close());
+    $('#bundle-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = ev.target;
+      const r0 = f.querySelector('input[name="column"]:checked');
+      const payload = { title: f.title.value.trim(), summary: f.summary.value.trim() };
+      if (r0) payload.column = r0.value;
+      if (!payload.title) return;
+      try {
+        const r = editingBundle ? await call('/bundles/' + editingBundle.id, { json: payload }) : await call('/bundles', { json: payload });
+        state.bundles.set(r.bundle.id, r.bundle);
+        state.version = r.version;
+        bdlg.close(); render(); poll();
+      } catch (e) { showError(e); }
+    });
+    const nb = $('#new-bundle');
+    if (nb) nb.addEventListener('click', () => openBundleDialog(null));
+    bdlg.addEventListener('close', () => render());
   }
 
   function renderReactions(type, id) {
@@ -440,7 +569,7 @@
       if (data.changed) {
         const prevStatus = state.status;
         applyState(data);
-        if (dlg.open) {
+        if (dlg.open || (bdlg && bdlg.open)) {
           // Nicht neu zeichnen, während jemand schreibt; nur Zustand übernehmen.
         } else render();
         if (prevStatus !== state.status) updateStatusNotice();
@@ -458,5 +587,5 @@
   applyState(Object.assign({ full: true }, W.state));
   render();
   timer = setTimeout(poll, 3000);
-  setInterval(() => { if (!dlg.open) render(); }, 60000); // Zeitangaben auffrischen
+  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open)) render(); }, 60000); // Zeitangaben auffrischen
 })();

@@ -80,7 +80,7 @@ function mcp_handle(array $msg): ?array {
                     'protocolVersion' => in_array($requested, $known, true) ? $requested : '2025-06-18',
                     'capabilities' => ['tools' => ['listChanged' => false]],
                     'serverInfo' => ['name' => 'wedo board', 'version' => WB_VERSION],
-                    'instructions' => "Nablet ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers.",
+                    'instructions' => "Nablet ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude.",
             ]];
             case 'notifications/initialized':
             case 'notifications/cancelled':
@@ -217,6 +217,85 @@ function mcp_tools(): array {
             ], 'required' => ['board']],
         ],
         [
+            'name' => 'create_post',
+            'description' => 'Schreibt als Besitzer oder Claude einen Beitrag auf ein Board, zum Beispiel eine Aufgabenstellung, Leitfragen oder ein Fazit. Optional in eine Spalte oder in ein Bündel.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'board' => $boardParam,
+                'title' => ['type' => 'string'],
+                'body' => ['type' => 'string', 'description' => 'Text des Beitrags (Zeilenumbrüche erlaubt).'],
+                'link' => ['type' => 'string', 'description' => 'Optionaler Link.'],
+                'column' => ['type' => 'string', 'description' => 'Spalten-ID oder Spaltentitel (nur bei Spalten-Boards).'],
+                'bundle_id' => ['type' => 'integer', 'description' => 'Bündel, in das der Beitrag gehört.'],
+                'author' => ['type' => 'string', 'description' => 'Angezeigter Name, Standard Claude.'],
+                'on_top' => ['type' => 'boolean', 'description' => 'Zuoberst einfügen (Standard: Einstellung des Boards).'],
+            ], 'required' => ['board', 'body']],
+        ],
+        [
+            'name' => 'create_comment',
+            'description' => 'Schreibt als Besitzer oder Claude einen Kommentar zu einem Beitrag, zum Beispiel eine Rückmeldung oder Nachfrage.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'board' => $boardParam,
+                'post_id' => ['type' => 'integer', 'description' => 'ID des Beitrags (aus read_board).'],
+                'body' => ['type' => 'string'],
+                'author' => ['type' => 'string', 'description' => 'Angezeigter Name, Standard Claude.'],
+            ], 'required' => ['board', 'post_id', 'body']],
+        ],
+        [
+            'name' => 'organize_board',
+            'description' => 'Bündelt die Beiträge eines Boards in einem Zug: Liste von Bündeln mit Titel, kurzer Zusammenfassung, optional Spalte (Titel oder ID) und den post_ids. Mit replace=true (Standard) werden bestehende Bündel vorher aufgelöst; die Beiträge selbst bleiben unverändert. Beiträge ohne Bündel bleiben lose sichtbar.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'board' => $boardParam,
+                'bundles' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                    'title' => ['type' => 'string'],
+                    'summary' => ['type' => 'string', 'description' => 'Ein bis drei Sätze, die die Beiträge des Bündels zusammenfassen.'],
+                    'column' => ['type' => 'string'],
+                    'post_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                ], 'required' => ['title', 'post_ids']]],
+                'replace' => ['type' => 'boolean'],
+                'author' => ['type' => 'string', 'description' => 'Name, der an den Bündeln steht, Standard Claude.'],
+            ], 'required' => ['board', 'bundles']],
+        ],
+        [
+            'name' => 'create_bundle',
+            'description' => 'Legt ein einzelnes Bündel an, optional gleich mit Beiträgen.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'board' => $boardParam,
+                'title' => ['type' => 'string'],
+                'summary' => ['type' => 'string'],
+                'column' => ['type' => 'string'],
+                'post_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                'author' => ['type' => 'string'],
+            ], 'required' => ['board', 'title']],
+        ],
+        [
+            'name' => 'update_bundle',
+            'description' => 'Ändert Titel, Zusammenfassung oder Spalte eines Bündels oder ordnet Beiträge zu (post_ids ersetzt die Zuordnung ganz, add_post_ids und remove_post_ids ändern sie teilweise).',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'board' => $boardParam,
+                'bundle_id' => ['type' => 'integer'],
+                'title' => ['type' => 'string'],
+                'summary' => ['type' => 'string'],
+                'column' => ['type' => 'string'],
+                'post_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                'add_post_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+                'remove_post_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+            ], 'required' => ['board', 'bundle_id']],
+        ],
+        [
+            'name' => 'delete_bundle',
+            'description' => 'Löst ein Bündel auf; seine Beiträge bleiben als lose Beiträge erhalten.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['board' => $boardParam, 'bundle_id' => ['type' => 'integer']], 'required' => ['board', 'bundle_id']],
+        ],
+        [
+            'name' => 'assign_posts',
+            'description' => 'Ordnet Beiträge einem Bündel zu (bundle_id) oder löst sie aus jedem Bündel (bundle_id weglassen oder 0).',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'board' => $boardParam,
+                'bundle_id' => ['type' => 'integer'],
+                'post_ids' => ['type' => 'array', 'items' => ['type' => 'integer']],
+            ], 'required' => ['board', 'post_ids']],
+        ],
+        [
             'name' => 'get_board_qr',
             'description' => 'Liefert den QR-Code eines Boards als PNG-Bild (für Folien und Arbeitsblätter) sowie die Bildadressen zum Einbetten.',
             'inputSchema' => ['type' => 'object', 'properties' => ['board' => $boardParam], 'required' => ['board']],
@@ -282,6 +361,48 @@ function mcp_call(string $name, array $a): array {
                 return mcp_text($n ? 'Beitrag gelöscht.' : 'Kein solcher Beitrag.', !$n);
             }
             throw new InvalidArgumentException('post_id oder comment_id angeben.');
+
+        case 'create_post':
+            $b = mcp_board_ref($a);
+            $post = owner_post_create($b, $a);
+            return mcp_json(['created' => true, 'post_id' => (int)$post['id'], 'author' => $post['author_name'], 'bundle_id' => $post['bundle_id'] !== null ? (int)$post['bundle_id'] : null, 'url' => $b['url']]);
+
+        case 'create_comment':
+            $b = mcp_board_ref($a);
+            $c = owner_comment_create($b, (int)($a['post_id'] ?? 0), $a);
+            return mcp_json(['created' => true, 'comment_id' => (int)$c['id'], 'post_id' => (int)$c['post_id'], 'author' => $c['author_name']]);
+
+        case 'organize_board':
+            $b = mcp_board_ref($a);
+            $list = is_array($a['bundles'] ?? null) ? $a['bundles'] : [];
+            $replace = array_key_exists('replace', $a) ? (bool)$a['replace'] : true;
+            $created = bundle_organize($b, $list, $replace, (string)($a['author'] ?? 'Claude'));
+            $loose = db_row('SELECT COUNT(*) AS n FROM posts WHERE board_id = ? AND deleted_at IS NULL AND bundle_id IS NULL', [$b['id']]);
+            return mcp_json(['organized' => true, 'bundles' => $created, 'loose_posts' => (int)$loose['n'], 'url' => $b['url']]);
+
+        case 'create_bundle':
+            $b = mcp_board_ref($a);
+            if (empty($a['author'])) $a['author'] = 'Claude';
+            return mcp_json(['created' => true] + bundle_public(bundle_create($b, $a)));
+
+        case 'update_bundle':
+            $b = mcp_board_ref($a);
+            $g = bundle_by_id($b, (int)($a['bundle_id'] ?? 0));
+            if (!$g) throw new InvalidArgumentException('Bündel nicht gefunden.');
+            return mcp_json(['updated' => true] + bundle_public(bundle_update($b, $g, $a)));
+
+        case 'delete_bundle':
+            $b = mcp_board_ref($a);
+            $g = bundle_by_id($b, (int)($a['bundle_id'] ?? 0));
+            if (!$g) throw new InvalidArgumentException('Bündel nicht gefunden.');
+            bundle_delete($b, $g);
+            return mcp_text('Bündel «' . $g['title'] . '» aufgelöst; die Beiträge bleiben erhalten.');
+
+        case 'assign_posts':
+            $b = mcp_board_ref($a);
+            $gid = !empty($a['bundle_id']) ? (int)$a['bundle_id'] : null;
+            $n = bundle_assign($b, $gid, array_map('intval', (array)($a['post_ids'] ?? [])));
+            return mcp_text($n . ' Beiträge ' . ($gid ? 'zugeordnet.' : 'aus Bündeln gelöst.'));
 
         case 'get_board_qr':
             $b = mcp_board_ref($a);

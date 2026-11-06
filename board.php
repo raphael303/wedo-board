@@ -46,6 +46,7 @@ $boot = [
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
     </button>
     <?php if ($owner): ?><a class="bar-btn" href="/admin/board.php?key=<?= e($board['bkey']) ?>" title="Bibliothek" aria-label="Bibliothek"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a><?php endif; ?>
+    <?php if ($owner): ?><button class="btn-ghost bar-ghost" id="new-bundle" type="button"><?= e(t('bundle_new', $lang)) ?></button><?php endif; ?>
     <button class="btn-primary" id="new-post" type="button"><?= e(t('new_post', $lang)) ?></button>
   </div>
 </header>
@@ -86,6 +87,28 @@ $boot = [
     </div>
   </form>
 </dialog>
+
+<?php if ($owner): ?>
+<dialog id="bundle-dialog" class="sheet">
+  <form id="bundle-form" method="dialog" novalidate>
+    <?php if ($board['type'] === 'columns'): ?>
+    <fieldset class="column-choice">
+      <legend><?= e(t('column_choice', $lang)) ?></legend>
+      <?php foreach ($board['columns'] as $i => $col): ?>
+        <label class="choice"><input type="radio" name="column" value="<?= e($col['id']) ?>" <?= $i === 0 ? 'checked' : '' ?>><span><?= e($col['title']) ?></span></label>
+      <?php endforeach; ?>
+    </fieldset>
+    <?php endif; ?>
+    <input class="field field-title" name="title" maxlength="200" placeholder="<?= e(t('bundle_title', $lang)) ?>" autocomplete="off" required>
+    <textarea class="field field-body" name="summary" maxlength="5000" rows="3" placeholder="<?= e(t('bundle_summary', $lang)) ?>"></textarea>
+    <p class="hint-text"><?= e(t('bundle_hint', $lang)) ?></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn-ghost" id="bundle-cancel"><?= e(t('cancel', $lang)) ?></button>
+      <button type="submit" class="btn-primary" id="bundle-submit"><?= e(t('bundle_create', $lang)) ?></button>
+    </div>
+  </form>
+</dialog>
+<?php endif; ?>
 
 <dialog id="lightbox" class="lightbox"><img alt=""><button type="button" class="lightbox-close" aria-label="<?= e(t('close', $lang)) ?>">×</button></dialog>
 

@@ -83,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     board_touch($board['id']);
                     admin_flash('Beitrag gelöscht.');
                     break;
+                case 'delete_bundle':
+                    $g = bundle_by_id($board, (int)($_POST['id'] ?? 0));
+                    if ($g) { bundle_delete($board, $g); admin_flash('Bündel aufgelöst, Beiträge bleiben erhalten.'); }
+                    break;
                 case 'delete_comment':
                     $cid = (int)($_POST['id'] ?? 0);
                     $now = wb_now();
@@ -243,7 +247,21 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
 
 <?php if ($board): ?>
 <section class="card" id="inhalt">
-  <h2>Inhalt <span class="muted"><?= count($export['posts']) ?> Beiträge</span></h2>
+  <h2>Inhalt <span class="muted"><?= count($export['posts']) ?> Beiträge<?= $export['bundles'] ? ', ' . count($export['bundles']) . ' Bündel' : '' ?></span></h2>
+  <?php if ($export['bundles']): ?>
+  <ul class="postlist">
+    <?php foreach ($export['bundles'] as $g): ?>
+    <li class="postitem">
+      <div class="postitem-head">
+        <strong>Bündel: <?= e($g['title']) ?></strong>
+        <span class="muted"><?= count($g['post_ids']) ?> Beiträge<?= $g['column'] ? ' · ' . e($g['column']) : '' ?><?= $g['author'] ? ' · ' . e($g['author']) : '' ?></span>
+        <form method="post" class="inline" data-confirm="Bündel auflösen? Die Beiträge bleiben erhalten."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete_bundle"><input type="hidden" name="id" value="<?= $g['id'] ?>"><button class="link-danger" type="submit">Auflösen</button></form>
+      </div>
+      <?php if ($g['summary']): ?><p class="postitem-body"><?= nl2br(e($g['summary'])) ?></p><?php endif; ?>
+    </li>
+    <?php endforeach; ?>
+  </ul>
+  <?php endif; ?>
   <?php if (!$export['posts']): ?>
     <p class="muted">Noch keine Beiträge.</p>
   <?php else: ?>
@@ -252,7 +270,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
     <li class="postitem">
       <div class="postitem-head">
         <strong><?= e($p['title'] ?: '—') ?></strong>
-        <span class="muted"><?= e($p['author']) ?> · <?= e($p['created_at']) ?><?= $p['column'] ? ' · ' . e($p['column']) : '' ?></span>
+        <span class="muted"><?= e($p['author']) ?> · <?= e($p['created_at']) ?><?= $p['column'] ? ' · ' . e($p['column']) : '' ?><?php if ($p['bundle_id']): foreach ($export['bundles'] as $g) if ($g['id'] === $p['bundle_id']) echo ' · Bündel «' . e($g['title']) . '»'; endif; ?></span>
         <form method="post" class="inline" data-confirm="Beitrag löschen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete_post"><input type="hidden" name="id" value="<?= $p['id'] ?>"><button class="link-danger" type="submit">Löschen</button></form>
       </div>
       <?php if ($p['body']): ?><p class="postitem-body"><?= nl2br(e($p['body'])) ?></p><?php endif; ?>

@@ -117,9 +117,24 @@ function guest_api(string $method, array $p): never {
         }
         $body = wb_clean_text($in['body'] ?? '', 2000);
         if ($body === '') wb_error('body_required', 422);
-        db_exec('UPDATE comments SET body = ?, updated_at = ? WHERE id = ?', [$body, $now, $id]);
+        db_exec('UPDATE comments SET body = ?, updated_at = ?, edited_at = ? WHERE id = ?', [$body, $now, $now, $id]);
         $c = db_row('SELECT * FROM comments WHERE id = ?', [$id]);
         wb_json(['ok' => true, 'comment' => comment_public($c, $uid, $owner), 'version' => board_touch($board['id'])]);
+    }
+    if ($sub === 'bundles') {
+        if (!$owner) wb_error('Nur der Besitzer kann Bündel verwalten.', 403);
+        if ($id === 0 && $method === 'POST') {
+            $g = bundle_create($board, $in);
+            wb_json(['ok' => true, 'bundle' => bundle_public($g), 'version' => board_by_id($board['id'])['last_activity_at']], 201);
+        }
+        $g = bundle_by_id($board, $id);
+        if (!$g) wb_error('Bündel nicht gefunden.', 404);
+        if ($method === 'DELETE' || $action === 'delete') {
+            bundle_delete($board, $g);
+            wb_json(['ok' => true, 'version' => board_by_id($board['id'])['last_activity_at']]);
+        }
+        $g = bundle_update($board, $g, $in);
+        wb_json(['ok' => true, 'bundle' => bundle_public($g), 'version' => board_by_id($board['id'])['last_activity_at']]);
     }
     if ($sub === 'react' && $method === 'POST') {
         if (!$board['settings']['reactions'] && !$owner) wb_error('Reaktionen sind ausgeschaltet.', 403);
@@ -192,7 +207,20 @@ function post_update(array $board, array $post, array $in, bool $owner): array {
     }
     if (array_key_exists('column', $in) && $board['type'] === 'columns') {
         $ids = array_column($board['columns'], 'id');
-        if (in_array($in['column'], $ids, true)) { $fields[] = 'column_id = ?'; $params[] = $in['column']; }
+        if (in_array($in['column'], $ids, true) && $in['column'] !== $post['column_id']) {
+            $fields[] = 'column_id = ?'; $params[] = $in['column'];
+            if (!array_key_exists('bundle_id', $in)) $fields[] = 'bundle_id = NULL';
+        }
+    }
+    if ($owner && array_key_exists('bundle_id', $in)) {
+        if ($in['bundle_id'] === null || $in['bundle_id'] === '' || (int)$in['bundle_id'] === 0) {
+            $fields[] = 'bundle_id = NULL';
+        } else {
+            $g = bundle_by_id($board, (int)$in['bundle_id']);
+            if (!$g) wb_error('Bündel nicht gefunden.', 404);
+            $fields[] = 'bundle_id = ?'; $params[] = (int)$g['id'];
+            if ($board['type'] === 'columns' && $g['column_id'] !== null) { $fields[] = 'column_id = ?'; $params[] = $g['column_id']; }
+        }
     }
     if (!empty($in['remove_image']) && $post['image']) {
         post_delete_image($board['bkey'], $post['image']);
@@ -206,6 +234,8 @@ function post_update(array $board, array $post, array $in, bool $owner): array {
         $fields[] = 'image = ?'; $params[] = $img;
     }
     if (!$fields) return $post;
+    $contentChanged = (bool)array_intersect_key($in, array_flip(['title', 'body', 'link', 'remove_image'])) || (!empty($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE);
+    if ($contentChanged) { $fields[] = 'edited_at = ?'; $params[] = wb_now(); }
     $fields[] = 'updated_at = ?'; $params[] = wb_now();
     $params[] = $post['id'];
     db_exec('UPDATE posts SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
@@ -279,6 +309,40 @@ function owner_boards_api(string $method, array $p): never {
         if ($action === 'posts') {
             wb_json(['ok' => true] + board_export_data($board));
         }
+        if ($action === 'bundles') {
+            wb_json(['ok' => true, 'bundles' => board_export_data($board)['bundles']]);
+        }
+    }
+    if ($action === 'bundles' && ($method === 'POST' || $method === 'PATCH' || $method === 'DELETE')) {
+        $gid = (int)($p[3] ?? 0);
+        if ($gid === 0 && $method === 'POST') {
+            wb_json(['ok' => true, 'bundle' => bundle_public(bundle_create($board, $in))], 201);
+        }
+        $g = bundle_by_id($board, $gid);
+        if (!$g) wb_error('Bündel nicht gefunden.', 404);
+        if ($method === 'DELETE' || ($p[4] ?? '') === 'delete') {
+            bundle_delete($board, $g);
+            wb_json(['ok' => true]);
+        }
+        wb_json(['ok' => true, 'bundle' => bundle_public(bundle_update($board, $g, $in))]);
+    }
+    if ($action === 'organize' && $method === 'POST') {
+        $list = is_array($in['bundles'] ?? null) ? $in['bundles'] : [];
+        $replace = array_key_exists('replace', $in) ? filter_var($in['replace'], FILTER_VALIDATE_BOOLEAN) : true;
+        wb_json(['ok' => true, 'bundles' => bundle_organize($board, $list, $replace, (string)($in['author'] ?? 'Claude'))]);
+    }
+    if ($action === 'assign' && $method === 'POST') {
+        $gid = isset($in['bundle_id']) && (int)$in['bundle_id'] > 0 ? (int)$in['bundle_id'] : null;
+        $n = bundle_assign($board, $gid, array_map('intval', (array)($in['post_ids'] ?? [])));
+        wb_json(['ok' => true, 'assigned' => $n]);
+    }
+    if ($action === 'posts' && $method === 'POST' && (int)($p[3] ?? 0) === 0) {
+        $post = owner_post_create($board, $in);
+        wb_json(['ok' => true, 'post' => post_public($board, $post, WB_OWNER_KEY, true)], 201);
+    }
+    if ($action === 'posts' && $method === 'POST' && (int)($p[3] ?? 0) > 0 && ($p[4] ?? '') === 'comments') {
+        $c = owner_comment_create($board, (int)$p[3], $in);
+        wb_json(['ok' => true, 'comment' => comment_public($c, WB_OWNER_KEY, true)], 201);
     }
     if ($method === 'POST' || $method === 'DELETE') {
         switch ($action) {

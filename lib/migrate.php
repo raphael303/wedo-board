@@ -11,6 +11,25 @@ function db_migrations(): array {
             "ALTER TABLE boards ADD COLUMN slug VARCHAR(32) NULL AFTER bkey",
             "ALTER TABLE boards ADD KEY ix_slug (slug)",
         ],
+        2 => [
+            "ALTER TABLE posts ADD COLUMN bundle_id INT UNSIGNED NULL AFTER column_id",
+            "ALTER TABLE posts ADD KEY ix_bundle (bundle_id)",
+            "ALTER TABLE posts ADD COLUMN edited_at DATETIME(6) NULL AFTER updated_at",
+            "ALTER TABLE comments ADD COLUMN edited_at DATETIME(6) NULL AFTER updated_at",
+            "CREATE TABLE IF NOT EXISTS bundles (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                board_id INT UNSIGNED NOT NULL,
+                column_id VARCHAR(32) NULL,
+                title VARCHAR(200) NOT NULL,
+                summary TEXT NULL,
+                author_name VARCHAR(80) NOT NULL DEFAULT '',
+                position INT NOT NULL DEFAULT 0,
+                created_at DATETIME(6) NOT NULL,
+                updated_at DATETIME(6) NOT NULL,
+                deleted_at DATETIME(6) NULL,
+                KEY ix_board_updated (board_id, updated_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
     ];
 }
 

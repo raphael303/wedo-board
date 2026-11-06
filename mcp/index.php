@@ -184,7 +184,7 @@ function mcp_tools(): array {
             'name' => 'update_board',
             'description' => 'Ändert Name, Kurzwort, Notiz, Tags, Spalten, Hintergrund, Sprache, Einstellungen oder Status eines Boards. Nur angegebene Felder werden geändert. Bei Spalten bleiben Beiträge in ihrer Spalte, wenn die Reihenfolge erhalten bleibt.',
             'inputSchema' => ['type' => 'object', 'properties' => ['board' => $boardParam] + $boardFields + [
-                'status' => ['type' => 'string', 'enum' => ['open', 'closed', 'archived'], 'description' => 'open = beschreibbar; closed = nur lesbar; archived = für die Klasse unsichtbar, Kurzwort wird frei.'],
+                'status' => ['type' => 'string', 'enum' => ['open', 'closed', 'archived'], 'description' => 'open = beschreibbar (auch zum Zurückholen aus dem Archiv); closed = nur lesbar; archived = für die Klasse unsichtbar, Kurzwort wird frei.'],
             ], 'required' => ['board']],
         ],
         [

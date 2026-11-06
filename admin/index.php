@@ -50,7 +50,7 @@ admin_header('Bibliothek', 'library');
 
 <?php if (!$boards): ?>
   <section class="card empty">
-    <p>Keine Boards gefunden.</p>
+    <p>Keine Boards gefunden.<?= $status === 'active' ? ' Archivierte Boards findest du über den Filter «Archiv».' : '' ?></p>
     <a class="btn" href="/admin/board.php?new=1">Erstes Board anlegen</a>
   </section>
 <?php else: ?>

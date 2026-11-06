@@ -59,7 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             switch ($action) {
                 case 'clear': board_clear($board); admin_flash('Alle Beiträge entfernt.'); break;
                 case 'close': board_update($board, ['status' => 'closed']); admin_flash('Board geschlossen.'); break;
-                case 'open': board_update($board, ['status' => 'open']); admin_flash('Board geöffnet.'); break;
+                case 'open':
+                    $wasArchived = $board['status'] === 'archived';
+                    $b2 = board_update($board, ['status' => 'open']);
+                    admin_flash($wasArchived ? 'Board aus dem Archiv geholt. Link: ' . $b2['url'] : 'Board geöffnet.');
+                    break;
                 case 'archive': board_update($board, ['status' => 'archived']); admin_flash('Board archiviert.'); break;
                 case 'duplicate':
                     $copy = board_duplicate($board);
@@ -137,8 +141,10 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
     <div class="action-grid">
       <?php if ($board['status'] === 'open'): ?>
         <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="close"><button class="btn-ghost" type="submit" title="Lesen bleibt möglich, Schreiben nicht mehr">Schliessen</button></form>
+      <?php elseif ($board['status'] === 'closed'): ?>
+        <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="open"><button class="btn-ghost" type="submit" title="Schreiben wieder erlauben">Öffnen</button></form>
       <?php else: ?>
-        <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="open"><button class="btn-ghost" type="submit">Öffnen</button></form>
+        <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="open"><button class="btn" type="submit" title="Board wieder aktivieren; ein inzwischen vergebenes Kurzwort wird ersetzt">Aus dem Archiv holen</button></form>
       <?php endif; ?>
       <form method="post" data-confirm="Alle Beiträge und Kommentare dieses Boards entfernen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="clear"><button class="btn-ghost" type="submit">Leeren</button></form>
       <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="duplicate"><button class="btn-ghost" type="submit" title="Struktur ohne Inhalte kopieren">Duplizieren</button></form>

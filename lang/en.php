@@ -41,5 +41,6 @@ return [
     'not_found' => 'This board does not exist or has been archived.',
     'untitled' => 'Post',
     'close' => 'Close',
+    'drag_hint' => 'Drag to move to another column',
     'react' => 'React',
 ];

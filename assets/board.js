@@ -13,7 +13,8 @@
     posts: new Map(),
     comments: new Map(),
     reactions: new Map(), // "post:12" -> Map(emoji -> {n, mine})
-    openComments: new Set(),
+    collapsedComments: new Set(),
+    openForms: new Set(),
     expanded: new Set(),
     drafts: new Map(),
     activeColumn: board.columns[0] ? board.columns[0].id : null,
@@ -148,18 +149,40 @@
       const body = el('div', { class: 'column-body' });
       if (!list.length) body.append(el('p', { class: 'column-empty', text: t('column_empty') }));
       for (const p of list) body.append(renderPost(p));
-      wrap.append(el('section', { class: 'column' + (c.id === state.activeColumn ? ' active' : ''), 'data-column': c.id },
+      const section = el('section', { class: 'column' + (c.id === state.activeColumn ? ' active' : ''), 'data-column': c.id },
         el('header', { class: 'column-head' },
           el('h2', { class: 'column-title', text: c.title }),
           el('span', { class: 'column-count', text: list.length ? String(list.length) : '' }),
           canWrite() ? el('button', { class: 'column-add', type: 'button', title: t('new_post'), 'aria-label': t('new_post'), text: '+', onclick: () => openComposer(null, c.id) }) : null),
-        body));
+        body);
+      if (me.owner) {
+        section.addEventListener('dragover', (ev) => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; section.classList.add('drop-target'); });
+        section.addEventListener('dragleave', (ev) => { if (!section.contains(ev.relatedTarget)) section.classList.remove('drop-target'); });
+        section.addEventListener('drop', async (ev) => {
+          ev.preventDefault();
+          section.classList.remove('drop-target');
+          const id = parseInt(ev.dataTransfer.getData('text/plain'), 10);
+          const post = state.posts.get(id);
+          if (!post || post.column === c.id) return;
+          const prev = post.column;
+          post.column = c.id; render();
+          try { const r = await call('/posts/' + id, { json: { column: c.id } }); state.posts.set(id, r.post); state.version = r.version; render(); }
+          catch (e) { post.column = prev; render(); showError(e); }
+        });
+      }
+      wrap.append(section);
     }
     root.append(tabs, wrap);
   }
 
   function renderPost(p) {
     const art = el('article', { class: 'post', 'data-id': p.id, style: '--hue:' + p.hue });
+    if (me.owner && board.type === 'columns') {
+      art.draggable = true;
+      art.title = t('drag_hint');
+      art.addEventListener('dragstart', (ev) => { ev.dataTransfer.setData('text/plain', String(p.id)); ev.dataTransfer.effectAllowed = 'move'; art.classList.add('dragging'); });
+      art.addEventListener('dragend', () => art.classList.remove('dragging'));
+    }
     const head = el('header', { class: 'post-head' },
       el('span', { class: 'author' }, el('i', { class: 'dot' }), el('span', { class: 'name', text: p.author })),
       el('time', { text: timeLabel(p.created_at) + (p.updated_at > p.created_at ? ' · ' + t('edited') : ''), title: p.created_at }));
@@ -188,13 +211,18 @@
     const foot = el('footer', { class: 'post-foot' });
     foot.append(renderReactions('post', p.id));
     const count = [...state.comments.values()].filter(c => c.post === p.id).length;
+    const open = count ? !state.collapsedComments.has(p.id) : state.openForms.has(p.id);
     if (commentsOn() || count) {
-      foot.append(el('button', { class: 'comments-toggle', type: 'button', 'aria-expanded': String(state.openComments.has(p.id)),
-        onclick: () => { state.openComments.has(p.id) ? state.openComments.delete(p.id) : state.openComments.add(p.id); render(); } },
+      foot.append(el('button', { class: 'comments-toggle', type: 'button', 'aria-expanded': String(open),
+        onclick: () => {
+          if (count) { open ? state.collapsedComments.add(p.id) : state.collapsedComments.delete(p.id); }
+          else { open ? state.openForms.delete(p.id) : state.openForms.add(p.id); }
+          render();
+        } },
         svg('comment'), el('span', { text: count ? String(count) : t('comment') })));
     }
     art.append(foot);
-    if (state.openComments.has(p.id)) art.append(renderComments(p));
+    if (open) art.append(renderComments(p));
     return art;
   }
 
@@ -260,16 +288,21 @@
 
   function editComment(row, c) {
     row.classList.add('editing');
-    const input = el('input', { type: 'text', maxlength: '2000', value: c.body });
+    const input = el('textarea', { maxlength: '2000', rows: '3' });
+    input.value = c.body;
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) form.requestSubmit(); if (ev.key === 'Escape') render(); });
     const form = el('form', { class: 'comment-edit', onsubmit: async (ev) => {
       ev.preventDefault();
       try {
         const r = await call('/comments/' + c.id, { json: { body: input.value.trim() } });
         state.comments.set(r.comment.id, r.comment); state.version = r.version; render();
       } catch (e) { showError(e); }
-    } }, input, el('button', { type: 'submit', class: 'btn-primary', text: t('save') }), el('button', { type: 'button', class: 'btn-ghost', text: t('cancel'), onclick: render }));
+    } }, input, el('div', { class: 'comment-edit-actions' },
+      el('button', { type: 'submit', class: 'btn-primary', text: t('save') }),
+      el('button', { type: 'button', class: 'btn-ghost', text: t('cancel'), onclick: render })));
     row.querySelector('.comment-body').after(form);
     input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
   }
 
   async function deleteComment(c) {

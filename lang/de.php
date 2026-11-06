@@ -41,5 +41,6 @@ return [
     'not_found' => 'Dieses Board gibt es nicht oder es ist archiviert.',
     'untitled' => 'Beitrag',
     'close' => 'Schliessen',
+    'drag_hint' => 'Ziehen, um in eine andere Spalte zu verschieben',
     'react' => 'Reagieren',
 ];

@@ -1,6 +1,6 @@
 # wedo board
 
-Ein selbst gehosteter Padlet-Ersatz für den Unterricht: Schülerinnen und Schüler schreiben über einen Link oder QR-Code Beiträge, kommentieren und reagieren mit Emojis; Boards werden nur vom Besitzer angelegt, in der Bibliothek oder über eine Schnittstelle (zum Beispiel durch Claude). Das Konzept steht in `CONCEPT.md`, die Schnittstelle in `API.md`.
+Ein selbst gehosteter Padlet-Ersatz für den Unterricht: Schülerinnen und Schüler schreiben über einen Link oder QR-Code Beiträge, kommentieren und reagieren mit Emojis; Boards werden nur vom Besitzer angelegt, in der Bibliothek oder über eine Schnittstelle (zum Beispiel durch Claude). Das Konzept steht in `CONCEPT.md`, die Schnittstelle in `API.md`, der Arbeitsablauf für die Weiterentwicklung in `DEVELOPMENT.md`.
 
 ## Voraussetzungen
 

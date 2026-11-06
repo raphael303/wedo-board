@@ -80,8 +80,8 @@ function mcp_handle(array $msg): ?array {
                     'protocolVersion' => in_array($requested, $known, true) ? $requested : '2025-06-18',
                     'capabilities' => ['tools' => ['listChanged' => false]],
                     'serverInfo' => ['name' => 'wedo board', 'version' => WB_VERSION],
-                    'instructions' => 'Verwaltet Unterrichts-Boards (Padlet-Ersatz) unter ' . wb_base_url() . '. Beim Anlegen eines Boards immer eine aussagekräftige Notiz (Klasse, Fach, Thema, Datum) und Tags setzen, damit die Bibliothek durchsuchbar bleibt. Boards werden über ihr Kurzwort (slug) oder ihren Schlüssel angesprochen.',
-                ]];
+                    'instructions' => "Nablet ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers.",
+            ]];
             case 'notifications/initialized':
             case 'notifications/cancelled':
             case 'notifications/progress':

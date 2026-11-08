@@ -58,6 +58,7 @@ function ai_error_message(AiException $e, string $lang): string {
 foreach (array_keys(AI_PROVIDERS) as $p) {
     require_once __DIR__ . '/' . $p . '.php';
 }
+require_once __DIR__ . '/organize.php';
 
 /* ---------- Geheimnis und Verschlüsselung ---------- */
 

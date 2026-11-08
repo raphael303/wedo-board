@@ -13,6 +13,7 @@ declare(strict_types=1);
  *   organize, assign, bundle_update, bundle_delete:
  *     {actor, bundles: {id: {column_id, title, summary, author_name, position}}, posts: {id: {bundle_id, column_id}}, full: bool}
  *     full = true (organize mit replace): Bündel und Zuordnungen, die nicht im Protokoll stehen, werden entfernt beziehungsweise gelöst.
+ *     remove_bundle_ids (organize ohne replace): von der Aktion neu angelegte Bündel, die beim Rückgängig wieder verschwinden.
  *   post_delete:    {actor, post_id, comment_ids}
  *   comment_delete: {actor, comment_id}
  *   board_clear:    {actor, post_ids, comment_ids, bundle_ids}
@@ -235,6 +236,13 @@ function undo_restore_arrangement(array $board, array $payload, bool $full, stri
         $params = [$now, $board['id']];
         if ($keepPosts) { $sql .= ' AND id NOT IN (' . implode(',', array_fill(0, count($keepPosts), '?')) . ')'; $params = array_merge($params, $keepPosts); }
         db_exec($sql, $params);
+    }
+    // Bündel, die die Aktion neu angelegt hat (Bündelung ohne Ersetzen), verschwinden wieder.
+    $remove = array_map('intval', (array)($payload['remove_bundle_ids'] ?? []));
+    if ($remove) {
+        $in = implode(',', array_fill(0, count($remove), '?'));
+        db_exec("UPDATE posts SET bundle_id = NULL, updated_at = ? WHERE board_id = ? AND bundle_id IN ($in)", array_merge([$now, $board['id']], $remove));
+        db_exec("UPDATE bundles SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL AND id IN ($in)", array_merge([$now, $now, $board['id']], $remove));
     }
     foreach ($posts as $pid => $p) {
         db_exec('UPDATE posts SET bundle_id = ?, column_id = ?, updated_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NULL',

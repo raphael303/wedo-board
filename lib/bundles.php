@@ -161,6 +161,7 @@ function bundle_organize(array $board, array $bundles, bool $replace, string $au
         }
         return $created;
     });
+    if (!$replace) $snap['remove_bundle_ids'] = array_map(fn($g) => $g['id'], $created);
     $undoId = undo_log($board, 'organize', t('log_organize', $board['lang'], ['n' => count($created)]), $snap);
     return $created;
 }

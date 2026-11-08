@@ -49,7 +49,7 @@ $boot = [
     </button>
     <?php if ($owner): ?><a class="bar-btn" href="/admin/board.php?key=<?= e($board['bkey']) ?>" title="Bibliothek" aria-label="Bibliothek"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a><?php endif; ?>
     <?php if ($owner): ?><button class="bar-btn" id="history-btn" type="button" title="<?= e(t('history', $lang)) ?>" aria-label="<?= e(t('history', $lang)) ?>"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></button><?php endif; ?>
-    <?php if ($owner): ?><button class="btn-ghost bar-ghost" id="new-bundle" type="button"><?= e(t('bundle_new', $lang)) ?></button><?php endif; ?>
+    <?php if ($owner): ?><button class="btn-ghost bar-ghost" id="new-bundle" type="button"><?= e(t('bundle_new', $lang)) ?></button><button class="btn-ghost bar-ghost" id="ai-bundle" type="button"><?= e(t('ai_bundle', $lang)) ?></button><?php endif; ?>
     <button class="btn-primary" id="new-post" type="button"><?= e(t('new_post', $lang)) ?></button>
   </div>
 </header>
@@ -114,6 +114,36 @@ $boot = [
 <?php endif; ?>
 
 <?php if ($owner): ?>
+<dialog id="ai-dialog" class="sheet">
+  <form id="ai-form" method="dialog" novalidate>
+    <h2 class="sheet-title"><?= e(t('ai_title', $lang)) ?></h2>
+    <div id="ai-unavailable" hidden>
+      <p class="ai-msg" id="ai-unavailable-text"></p>
+      <div class="sheet-actions"><button type="button" class="btn-ghost ai-close"><?= e(t('close', $lang)) ?></button><a class="btn-primary" id="ai-settings-link" href="/admin/settings.php#ki"><?= e(t('ai_to_settings', $lang)) ?></a></div>
+    </div>
+    <div id="ai-body" hidden>
+      <label class="field-label" for="ai-instruction"><?= e(t('ai_instruction', $lang)) ?></label>
+      <textarea class="field" id="ai-instruction" name="instruction" rows="3" maxlength="2000" placeholder="<?= e(t('ai_instruction_placeholder', $lang)) ?>"></textarea>
+      <div class="chips" id="ai-recent" hidden></div>
+      <div class="ai-options">
+        <label class="radio-row"><input type="radio" name="scope" value="all" checked> <span><?= e(t('ai_scope_all', $lang)) ?></span></label>
+        <label class="radio-row"><input type="radio" name="scope" value="loose"> <span><?= e(t('ai_scope_loose', $lang)) ?></span></label>
+        <label class="check-row"><input type="checkbox" name="collect_rest"> <span><?= e(t('ai_collect_rest', $lang)) ?></span></label>
+      </div>
+      <p class="hint-text" id="ai-warn" hidden></p>
+      <p class="hint-text" id="ai-model-hint"></p>
+      <p class="form-error" id="ai-error" hidden></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn-ghost ai-close"><?= e(t('cancel', $lang)) ?></button>
+        <button type="submit" class="btn-primary" id="ai-submit"><?= e(t('ai_run_auto', $lang)) ?></button>
+      </div>
+    </div>
+    <div id="ai-running" hidden>
+      <p class="ai-msg"><span class="spinner"></span> <?= e(t('ai_running', $lang)) ?></p>
+      <div class="sheet-actions"><button type="button" class="btn-ghost" id="ai-abort"><?= e(t('cancel', $lang)) ?></button></div>
+    </div>
+  </form>
+</dialog>
 <dialog id="block-dialog" class="sheet">
   <form id="block-form" method="dialog" novalidate>
     <h2 class="sheet-title" id="block-title"></h2>

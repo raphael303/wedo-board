@@ -95,6 +95,15 @@ function guest_api(string $method, array $p): never {
         $entry = undo_apply($board, $id);
         wb_json(['ok' => true, 'entry' => $entry, 'version' => board_by_id($board['id'])['last_activity_at']]);
     }
+    if ($sub === 'ai' && ($p[3] ?? '') === 'status' && $method === 'GET') {
+        if (!wb_can('ai.use', $board)) wb_error('Nicht berechtigt.', 403);
+        wb_json(['ok' => true] + ai_organize_status($board));
+    }
+    if ($sub === 'ai' && ($p[3] ?? '') === 'organize' && $method === 'POST') {
+        if (!wb_can('ai.use', $board)) wb_error('Nicht berechtigt.', 403);
+        wb_check_csrf_header();
+        ai_organize_api($board, wb_read_json_body());
+    }
     if ($sub === 'block' && $method === 'POST') {
         if (!wb_can('guest.block', $board)) wb_error('Nicht berechtigt.', 403);
         wb_check_csrf_header();
@@ -188,6 +197,17 @@ function guest_api(string $method, array $p): never {
         wb_json(['ok' => true, 'active' => $had === 0, 'version' => board_touch($board['id'])]);
     }
     wb_error('Unbekannter Aufruf.', 404);
+}
+
+/** KI-Bündelung für Board-Seite und Schnittstelle; ein Lauf darf bis zu 60 Sekunden dauern. */
+function ai_organize_api(array $board, array $in): never {
+    @set_time_limit(AI_ORGANIZE_TIMEOUT + 30);
+    try {
+        $r = ai_organize_board($board, $in);
+    } catch (AiException $e) {
+        wb_error(ai_error_message($e, $board['lang']), 502, ['code' => 'ai_' . $e->kind]);
+    }
+    wb_json(['ok' => true] + $r + ['version' => board_by_id($board['id'])['last_activity_at']]);
 }
 
 function rate_limit(string $uid, int $max = 30): void {
@@ -341,6 +361,12 @@ function owner_boards_api(string $method, array $p): never {
     if ($action === 'undo' && $method === 'POST' && (int)($p[3] ?? 0) > 0) {
         wb_check_csrf_header();
         wb_json(['ok' => true, 'entry' => undo_apply($board, (int)$p[3])]);
+    }
+    if ($action === 'ai-organize' && $method === 'POST') {
+        ai_organize_api($board, $in);
+    }
+    if ($action === 'ai-status' && $method === 'GET') {
+        wb_json(['ok' => true] + ai_organize_status($board));
     }
     if ($action === 'block' && $method === 'POST') {
         $block = guest_block_create($board, (string)($in['guest_key'] ?? ''), (string)($in['display_name'] ?? ''), ($in['scope'] ?? 'board') === 'all', filter_var($in['hide'] ?? false, FILTER_VALIDATE_BOOLEAN));

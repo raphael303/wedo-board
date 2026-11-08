@@ -365,3 +365,18 @@ body.presenter #history-btn { display: none; }
 .author-btn:hover .name { text-decoration: underline; }
 .radio-row, .check-row { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; cursor: pointer; }
 .radio-row input, .check-row input { width: 18px; height: 18px; margin: 0; }
+
+/* KI-Bündelung */
+.field-label { font-size: 0.85rem; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips-label { font-size: 0.8rem; color: var(--muted); margin-right: 2px; }
+.chips .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 0.85rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.chips .chip:hover { background: rgba(27, 31, 36, 0.05); }
+.ai-options { display: flex; flex-direction: column; gap: 8px; }
+.ai-msg { margin: 4px 0; font-size: 0.98rem; line-height: 1.45; display: flex; align-items: center; gap: 10px; }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--line); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
+a.btn-primary { text-decoration: none; display: inline-block; }
+body.presenter #ai-bundle { display: none; }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+#ai-model-hint, #ai-warn { margin-top: 4px; }

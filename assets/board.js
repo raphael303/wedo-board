@@ -338,6 +338,96 @@
     kdlg.addEventListener('close', () => render());
   }
 
+  /* ---------- KI-Bündelung (Besitzer) ---------- */
+  const adlg = $('#ai-dialog');
+  let aiAbort = null;
+  function aiShow(part) {
+    for (const id of ['ai-unavailable', 'ai-body', 'ai-running']) $('#' + id).hidden = id !== part;
+  }
+  function aiUpdateButton() {
+    const f = $('#ai-form');
+    $('#ai-submit').textContent = t(f.instruction.value.trim() ? 'ai_run_prompt' : 'ai_run_auto');
+  }
+  async function openAiDialog() {
+    if (!adlg) return;
+    const f = $('#ai-form');
+    f.reset();
+    $('#ai-error').hidden = true;
+    adlg.showModal();
+    aiShow('ai-running');
+    try {
+      const st = await call('/ai/status', { method: 'GET' });
+      if (!st.available) {
+        $('#ai-unavailable-text').textContent = t('ai_unavailable_' + st.reason);
+        const link = $('#ai-settings-link');
+        link.href = st.reason === 'board_off' ? '/admin/board.php?key=' + board.key : '/admin/settings.php#ki';
+        link.textContent = t(st.reason === 'board_off' ? 'ai_to_board_settings' : 'ai_to_settings');
+        link.hidden = st.reason === 'forbidden';
+        aiShow('ai-unavailable'); return;
+      }
+      if (st.post_count < st.min_posts) {
+        $('#ai-unavailable-text').textContent = t('ai_too_few', { n: st.min_posts });
+        $('#ai-settings-link').hidden = true;
+        aiShow('ai-unavailable'); return;
+      }
+      if (st.post_count > st.max_posts) {
+        $('#ai-unavailable-text').textContent = t('ai_too_many', { n: st.max_posts });
+        $('#ai-settings-link').hidden = true;
+        aiShow('ai-unavailable'); return;
+      }
+      const warn = $('#ai-warn');
+      warn.hidden = st.post_count < st.warn_posts;
+      if (!warn.hidden) warn.textContent = t('ai_warn_many', { n: st.post_count });
+      $('#ai-model-hint').textContent = t('ai_model_hint', { model: st.model || '' });
+      f.collect_rest.checked = !!st.collect_rest;
+      f.querySelector('input[name=scope][value=loose]').disabled = st.bundle_count === 0 && st.loose_count === st.post_count;
+      const rec = $('#ai-recent');
+      rec.replaceChildren();
+      if (st.recent_instructions && st.recent_instructions.length) {
+        rec.append(el('span', { class: 'chips-label', text: t('ai_recent') }));
+        for (const ins of st.recent_instructions) rec.append(el('button', { type: 'button', class: 'chip', text: ins.length > 60 ? ins.slice(0, 57) + '…' : ins, title: ins, onclick: () => { f.instruction.value = ins; aiUpdateButton(); f.instruction.focus(); } }));
+      }
+      rec.hidden = !rec.childElementCount;
+      aiUpdateButton();
+      aiShow('ai-body');
+      setTimeout(() => f.instruction.focus(), 30);
+    } catch (e) { adlg.close(); showError(e); }
+  }
+  if (adlg) {
+    const f = $('#ai-form');
+    $('#ai-bundle').addEventListener('click', openAiDialog);
+    adlg.querySelectorAll('.ai-close').forEach(b => b.addEventListener('click', () => adlg.close()));
+    f.instruction.addEventListener('input', aiUpdateButton);
+    f.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey) && !$('#ai-body').hidden) { ev.preventDefault(); f.requestSubmit(); } });
+    $('#ai-abort').addEventListener('click', () => { if (aiAbort) aiAbort.abort(); adlg.close(); });
+    f.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if ($('#ai-body').hidden) return;
+      $('#ai-error').hidden = true;
+      aiShow('ai-running');
+      aiAbort = new AbortController();
+      const body = { instruction: f.instruction.value.trim(), scope: f.scope.value, collect_rest: f.collect_rest.checked };
+      try {
+        const res = await fetch(api + '/ai/organize', { method: 'POST', credentials: 'same-origin', signal: aiAbort.signal,
+          headers: { 'Content-Type': 'application/json', 'X-CSRF': W.csrf || '' }, body: JSON.stringify(body) });
+        let data = null; try { data = await res.json(); } catch (e) { /* leer */ }
+        if (!res.ok || !data || !data.ok) {
+          const msg = (data && data.error) || t('error_generic');
+          $('#ai-error').textContent = msg; $('#ai-error').hidden = false;
+          aiShow('ai-body'); return;
+        }
+        adlg.close();
+        await poll();
+        const text = (data.scope === 'loose' ? t('ai_result_assigned', { a: data.assigned, n: data.bundles.length, m: data.loose_posts }) : t('ai_result', { n: data.bundles.length, m: data.loose_posts })) + ' · ' + data.model;
+        offerUndo(data, text);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        $('#ai-error').textContent = t('error_generic'); $('#ai-error').hidden = false; aiShow('ai-body');
+      } finally { aiAbort = null; }
+    });
+    adlg.addEventListener('close', () => render());
+  }
+
   /* ---------- Bündel ---------- */
   function renderBundle(g, wide) {
     const posts = postsInBundle(g.id);
@@ -688,5 +778,5 @@
   applyState(Object.assign({ full: true }, W.state));
   render();
   timer = setTimeout(poll, 3000);
-  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open) && !(hdlg && hdlg.open) && !(kdlg && kdlg.open)) render(); }, 60000); // Zeitangaben auffrischen
+  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open) && !(hdlg && hdlg.open) && !(kdlg && kdlg.open) && !(adlg && adlg.open)) render(); }, 60000); // Zeitangaben auffrischen
 })();

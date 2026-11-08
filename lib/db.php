@@ -208,6 +208,28 @@ function db_schema(): array {
             cnt INT UNSIGNED NOT NULL DEFAULT 0,
             PRIMARY KEY (author_key, minute)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+
+        "CREATE TABLE IF NOT EXISTS board_summaries (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            board_id INT UNSIGNED NOT NULL,
+            mode VARCHAR(16) NOT NULL,
+            status VARCHAR(16) NOT NULL DEFAULT 'idle',
+            content MEDIUMTEXT NULL,
+            fingerprint CHAR(40) NULL,
+            model VARCHAR(120) NOT NULL DEFAULT '',
+            post_count INT UNSIGNED NOT NULL DEFAULT 0,
+            comment_count INT UNSIGNED NOT NULL DEFAULT 0,
+            generated_by VARCHAR(16) NOT NULL DEFAULT '',
+            lock_token CHAR(32) NULL,
+            started_at DATETIME(6) NULL,
+            finished_at DATETIME(6) NULL,
+            failed_at DATETIME(6) NULL,
+            error VARCHAR(500) NULL,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            UNIQUE KEY ux_board_mode (board_id, mode)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
 }
 

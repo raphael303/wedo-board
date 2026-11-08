@@ -185,7 +185,8 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
         <form method="post" data-confirm="Board archivieren? Es ist danach für Gäste nicht mehr erreichbar."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="archive"><button class="btn-ghost" type="submit">Archivieren</button></form>
       <?php endif; ?>
       <a class="btn-ghost" href="/api/boards/<?= e($board['bkey']) ?>/export.md" target="_blank">Export Markdown</a>
-      <a class="btn-ghost" href="/admin/export.php?key=<?= e($board['bkey']) ?>" target="_blank">Druckansicht / PDF</a>
+      <a class="btn-ghost" href="/b/<?= e($board['bkey']) ?>/export?ai=<?= summary_unavailable_reason($board, 'board') === null ? 'board' : 'none' ?>" target="_blank">Export / PDF (ohne Namen)</a>
+      <a class="btn-ghost" href="/admin/export.php?key=<?= e($board['bkey']) ?>" target="_blank">Druckansicht mit Namen</a>
       <form method="post" data-confirm="Board in den Papierkorb legen? Es ist danach für die Klasse nicht mehr erreichbar und wird nach 30 Tagen endgültig gelöscht."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete"><button class="btn-danger" type="submit">Löschen</button></form>
     </div>
   </section>

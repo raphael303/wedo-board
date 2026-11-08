@@ -12,6 +12,9 @@ RewriteBase /
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
+# Inhaltlicher Export: /b/<key>/export
+RewriteRule ^b/([a-z0-9]{16})/export/?$ export.php?key=$1 [L,QSA]
+
 # Board-Links: /b/<key>
 RewriteRule ^b/([a-z0-9]{16})/?$ board.php?key=$1 [L,QSA]
 

@@ -187,7 +187,7 @@ admin_header('Einstellungen', 'settings');
   <?php endif; ?>
 
   <h3>Datenschutz</h3>
-  <p class="muted">Bei einem KI-Lauf gehen nur die Texte der Beiträge (Titel, Text, bei Links die Domain, bei Bildern der Vermerk «[Bild]») und die Spaltennamen an den gewählten Anbieter (zurzeit Anthropic, Server in den USA). Fantasienamen, Kommentare, Reaktionen und Bilder werden nicht übertragen. Boards, bei denen «KI-Funktionen erlaubt» ausgeschaltet ist, werden nie übertragen. Der API-Schlüssel liegt verschlüsselt in der Datenbank; der Geheimwert dazu steht in <code>config.php</code>.</p>
+  <p class="muted">Bei einem KI-Lauf gehen nur die Texte der Beiträge (Titel, Text, bei Links die Domain, bei Bildern der Vermerk «[Bild]») und die Spaltennamen an den gewählten Anbieter (zurzeit Anthropic, Server in den USA). Für die KI-Zusammenfassung im Export kommen die Texte der Kommentare dazu, ebenfalls ohne Namen. Fantasienamen, Reaktionen und Bilder werden nie übertragen. Eine Zusammenfassung wird gespeichert und kann von allen, die das Board öffnen, ausgelöst und gelesen werden; neu erzeugt wird sie erst, wenn sich die Inhalte geändert haben und die letzte Fassung älter als zehn Minuten ist. Boards, bei denen «KI-Funktionen erlaubt» ausgeschaltet ist, werden nie übertragen. Der API-Schlüssel liegt verschlüsselt in der Datenbank; der Geheimwert dazu steht in <code>config.php</code>.</p>
   <?php endif; ?>
 </section>
 

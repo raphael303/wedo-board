@@ -801,7 +801,30 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   dlg.addEventListener('close', () => render());
 
-  /* ---------- Start ---------- */
+  /* ---------- Export (für alle) ---------- */
+  const xdlg = $('#export-dialog');
+  if (xdlg) {
+    const xform = $('#export-form'), xsubmit = $('#export-submit');
+    const listBox = xform.querySelector('input[type=checkbox][name=list]');
+    const syncList = () => {
+      // Ohne Zusammenfassung ist die Beitragsliste der ganze Inhalt.
+      const none = xform.querySelector('input[name=ai]:checked').value === 'none';
+      if (none) listBox.checked = true;
+      listBox.disabled = none;
+    };
+    xform.querySelectorAll('input[name=ai]').forEach((r) => r.addEventListener('change', syncList));
+    syncList();
+    $('#export-btn').addEventListener('click', () => xdlg.showModal());
+    $('#export-cancel').addEventListener('click', () => xdlg.close());
+    xform.addEventListener('submit', () => {
+      // Doppelklicks abfangen: Das Formular öffnet genau eine Vorschau; die Seite dort wartet auf eine laufende Erstellung.
+      if (listBox.disabled) { listBox.disabled = false; setTimeout(syncList, 0); }
+      xsubmit.disabled = true;
+      setTimeout(() => { xsubmit.disabled = false; xdlg.close(); }, 1200);
+    });
+  }
+
+  /* ---------- Start ---------- */  /* ---------- Start ---------- */
   applyState(Object.assign({ full: true }, W.state));
   render();
   timer = setTimeout(poll, 3000);

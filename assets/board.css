@@ -413,3 +413,8 @@ body.presenter .access-url { font-size: 1.7rem; }
 .access-big-qr { width: min(72vh, 86vw); aspect-ratio: 1; }
 .access-big-url { margin: 0; font-weight: 750; font-size: clamp(1.6rem, 6vmin, 4.5rem); letter-spacing: -0.01em; text-align: center; overflow-wrap: anywhere; }
 @media print { .access, .access-big { display: none !important; } }
+
+/* Export-Dialog */
+.radio-inline { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.radio-row.is-disabled { color: var(--muted); cursor: default; }
+.muted-inline { color: var(--muted); font-size: 0.8rem; }

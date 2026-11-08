@@ -28,6 +28,15 @@ $boot = [
     'api' => '/api/b/' . $board['bkey'],
     'csrf' => $owner ? wb_csrf_token() : null,
 ];
+// Export-Dialog: Welche KI-Zusammenfassungen sind möglich (oder schon gespeichert)?
+$exportData = export_collect($board);
+$exportAi = [];
+foreach (SUMMARY_MODES as $m) {
+    $r = summary_unavailable_reason($board, $m, $exportData);
+    $stored = $r !== null && $r !== 'no_table' && summary_row($board['id'], $m) !== null;
+    $exportAi[$m] = ['ok' => $r === null || $stored, 'reason' => $r === null || $stored ? null : t('export_reason_' . $r, $lang, ['n' => SUMMARY_MIN_POSTS])];
+}
+$exportDefaultAi = $exportAi['board']['ok'] ? 'board' : 'none';
 // Zugangs-Panel: Kurzlink ohne Protokoll anzeigen, QR-Code direkt einbetten (kein zusätzlicher Abruf).
 $accessUrl = (string)$board['url'];
 $accessLabel = preg_replace('~^https?://(www\.)?~i', '', $accessUrl);
@@ -51,6 +60,9 @@ $accessQr = wb_qr_svg($accessUrl);
     <a class="bar-btn" href="?lang=<?= $lang === 'de' ? 'en' : 'de' ?>" title="<?= e(t('language', $lang)) ?>"><?= $lang === 'de' ? 'EN' : 'DE' ?></a>
     <button class="bar-btn" id="access-btn" type="button" aria-controls="access" aria-expanded="false" title="<?= e(t('access', $lang)) ?>" aria-label="<?= e(t('access', $lang)) ?>">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+    </button>
+    <button class="bar-btn" id="export-btn" type="button" title="<?= e(t('export', $lang)) ?>" aria-label="<?= e(t('export', $lang)) ?>">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
     </button>
     <button class="bar-btn" id="presenter" type="button" title="<?= e(t('presenter', $lang)) ?>" aria-label="<?= e(t('presenter', $lang)) ?>">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
@@ -195,6 +207,44 @@ $accessQr = wb_qr_svg($accessUrl);
   </div>
 </dialog>
 <?php endif; ?>
+
+<dialog id="export-dialog" class="sheet">
+  <form id="export-form" method="get" action="/b/<?= e($board['bkey']) ?>/export" target="_blank" novalidate>
+    <h2 class="sheet-title"><?= e(t('export_title', $lang)) ?></h2>
+    <span class="field-label"><?= e(t('export_ai', $lang)) ?></span>
+    <label class="radio-row"><input type="radio" name="ai" value="none" <?= $exportDefaultAi === 'none' ? 'checked' : '' ?>> <span><?= e(t('export_ai_none', $lang)) ?></span></label>
+    <?php foreach (['board' => 'export_ai_board', 'units' => 'export_ai_units_' . ($board['type'] === 'columns' ? 'columns' : 'bundles')] as $m => $label): ?>
+    <label class="radio-row<?= $exportAi[$m]['ok'] ? '' : ' is-disabled' ?>"><input type="radio" name="ai" value="<?= $m ?>" <?= $exportAi[$m]['ok'] ? '' : 'disabled' ?> <?= $exportDefaultAi === $m ? 'checked' : '' ?>> <span><?= e(t($label, $lang)) ?><?php if (!$exportAi[$m]['ok']): ?> <small class="muted-inline"><?= e($exportAi[$m]['reason']) ?></small><?php endif; ?></span></label>
+    <?php endforeach; ?>
+    <input type="hidden" name="list" value="0">
+    <label class="check-row" id="export-list-row"><input type="checkbox" name="list" value="1" checked> <span><?= e(t('export_list', $lang)) ?></span></label>
+    <span class="field-label"><?= e(t('export_group', $lang)) ?></span>
+    <div class="radio-inline">
+      <?php foreach (($board['type'] === 'columns' ? ['columns', 'bundles', 'time'] : ['bundles', 'time']) as $i => $g): ?>
+      <label class="radio-row"><input type="radio" name="group" value="<?= $g ?>" <?= $i === 0 ? 'checked' : '' ?>> <span><?= e(t('export_group_' . $g, $lang)) ?></span></label>
+      <?php endforeach; ?>
+    </div>
+    <span class="field-label"><?= e(t('export_images', $lang)) ?></span>
+    <div class="radio-inline">
+      <?php foreach (['thumb', 'large', 'none'] as $i => $g): ?>
+      <label class="radio-row"><input type="radio" name="img" value="<?= $g ?>" <?= $i === 0 ? 'checked' : '' ?>> <span><?= e(t('export_img_' . $g, $lang)) ?></span></label>
+      <?php endforeach; ?>
+    </div>
+    <input type="hidden" name="comments" value="0">
+    <label class="check-row"><input type="checkbox" name="comments" value="1" checked> <span><?= e(t('export_comments', $lang)) ?></span></label>
+    <input type="hidden" name="reactions" value="0">
+    <label class="check-row"><input type="checkbox" name="reactions" value="1" checked> <span><?= e(t('export_reactions', $lang)) ?></span></label>
+    <?php if ($board['type'] === 'columns'): ?>
+    <input type="hidden" name="newpage" value="0">
+    <label class="check-row"><input type="checkbox" name="newpage" value="1"> <span><?= e(t('export_newpage', $lang)) ?></span></label>
+    <?php endif; ?>
+    <p class="hint-text"><?= e(t('export_hint', $lang)) ?></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn-ghost" id="export-cancel"><?= e(t('cancel', $lang)) ?></button>
+      <button type="submit" class="btn-primary" id="export-submit"><?= e(t('export_open', $lang)) ?></button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="lightbox" class="lightbox"><img alt=""><button type="button" class="lightbox-close" aria-label="<?= e(t('close', $lang)) ?>">×</button></dialog>
 

@@ -23,6 +23,7 @@ function ai_fake_structured(array $credential, string $system, string $user, arr
         case 'fake-garbage': return ['data' => ['unsinn' => true], 'input_tokens' => 10, 'output_tokens' => 2, 'model' => 'fake-1'];
         case 'fake-slow': sleep(2); break;
     }
+    if (($options['tool_name'] ?? '') === 'zusammenfassung') return ai_fake_summary($credential, $system, $user, $options);
     $posts = [];
     if (preg_match('~<beitraege>(.*?)</beitraege>~su', $user, $m)) {
         foreach (preg_split('/\n+/', trim($m[1])) as $line) {
@@ -77,4 +78,57 @@ function ai_fake_structured(array $credential, string $system, string $user, arr
 function ai_fake_models(string $apiKey): array {
     if ($apiKey === 'fake-invalid') throw new AiException('invalid_key', 'Fake: Schlüssel ungültig.');
     return [['id' => 'fake-1', 'name' => 'Fake 1 (deterministisch)'], ['id' => 'fake-2', 'name' => 'Fake 2']];
+}
+
+/**
+ * Zusammenfassung (lib/summary.php): ein Abschnitt pro Einheit aus <einheiten> bzw. zwei Themen-Abschnitte,
+ * Belege aus den Beitragsnummern, ein wörtliches Zitat aus dem ersten Beitrag (die ersten sechs Wörter) und ein
+ * erfundenes Zitat, das die Prüfung verwerfen muss. Beiträge mit «lose» erhalten keinen Beleg.
+ */
+function ai_fake_summary(array $credential, string $system, string $user, array $options): array {
+    $posts = [];
+    if (preg_match('~<beitraege>(.*?)</beitraege>~su', $user, $m)) {
+        foreach (preg_split('/\n+/', trim($m[1])) as $line) {
+            if (preg_match('/^#(\d+)\s*(?:\[(?:Einheit|Spalte):\s*([^\]]*)\])?\s*(?:\[Impuls\])?\s*(.*)$/u', trim($line), $pm)) {
+                $posts[] = ['id' => (int)$pm[1], 'unit' => trim($pm[2]), 'text' => $pm[3]];
+            }
+        }
+    }
+    $units = [];
+    if (preg_match('~<einheiten>(.*?)</einheiten>~su', $user, $m)) {
+        foreach (preg_split('/\n+/', trim($m[1])) as $line) if (preg_match('/^(\S+):\s*(.*)$/u', trim($line), $um)) $units[] = $um[1];
+    }
+    $sections = [];
+    if ($units) {
+        foreach ($units as $u) {
+            $ids = array_values(array_map(fn($p) => $p['id'], array_filter($posts, fn($p) => $p['unit'] === $u && mb_stripos($p['text'], 'lose') === false)));
+            $sections[] = ['unit' => $u, 'title' => 'Einheit ' . $u, 'paragraphs' => [['text' => 'Zusammenfassung der Einheit ' . $u . ' mit ' . count($ids) . ' Beiträgen.', 'refs' => $ids]]];
+        }
+        $sections[] = ['unit' => 'gibt-es-nicht', 'title' => 'Falsch', 'paragraphs' => [['text' => 'Muss verworfen werden.', 'refs' => [1]]]];
+    } else {
+        $half = (int)ceil(count($posts) / 2);
+        foreach ([array_slice($posts, 0, $half), array_slice($posts, $half)] as $i => $chunk) {
+            if (!$chunk) continue;
+            $sections[] = ['title' => 'Thema ' . ($i + 1), 'paragraphs' => [['text' => 'Fake-Abschnitt mit ' . count($chunk) . ' Beiträgen.', 'refs' => array_merge(array_map(fn($p) => $p['id'], $chunk), [999999])]]];
+        }
+    }
+    $quotes = [];
+    if ($posts) {
+        $words = preg_split('/\s+/u', trim(preg_replace('/^.*? — /u', '', $posts[0]['text']) ?? ''));
+        $quotes[] = ['text' => '«' . implode(' ', array_slice($words, 0, 6)) . '»', 'ref' => $posts[0]['id']];
+        $quotes[] = ['text' => 'Dieses Zitat steht in keinem Beitrag.', 'ref' => $posts[0]['id']];
+    }
+    $data = [
+        'intro' => 'Fake-Einleitung über ' . count($posts) . ' Beiträge.',
+        'sections' => $sections,
+        'disagreements' => $posts ? [['text' => 'Fake-Uneinigkeit.', 'refs' => [$posts[0]['id']]]] : [],
+        'open_questions' => [['text' => 'Fake-Frage ohne Beleg?', 'refs' => []]],
+        'quotes' => $quotes,
+    ];
+    return [
+        'data' => $data,
+        'input_tokens' => (int)(mb_strlen($system . $user) / 4),
+        'output_tokens' => (int)(strlen(json_encode($data)) / 4),
+        'model' => (string)($options['model'] ?? $credential['model'] ?? 'fake-1'),
+    ];
 }

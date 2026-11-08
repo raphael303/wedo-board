@@ -14,7 +14,7 @@ try {
 
 if (!$errors && db_is_installed()) {
     http_response_code(403);
-    echo '<!doctype html><meta charset="utf-8"><title>wedo board</title><body style="font-family:system-ui;padding:2rem;max-width:40rem"><h1>Bereits installiert</h1><p>Die Installation wurde abgeschlossen. Aus Sicherheitsgründen kannst du diese Seite löschen. Zur <a href="admin/">Bibliothek</a>.</p></body>';
+    echo '<!doctype html><meta charset="utf-8"><title>' . e(wb_app_name()) . '</title><body style="font-family:system-ui;padding:2rem;max-width:40rem"><h1>Bereits installiert</h1><p>Die Installation wurde abgeschlossen. Aus Sicherheitsgründen kannst du diese Seite löschen. Zur <a href="admin/">Bibliothek</a>.</p></body>';
     exit;
 }
 
@@ -31,6 +31,7 @@ if (!$errors && $_SERVER['REQUEST_METHOD'] === 'POST') {
             setting_set('admin_password_hash', password_hash($pw, PASSWORD_DEFAULT));
             setting_set('installed_at', date('c'));
             setting_set('schema_version', (string)WB_SCHEMA_VERSION);
+            db_ensure_superadmin();
             if (!is_dir(__DIR__ . '/uploads')) @mkdir(__DIR__ . '/uploads', 0755);
             $done = true;
         } catch (Throwable $e) {
@@ -53,7 +54,7 @@ $checks = [
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>wedo board – Installation</title>
+<title><?= e(wb_app_name()) ?> – Installation</title>
 <style>
 body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f3f4f6;color:#1b1f24;margin:0;padding:2rem 1rem}
 main{max-width:34rem;margin:0 auto;background:#fff;border-radius:14px;padding:2rem;box-shadow:0 1px 2px rgba(0,0,0,.06)}
@@ -76,7 +77,7 @@ code{background:#f3f4f6;padding:.15rem .4rem;border-radius:4px;word-break:break-
   <p>Du findest ihn jederzeit wieder in der Bibliothek unter «Einstellungen». Lösche jetzt die Datei <code>install.php</code> vom Server oder lasse sie liegen; sie ist ab sofort gesperrt.</p>
   <p><a href="admin/">Zur Bibliothek</a></p>
 <?php else: ?>
-  <h1>wedo board einrichten</h1>
+  <h1><?= e(wb_app_name()) ?> einrichten</h1>
   <?php foreach ($errors as $err): ?><p class="err"><?= e($err) ?></p><?php endforeach; ?>
   <ul>
     <?php foreach ($checks as $label => $ok): ?>

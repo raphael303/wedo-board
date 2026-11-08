@@ -20,6 +20,12 @@ function wb_base_url(): string {
     return rtrim((string)wb_config('base_url', ''), '/');
 }
 
+/** Anzeigename der App als Dateinamen-tauglicher Kurzname (für Exporte). */
+function wb_app_slug(): string {
+    $s = strtolower(trim(preg_replace('/[^a-z0-9]+/i', '-', wb_app_name()) ?? '', '-'));
+    return $s !== '' ? $s : 'board';
+}
+
 function wb_board_url(string $key, ?string $slug = null): string {
     return wb_base_url() . '/' . ($slug !== null && $slug !== '' ? $slug : 'b/' . $key);
 }

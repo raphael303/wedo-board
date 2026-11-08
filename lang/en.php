@@ -1,4 +1,5 @@
 <?php
+// Strings of the guest page. {app} is replaced with the app name from config.php.
 return [
     'new_post' => 'New post',
     'post_title' => 'Title (optional)',

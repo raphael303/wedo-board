@@ -42,13 +42,13 @@ function admin_header(string $title, string $active = ''): void {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title><?= e($title) ?> – wedo board</title>
+<title><?= e($title) ?> – <?= e(wb_app_name()) ?></title>
 <link rel="stylesheet" href="/assets/admin.css?v=<?= WB_VERSION ?>">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231b1f24'/><rect x='7' y='7' width='8' height='11' rx='2' fill='%23fff'/><rect x='17' y='7' width='8' height='6' rx='2' fill='%23fff'/><rect x='17' y='15' width='8' height='10' rx='2' fill='%23fff'/><rect x='7' y='20' width='8' height='5' rx='2' fill='%23fff'/></svg>">
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/admin/">wedo board</a>
+  <a class="brand" href="/admin/"><?= e(wb_app_name()) ?></a>
   <?php if (wb_is_admin_session()): ?>
   <a href="/admin/" class="<?= $active === 'library' ? 'active' : '' ?>">Bibliothek</a>
   <a href="/admin/board.php?new=1" class="<?= $active === 'new' ? 'active' : '' ?>">Neues Board</a>

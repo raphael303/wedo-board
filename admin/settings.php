@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $all = [];
         foreach (db_all('SELECT * FROM boards ORDER BY id') as $b) $all[] = board_export_data(board_normalize($b));
         header('Content-Type: application/json; charset=utf-8');
-        header('Content-Disposition: attachment; filename="wedo-board-backup-' . date('Y-m-d') . '.json"');
+        header('Content-Disposition: attachment; filename="' . wb_app_slug() . '-backup-' . date('Y-m-d') . '.json"');
         echo json_encode(['exported_at' => date('c'), 'boards' => $all], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
     }
@@ -73,6 +73,7 @@ admin_header('Einstellungen', 'settings');
     <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="backup"><button class="btn-ghost" type="submit">Alle Boards als JSON sichern</button></form>
     <form method="post" data-confirm="Gelöschte Beiträge und Kommentare, die älter als 30 Tage sind, endgültig entfernen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="purge"><button class="btn-ghost" type="submit">Papierkorb leeren (älter als 30 Tage)</button></form>
   </div>
+  <p class="muted">Anzeigename «<?= e(wb_app_name()) ?>» und Adresse <code><?= e(wb_base_url()) ?></code> stammen aus <code>config.php</code><?php $lh = (array)wb_config('legacy_hosts', []); ?><?= $lh ? '; frühere Domains, die dorthin umleiten: ' . e(implode(', ', $lh)) : '' ?>. Die Checkliste für einen Domainwechsel steht in <code>DEVELOPMENT.md</code>.</p>
   <p class="muted">Version <?= WB_VERSION ?> · PHP <?= PHP_VERSION ?></p>
 </section>
 <?php admin_footer();

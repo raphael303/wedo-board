@@ -1,4 +1,4 @@
-# wedo board
+# Regeln für Apache/LiteSpeed. Domains stehen nur in config.php (base_url, legacy_hosts).
 Options -Indexes
 AddDefaultCharset utf-8
 
@@ -6,9 +6,7 @@ AddDefaultCharset utf-8
 RewriteEngine On
 RewriteBase /
 
-# Alte Adresse und www auf die Hauptdomain umleiten
-RewriteCond %{HTTP_HOST} ^(www\.nablet\.top|board\.wedo\.science)$ [NC]
-RewriteRule ^(.*)$ https://nablet.top/$1 [R=301,L]
+# Frühere Domains und www leitet lib/bootstrap.php anhand von config.php um (legacy_hosts).
 
 # Authorization-Header an PHP durchreichen (für Bearer-Token)
 RewriteCond %{HTTP:Authorization} .

@@ -42,6 +42,7 @@ function board_by_id(int $id): ?array {
 
 function board_normalize(array $b): array {
     $b['id'] = (int)$b['id'];
+    $b['owner_user_id'] = (int)($b['owner_user_id'] ?? 1);
     $b['columns'] = json_decode($b['columns_json'] ?? '[]', true) ?: [];
     $b['settings'] = array_merge(wb_default_settings(), json_decode($b['settings_json'] ?? '{}', true) ?: []);
     $b['tags'] = wb_parse_tags($b['tags'] ?? '');
@@ -158,10 +159,11 @@ function board_create(array $in): array {
     }
     $now = wb_now();
     $key = wb_random_key(16);
+    $ownerId = (int)(wb_current_user()['id'] ?? 1);
     $id = db_insert(
-        'INSERT INTO boards (bkey, slug, name, type, columns_json, background, lang, settings_json, status, note, tags, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [$key, $slug, $name, $type, json_encode($columns, JSON_UNESCAPED_UNICODE), $bg, $lang,
+        'INSERT INTO boards (bkey, slug, owner_user_id, name, type, columns_json, background, lang, settings_json, status, note, tags, created_at, updated_at, last_activity_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [$key, $slug, $ownerId, $name, $type, json_encode($columns, JSON_UNESCAPED_UNICODE), $bg, $lang,
          json_encode($settings, JSON_UNESCAPED_UNICODE), 'open', $note, implode(', ', $tags), $now, $now, $now]
     );
     return board_by_id($id);

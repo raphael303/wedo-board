@@ -1,4 +1,5 @@
 <?php
+// Texte der Gästeseite. {app} wird durch den Anzeigenamen der App aus config.php ersetzt.
 return [
     'new_post' => 'Neuer Beitrag',
     'post_title' => 'Titel (optional)',

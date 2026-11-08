@@ -8,11 +8,11 @@ if (db_is_installed()) {
 }
 $lang = wb_resolve_lang($board['lang'] ?? (string)wb_config('default_lang', 'de'));
 $uid = wb_client_uid();
-$owner = wb_is_owner();
+$owner = $board ? wb_can('board.manage', $board) : false;
 
 if (!$board || $board['status'] === 'archived') {
     http_response_code(404);
-    ?><!doctype html><html lang="<?= e($lang) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>wedo board</title><link rel="stylesheet" href="/assets/board.css"></head>
+    ?><!doctype html><html lang="<?= e($lang) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><?= e(wb_app_name()) ?></title><link rel="stylesheet" href="/assets/board.css"></head>
     <body class="bg-graphit"><main class="notfound"><h1><?= e(t('not_found', $lang)) ?></h1></main></body></html><?php
     exit;
 }
@@ -32,7 +32,7 @@ $boot = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<title><?= e($board['name']) ?> – wedo board</title>
+<title><?= e($board['name']) ?> – <?= e(wb_app_name()) ?></title>
 <link rel="stylesheet" href="/assets/board.css?v=<?= WB_VERSION ?>">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231b1f24'/><rect x='7' y='7' width='8' height='11' rx='2' fill='%23fff'/><rect x='17' y='7' width='8' height='6' rx='2' fill='%23fff'/><rect x='17' y='15' width='8' height='10' rx='2' fill='%23fff'/><rect x='7' y='20' width='8' height='5' rx='2' fill='%23fff'/></svg>">
 </head>

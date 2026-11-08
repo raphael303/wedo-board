@@ -47,10 +47,22 @@ function db_schema(): array {
             v TEXT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+        "CREATE TABLE IF NOT EXISTS users (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            role ENUM('superadmin','admin','teacher','student','guest') NOT NULL DEFAULT 'guest',
+            display_name VARCHAR(80) NOT NULL DEFAULT '',
+            email VARCHAR(200) NULL,
+            password_hash VARCHAR(255) NULL,
+            created_at DATETIME(6) NOT NULL,
+            disabled_at DATETIME(6) NULL,
+            KEY ix_role (role)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
         "CREATE TABLE IF NOT EXISTS boards (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             bkey CHAR(16) NOT NULL,
             slug VARCHAR(32) NULL,
+            owner_user_id INT UNSIGNED NOT NULL DEFAULT 1,
             name VARCHAR(200) NOT NULL,
             type ENUM('wall','columns') NOT NULL DEFAULT 'wall',
             columns_json TEXT NULL,
@@ -65,6 +77,7 @@ function db_schema(): array {
             last_activity_at DATETIME(6) NOT NULL,
             UNIQUE KEY uk_bkey (bkey),
             KEY ix_slug (slug),
+            KEY ix_owner (owner_user_id),
             KEY ix_status (status),
             KEY ix_activity (last_activity_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -147,6 +160,13 @@ function setting_get(string $k, ?string $default = null): ?string {
 
 function setting_set(string $k, ?string $v): void {
     db_exec('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', [$k, $v]);
+}
+
+/** Legt den Super-Admin (Benutzer 1) an, falls er fehlt; Installation und Migration rufen das auf. */
+function db_ensure_superadmin(): void {
+    $row = db_row('SELECT id FROM users WHERE id = 1');
+    if ($row) return;
+    db_exec("INSERT INTO users (id, role, display_name, created_at) VALUES (1, 'superadmin', 'Lehrperson', ?)", [wb_now()]);
 }
 
 function db_is_installed(): bool {

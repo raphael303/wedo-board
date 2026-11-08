@@ -1,4 +1,4 @@
-/* wedo board – Gäste-Ansicht */
+/* Gäste-Ansicht (Board-Seite) */
 (function () {
   'use strict';
   const W = window.WB;

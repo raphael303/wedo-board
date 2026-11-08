@@ -1,4 +1,4 @@
-/* wedo board – Bibliothek */
+/* Bibliothek */
 (function () {
   'use strict';
   document.addEventListener('click', async (ev) => {

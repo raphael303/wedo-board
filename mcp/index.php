@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 /**
- * wedo board – Connector für Claude (MCP, Streamable HTTP, zustandslos).
- * Adresse: https://nablet.top/mcp/<api-token>
+ * Connector für Claude (MCP, Streamable HTTP, zustandslos).
+ * Adresse: <base_url>/mcp/<api-token>
  */
 require dirname(__DIR__) . '/lib/bootstrap.php';
 require WB_ROOT . '/lib/qr.php';
@@ -79,8 +79,8 @@ function mcp_handle(array $msg): ?array {
                 return ['jsonrpc' => '2.0', 'id' => $id, 'result' => [
                     'protocolVersion' => in_array($requested, $known, true) ? $requested : '2025-06-18',
                     'capabilities' => ['tools' => ['listChanged' => false]],
-                    'serverInfo' => ['name' => 'wedo board', 'version' => WB_VERSION],
-                    'instructions' => "Nablet ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude.",
+                    'serverInfo' => ['name' => wb_app_name(), 'version' => WB_VERSION],
+                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude.",
             ]];
             case 'notifications/initialized':
             case 'notifications/cancelled':
@@ -105,7 +105,7 @@ function mcp_handle(array $msg): ?array {
     } catch (InvalidArgumentException $e) {
         return ['jsonrpc' => '2.0', 'id' => $id, 'result' => mcp_text($e->getMessage(), true)];
     } catch (Throwable $e) {
-        error_log('wedo board mcp: ' . $e->getMessage());
+        error_log(wb_app_name() . ' mcp: ' . $e->getMessage());
         return mcp_rpc_error($id, -32603, 'Serverfehler: ' . $e->getMessage());
     }
 }

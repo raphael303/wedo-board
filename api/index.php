@@ -39,7 +39,7 @@ try {
 } catch (RuntimeException $e) {
     wb_error($e->getMessage(), 400);
 } catch (Throwable $e) {
-    error_log('wedo board: ' . $e->getMessage());
+    error_log(wb_app_name() . ' api: ' . $e->getMessage());
     wb_error('Serverfehler.', 500);
 }
 
@@ -49,7 +49,7 @@ function guest_api(string $method, array $p): never {
     $board = board_by_key($p[1] ?? '');
     if (!$board || $board['status'] === 'archived') wb_error('Board nicht gefunden.', 404);
     $uid = wb_client_uid();
-    $owner = wb_is_owner();
+    $owner = wb_can('board.manage', $board);
     $lang = wb_resolve_lang($board['lang']);
     $name = wb_fantasy_name($uid, $board['bkey'], $board['lang']);
     $sub = $p[2] ?? '';
@@ -122,7 +122,7 @@ function guest_api(string $method, array $p): never {
         wb_json(['ok' => true, 'comment' => comment_public($c, $uid, $owner), 'version' => board_touch($board['id'])]);
     }
     if ($sub === 'bundles') {
-        if (!$owner) wb_error('Nur der Besitzer kann Bündel verwalten.', 403);
+        if (!wb_can('bundle.manage', $board)) wb_error('Nur der Besitzer kann Bündel verwalten.', 403);
         if ($id === 0 && $method === 'POST') {
             $g = bundle_create($board, $in);
             wb_json(['ok' => true, 'bundle' => bundle_public($g), 'version' => board_by_id($board['id'])['last_activity_at']], 201);

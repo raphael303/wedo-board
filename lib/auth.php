@@ -74,8 +74,50 @@ function wb_is_owner(): bool {
     return $cached;
 }
 
+/**
+ * Der angemeldete Benutzer: bei gültiger Admin-Sitzung oder gültigem Token der Benutzer 1 (Super-Admin),
+ * sonst null. Vorbereitung für mehrere Benutzer mit Rollen; heute gibt es nur diesen einen.
+ */
+function wb_current_user(): ?array {
+    static $cached = false;
+    if ($cached !== false) return $cached;
+    $cached = null;
+    if (wb_is_owner()) {
+        try {
+            $u = db_row('SELECT * FROM users WHERE id = 1 AND disabled_at IS NULL');
+        } catch (PDOException $e) {
+            // Die Tabelle users entsteht erst mit Migration 3, die nach dieser Prüfung läuft.
+            $u = null;
+        }
+        if (!$u) {
+            $u = ['id' => 1, 'role' => 'superadmin', 'display_name' => 'Lehrperson', 'email' => null, 'created_at' => null, 'disabled_at' => null];
+        }
+        $u['id'] = (int)$u['id'];
+        $cached = $u;
+    }
+    return $cached;
+}
+
+/**
+ * Zentrale Rechteprüfung. Fähigkeiten: board.manage, bundle.manage, ai.use, guest.block, undo, settings.system.
+ * Heute darf der Super-Admin alles und sonst niemand etwas; später entscheiden Rolle und Board-Besitz.
+ */
+function wb_can(string $ability, ?array $board = null): bool {
+    $u = wb_current_user();
+    if ($u === null) return false;
+    if ($u['role'] === 'superadmin') return true;
+    // Vorgesehen: Lehrpersonen auf eigenen Boards (owner_user_id), Admins auf Boards ihrer Organisation.
+    return false;
+}
+
 function wb_require_owner(): void {
-    if (!wb_is_owner()) {
+    if (!wb_can('board.manage')) {
         wb_error('Nicht berechtigt.', 401);
+    }
+}
+
+function wb_require_can(string $ability, ?array $board = null): void {
+    if (!wb_can($ability, $board)) {
+        wb_error('Nicht berechtigt.', wb_current_user() === null ? 401 : 403);
     }
 }

@@ -1,6 +1,7 @@
 <?php
 // Nur für die lokale Entwicklung: php -S localhost:8080 dev-router.php
-// Bildet die Regeln aus .htaccess nach.
+// Bildet die Regeln aus .htaccess nach. Domains stehen nur in config.php (base_url, legacy_hosts);
+// die Weiterleitung früherer Hosts macht lib/bootstrap.php, auch hier (Test: curl -H 'Host: alt.example' …).
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 if (preg_match('~^/b/([a-z0-9]{16})/?$~', $uri, $m)) {
     $_GET['key'] = $m[1];

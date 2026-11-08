@@ -30,6 +30,21 @@ function db_migrations(): array {
                 KEY ix_board_updated (board_id, updated_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        // Etappe 5a: Benutzer und Rollen (vorbereitend), Boards gehören einem Benutzer.
+        3 => [
+            "CREATE TABLE IF NOT EXISTS users (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                role ENUM('superadmin','admin','teacher','student','guest') NOT NULL DEFAULT 'guest',
+                display_name VARCHAR(80) NOT NULL DEFAULT '',
+                email VARCHAR(200) NULL,
+                password_hash VARCHAR(255) NULL,
+                created_at DATETIME(6) NOT NULL,
+                disabled_at DATETIME(6) NULL,
+                KEY ix_role (role)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            "ALTER TABLE boards ADD COLUMN owner_user_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER slug",
+            "ALTER TABLE boards ADD KEY ix_owner (owner_user_id)",
+        ],
     ];
 }
 
@@ -53,6 +68,9 @@ function db_migrate(): int {
             foreach (db_all('SELECT id FROM boards WHERE slug IS NULL') as $row) {
                 db_exec('UPDATE boards SET slug = ? WHERE id = ?', [board_free_slug(), (int)$row['id']]);
             }
+        }
+        if ($version === 3) {
+            db_ensure_superadmin();
         }
         setting_set('schema_version', (string)$version);
         $applied++;

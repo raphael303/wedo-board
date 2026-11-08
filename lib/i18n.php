@@ -9,7 +9,8 @@ function wb_lang_strings(string $lang): array {
     static $cache = [];
     if (!in_array($lang, wb_langs(), true)) $lang = 'de';
     if (!isset($cache[$lang])) {
-        $cache[$lang] = require WB_ROOT . '/lang/' . $lang . '.php';
+        // {app} in den Sprachdateien steht für den Anzeigenamen aus der Konfiguration.
+        $cache[$lang] = array_map(fn($s) => str_replace('{app}', wb_app_name(), (string)$s), require WB_ROOT . '/lang/' . $lang . '.php');
     }
     return $cache[$lang];
 }

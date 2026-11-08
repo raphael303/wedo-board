@@ -50,7 +50,11 @@ function ai_structured(array $credential, string $system, string $user, array $s
 
 /** Verständliche Meldung zu einer Fehlerart in der Sprache des Boards. */
 function ai_error_message(AiException $e, string $lang): string {
-    return t('ai_error_' . $e->kind, $lang);
+    $msg = t('ai_error_' . $e->kind, $lang);
+    if (in_array($e->kind, ['invalid_response', 'network'], true) && $e->getMessage() !== '') {
+        $msg .= ' (' . mb_substr($e->getMessage(), 0, 300) . ')';
+    }
+    return $msg;
 }
 
 /* ---------- Anbieter laden ---------- */

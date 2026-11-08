@@ -23,6 +23,11 @@ function ai_anthropic_structured(array $credential, string $system, string $user
         'tool_choice' => ['type' => 'tool', 'name' => $options['tool_name']],
     ];
     [$status, $json] = ai_anthropic_request('POST', '/messages', (string)$credential['api_key'], $body, (int)$options['timeout']);
+    if ($status === 400 && $body['max_tokens'] > 4096 && stripos((string)($json['error']['message'] ?? ''), 'max_tokens') !== false) {
+        // Ältere Modelle erlauben höchstens 4096 Ausgabe-Token: einmal mit dieser Grenze wiederholen.
+        $body['max_tokens'] = 4096;
+        [$status, $json] = ai_anthropic_request('POST', '/messages', (string)$credential['api_key'], $body, (int)$options['timeout']);
+    }
     ai_anthropic_check_status($status, $json);
     $input = null;
     foreach ($json['content'] ?? [] as $block) {
@@ -82,5 +87,6 @@ function ai_anthropic_check_status(int $status, array $json): void {
     if ($status === 429 || $type === 'rate_limit_error') throw new AiException('rate_limit', $msg);
     if ($status === 529 || $status === 503 || $type === 'overloaded_error') throw new AiException('overloaded', $msg);
     if ($status === 408 || $status === 504) throw new AiException('timeout', $msg);
-    throw new AiException('invalid_response', $msg);
+    if ($status === 404 || $type === 'not_found_error') throw new AiException('invalid_response', 'Modell nicht gefunden: ' . $msg);
+    throw new AiException('invalid_response', 'HTTP ' . $status . ': ' . $msg);
 }

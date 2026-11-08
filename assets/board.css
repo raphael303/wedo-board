@@ -342,3 +342,20 @@ body.presenter .post { padding: 16px 18px 14px; }
 }
 :focus-visible { outline: 2px solid #1b1f24; outline-offset: 2px; }
 .bg-meer :focus-visible, .bg-wald :focus-visible, .bg-daemmerung :focus-visible, .bg-graphit :focus-visible { outline-color: #fff; }
+
+/* Rückgängig und Verlauf */
+.notice.has-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.notice-action { border: 0; background: var(--ink); color: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 600; font-size: 0.88rem; white-space: nowrap; }
+.notice-action:hover { background: #30363f; }
+.sheet-body { display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+.sheet-title { margin: 0; font-size: 1.15rem; }
+.history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow: auto; }
+.history-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: #fff; }
+.history-item.undone { opacity: 0.55; }
+.history-item.undone .history-label { text-decoration: line-through; }
+.history-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.history-label { font-weight: 600; font-size: 0.95rem; }
+.history-meta { font-size: 0.8rem; color: var(--muted); }
+.history-empty { color: var(--muted); padding: 8px 0; }
+.btn-ghost.small { padding: 6px 12px; font-size: 0.85rem; white-space: nowrap; }
+body.presenter #history-btn { display: none; }

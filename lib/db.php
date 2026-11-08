@@ -75,6 +75,7 @@ function db_schema(): array {
             created_at DATETIME(6) NOT NULL,
             updated_at DATETIME(6) NOT NULL,
             last_activity_at DATETIME(6) NOT NULL,
+            deleted_at DATETIME(6) NULL,
             UNIQUE KEY uk_bkey (bkey),
             KEY ix_slug (slug),
             KEY ix_owner (owner_user_id),
@@ -142,6 +143,19 @@ function db_schema(): array {
             created_at DATETIME(6) NOT NULL,
             UNIQUE KEY uk_reaction (target_type, target_id, emoji, author_key),
             KEY ix_board (board_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+        "CREATE TABLE IF NOT EXISTS undo_log (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            board_id INT UNSIGNED NOT NULL,
+            action VARCHAR(40) NOT NULL,
+            label VARCHAR(200) NOT NULL DEFAULT '',
+            payload MEDIUMTEXT NULL,
+            created_at DATETIME(6) NOT NULL,
+            undone_at DATETIME(6) NULL,
+            undone_by INT UNSIGNED NULL,
+            KEY ix_board_created (board_id, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
         "CREATE TABLE IF NOT EXISTS rate_limits (

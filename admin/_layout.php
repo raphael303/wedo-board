@@ -27,15 +27,26 @@ function admin_check_csrf(): void {
     }
 }
 
-function admin_flash(?string $msg = null): ?string {
-    if ($msg !== null) { $_SESSION['flash'] = $msg; return null; }
+function admin_flash(?string $msg = null, int $undoId = 0, string $boardKey = ''): ?string {
+    if ($msg !== null) {
+        $_SESSION['flash'] = $msg;
+        $_SESSION['flash_undo'] = $undoId > 0 ? ['id' => $undoId, 'key' => $boardKey] : null;
+        return null;
+    }
     $m = $_SESSION['flash'] ?? null;
     unset($_SESSION['flash']);
     return $m;
 }
 
+function admin_flash_undo(): ?array {
+    $u = $_SESSION['flash_undo'] ?? null;
+    unset($_SESSION['flash_undo']);
+    return is_array($u) ? $u : null;
+}
+
 function admin_header(string $title, string $active = ''): void {
     $flash = admin_flash();
+    $flashUndo = $flash ? admin_flash_undo() : null;
     ?><!doctype html>
 <html lang="de">
 <head>
@@ -57,7 +68,7 @@ function admin_header(string $title, string $active = ''): void {
   <?php endif; ?>
 </nav>
 <main class="wrap">
-<?php if ($flash): ?><div class="flash"><?= e($flash) ?></div><?php endif; ?>
+<?php if ($flash): ?><div class="flash"><?= e($flash) ?><?php if ($flashUndo): ?> <form method="post" action="/admin/board.php?key=<?= e($flashUndo['key']) ?>" class="inline"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="undo"><input type="hidden" name="id" value="<?= (int)$flashUndo['id'] ?>"><button class="link-undo" type="submit">Rückgängig</button></form><?php endif; ?></div><?php endif; ?>
 <?php
 }
 

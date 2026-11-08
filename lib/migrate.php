@@ -45,6 +45,22 @@ function db_migrations(): array {
             "ALTER TABLE boards ADD COLUMN owner_user_id INT UNSIGNED NOT NULL DEFAULT 1 AFTER slug",
             "ALTER TABLE boards ADD KEY ix_owner (owner_user_id)",
         ],
+        // Etappe 5b: Änderungsprotokoll mit Rückgängig, Papierkorb für Boards.
+        4 => [
+            "ALTER TABLE boards ADD COLUMN deleted_at DATETIME(6) NULL AFTER last_activity_at",
+            "CREATE TABLE IF NOT EXISTS undo_log (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL DEFAULT 1,
+                board_id INT UNSIGNED NOT NULL,
+                action VARCHAR(40) NOT NULL,
+                label VARCHAR(200) NOT NULL DEFAULT '',
+                payload MEDIUMTEXT NULL,
+                created_at DATETIME(6) NOT NULL,
+                undone_at DATETIME(6) NULL,
+                undone_by INT UNSIGNED NULL,
+                KEY ix_board_created (board_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
     ];
 }
 

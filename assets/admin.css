@@ -35,6 +35,9 @@ code { background: #eef0f3; padding: 2px 6px; border-radius: 5px; font-size: 0.9
 .btn-danger { display: inline-block; border: 1px solid #f1c2bd; border-radius: 999px; background: #fff5f4; color: var(--danger); padding: 8px 14px; font-weight: 500; line-height: 1.2; }
 .btn-danger:hover { background: #fde8e8; }
 .link-danger { border: 0; background: none; color: var(--danger); padding: 0; font-size: 0.85rem; text-decoration: underline; }
+.link-undo { border: 0; background: none; color: inherit; padding: 0 0 0 6px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.flash .inline { display: inline; }
+.btn-ghost.danger { color: var(--danger); border-color: #f1c2bd; }
 
 .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
 .card.narrow { max-width: 420px; margin: 10vh auto; }
@@ -66,6 +69,7 @@ code { background: #eef0f3; padding: 2px 6px; border-radius: 5px; font-size: 0.9
 .status-open { background: #e6f4ea; color: #166534; }
 .status-closed { background: #fff4d6; color: #92400e; }
 .status-archived { background: #e9ecf0; color: var(--muted); }
+.status-trash { background: #fde8e8; color: var(--danger); }
 
 .bg-morgen { --swatch: linear-gradient(135deg, #fbe4c4, #f6b39d, #d8a8e6); }
 .bg-meer { --swatch: linear-gradient(135deg, #10395a, #2f8fbd, #9ad9d2); }

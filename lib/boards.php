@@ -3,27 +3,27 @@ declare(strict_types=1);
 
 /* ---------- Laden und Normalisieren ---------- */
 
-function board_by_key(string $key): ?array {
+function board_by_key(string $key, bool $withTrash = false): ?array {
     if (!preg_match('/^[a-z0-9]{16}$/', $key)) return null;
-    $b = db_row('SELECT * FROM boards WHERE bkey = ?', [$key]);
+    $b = db_row('SELECT * FROM boards WHERE bkey = ?' . ($withTrash ? '' : ' AND deleted_at IS NULL'), [$key]);
     return $b ? board_normalize($b) : null;
 }
 
 function board_by_slug(string $slug): ?array {
     $slug = wb_valid_slug($slug);
     if ($slug === null) return null;
-    $b = db_row("SELECT * FROM boards WHERE slug = ? AND status <> 'archived' ORDER BY id DESC LIMIT 1", [$slug]);
+    $b = db_row("SELECT * FROM boards WHERE slug = ? AND status <> 'archived' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1", [$slug]);
     return $b ? board_normalize($b) : null;
 }
 
 /** Findet ein Board über Schlüssel oder Kurzwort (für Bibliothek, API und Connector). */
-function board_find(string $ref): ?array {
+function board_find(string $ref, bool $withTrash = false): ?array {
     $ref = trim($ref);
-    return board_by_key($ref) ?? board_by_slug($ref);
+    return board_by_key($ref, $withTrash) ?? board_by_slug($ref);
 }
 
 function board_slug_taken(string $slug, ?int $exceptId = null): bool {
-    $row = db_row("SELECT id FROM boards WHERE slug = ? AND status <> 'archived'" . ($exceptId ? ' AND id <> ?' : ''), $exceptId ? [$slug, $exceptId] : [$slug]);
+    $row = db_row("SELECT id FROM boards WHERE slug = ? AND status <> 'archived' AND deleted_at IS NULL" . ($exceptId ? ' AND id <> ?' : ''), $exceptId ? [$slug, $exceptId] : [$slug]);
     return $row !== null;
 }
 
@@ -43,6 +43,7 @@ function board_by_id(int $id): ?array {
 function board_normalize(array $b): array {
     $b['id'] = (int)$b['id'];
     $b['owner_user_id'] = (int)($b['owner_user_id'] ?? 1);
+    $b['deleted_at'] = $b['deleted_at'] ?? null;
     $b['columns'] = json_decode($b['columns_json'] ?? '[]', true) ?: [];
     $b['settings'] = array_merge(wb_default_settings(), json_decode($b['settings_json'] ?? '{}', true) ?: []);
     $b['tags'] = wb_parse_tags($b['tags'] ?? '');
@@ -92,6 +93,7 @@ function board_owner_view(array $b): array {
         'created_at' => $b['created_at'],
         'updated_at' => $b['updated_at'],
         'last_activity_at' => $b['last_activity_at'],
+        'deleted_at' => $b['deleted_at'],
     ];
 }
 
@@ -229,16 +231,58 @@ function board_touch(int $boardId): string {
     return $now;
 }
 
-function board_clear(array $b): void {
+/** Leert ein Board weich (Reaktionen bleiben an den weich gelöschten Elementen hängen, damit Rückgängig sie zurückbringt). */
+function board_clear(array $b): int {
     $now = wb_now();
+    $ids = fn(string $table) => array_map('intval', array_column(db_all("SELECT id FROM $table WHERE board_id = ? AND deleted_at IS NULL", [$b['id']]), 'id'));
+    $payload = ['post_ids' => $ids('posts'), 'comment_ids' => $ids('comments'), 'bundle_ids' => $ids('bundles')];
     db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
     db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
-    db_exec('DELETE FROM reactions WHERE board_id = ?', [$b['id']]);
     db_exec('UPDATE bundles SET deleted_at = ?, updated_at = ? WHERE board_id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
     board_touch($b['id']);
+    return undo_log($b, 'board_clear', t('log_board_clear', $b['lang'], ['n' => count($payload['post_ids'])]), $payload);
+}
+
+/** Löscht einen Beitrag mit seinen Kommentaren weich; der Besitzer kann das rückgängig machen. Gibt -1 zurück, wenn es den Beitrag nicht gibt. */
+function post_soft_delete(array $b, int $postId, bool $byOwner): int {
+    $now = wb_now();
+    $commentIds = array_map('intval', array_column(db_all('SELECT id FROM comments WHERE post_id = ? AND deleted_at IS NULL', [$postId]), 'id'));
+    $n = db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NULL', [$now, $now, $postId, $b['id']]);
+    if ($n === 0) return -1;
+    db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE post_id = ? AND deleted_at IS NULL', [$now, $now, $postId]);
+    board_touch($b['id']);
+    return $byOwner ? undo_log($b, 'post_delete', t('log_post_delete', $b['lang']), ['post_id' => $postId, 'comment_ids' => $commentIds]) : 0;
+}
+
+function comment_soft_delete(array $b, int $commentId, bool $byOwner): int {
+    $now = wb_now();
+    $n = db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NULL', [$now, $now, $commentId, $b['id']]);
+    if ($n === 0) return -1;
+    board_touch($b['id']);
+    return $byOwner ? undo_log($b, 'comment_delete', t('log_comment_delete', $b['lang']), ['comment_id' => $commentId]) : 0;
+}
+
+/** Legt ein Board in den Papierkorb (weiches Löschen, 30 Tage). Das Kurzwort wird frei. */
+function board_trash(array $b): int {
+    $now = wb_now();
+    db_exec('UPDATE boards SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL', [$now, $now, $b['id']]);
+    return undo_log($b, 'board_delete', t('log_board_delete', $b['lang']), []);
+}
+
+/** Holt ein Board aus dem Papierkorb; ein inzwischen vergebenes Kurzwort wird ersetzt. */
+function board_restore(array $b): array {
+    $fields = ['deleted_at = NULL', 'updated_at = ?'];
+    $params = [wb_now()];
+    if ($b['status'] !== 'archived' && $b['slug'] && board_slug_taken($b['slug'], $b['id'])) {
+        $fields[] = 'slug = ?'; $params[] = board_free_slug();
+    }
+    $params[] = $b['id'];
+    db_exec('UPDATE boards SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
+    return board_by_id($b['id']);
 }
 
 function board_delete_forever(array $b): void {
+    db_exec('DELETE FROM undo_log WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM reactions WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM comments WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM posts WHERE board_id = ?', [$b['id']]);
@@ -275,8 +319,16 @@ function board_purge_deleted(int $days = 30): int {
         db_exec('DELETE FROM posts WHERE id = ?', [$p['id']]);
         $n++;
     }
+    foreach (db_all('SELECT id FROM comments WHERE deleted_at IS NOT NULL AND deleted_at < ?', [$limit]) as $c) {
+        db_exec('DELETE FROM reactions WHERE target_type = "comment" AND target_id = ?', [$c['id']]);
+    }
     $n += db_exec('DELETE FROM comments WHERE deleted_at IS NOT NULL AND deleted_at < ?', [$limit]);
     $n += db_exec('DELETE FROM bundles WHERE deleted_at IS NOT NULL AND deleted_at < ?', [$limit]);
+    foreach (db_all('SELECT * FROM boards WHERE deleted_at IS NOT NULL AND deleted_at < ?', [$limit]) as $b) {
+        board_delete_forever(board_normalize($b));
+        $n++;
+    }
+    undo_purge($days);
     return $n;
 }
 
@@ -284,6 +336,7 @@ function boards_list(array $opt = []): array {
     $where = [];
     $params = [];
     $status = $opt['status'] ?? 'active';
+    $where[] = $status === 'trash' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
     if ($status === 'active') { $where[] = "status IN ('open','closed')"; }
     elseif (in_array($status, ['open', 'closed', 'archived'], true)) { $where[] = 'status = ?'; $params[] = $status; }
     $q = trim((string)($opt['q'] ?? ''));

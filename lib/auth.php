@@ -116,6 +116,20 @@ function wb_require_owner(): void {
     }
 }
 
+/**
+ * Schreibende Besitzer-Aufrufe der Board-Seite laufen über die Admin-Sitzung und müssen den CSRF-Token
+ * im Header X-CSRF mitschicken. Aufrufe mit gültigem API-Token brauchen das nicht.
+ */
+function wb_check_csrf_header(): void {
+    $token = wb_bearer_token();
+    if ($token !== null) {
+        $stored = (string)setting_get('api_token');
+        if ($stored !== '' && hash_equals($stored, $token)) return;
+    }
+    $h = (string)($_SERVER['HTTP_X_CSRF'] ?? '');
+    if ($h === '' || !hash_equals(wb_csrf_token(), $h)) wb_error('Ungültige Anfrage (CSRF).', 403);
+}
+
 function wb_require_can(string $ability, ?array $board = null): void {
     if (!wb_can($ability, $board)) {
         wb_error('Nicht berechtigt.', wb_current_user() === null ? 401 : 403);

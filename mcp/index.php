@@ -80,7 +80,7 @@ function mcp_handle(array $msg): ?array {
                     'protocolVersion' => in_array($requested, $known, true) ? $requested : '2025-06-18',
                     'capabilities' => ['tools' => ['listChanged' => false]],
                     'serverInfo' => ['name' => wb_app_name(), 'version' => WB_VERSION],
-                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude.",
+                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Bündelungen, Zuordnungen, Löschungen und Leeren werden protokolliert; der Besitzer kann sie auf der Board-Seite im Verlauf rückgängig machen, du brauchst dafür kein Werkzeug. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude.",
             ]];
             case 'notifications/initialized':
             case 'notifications/cancelled':
@@ -199,7 +199,7 @@ function mcp_tools(): array {
         ],
         [
             'name' => 'delete_board',
-            'description' => 'Löscht ein Board endgültig inklusive aller Inhalte und Bilder. Nur mit confirm=true und nur nach ausdrücklicher Bestätigung des Besitzers; sonst archivieren (update_board mit status=archived).',
+            'description' => 'Legt ein Board in den Papierkorb der Bibliothek (dreissig Tage wiederherstellbar, danach endgültig weg). Nur mit confirm=true und nur nach ausdrücklicher Bestätigung des Besitzers; sonst archivieren (update_board mit status=archived).',
             'inputSchema' => ['type' => 'object', 'properties' => ['board' => $boardParam, 'confirm' => ['type' => 'boolean']], 'required' => ['board', 'confirm']],
         ],
         [
@@ -335,10 +335,10 @@ function mcp_call(string $name, array $a): array {
             return mcp_json(['created' => true] + mcp_board_summary(board_owner_view($copy)));
 
         case 'delete_board':
-            if (empty($a['confirm'])) throw new InvalidArgumentException('Endgültiges Löschen braucht confirm=true nach Bestätigung durch den Besitzer.');
+            if (empty($a['confirm'])) throw new InvalidArgumentException('Löschen braucht confirm=true nach Bestätigung durch den Besitzer.');
             $b = mcp_board_ref($a);
-            board_delete_forever($b);
-            return mcp_text('Board «' . $b['name'] . '» endgültig gelöscht.');
+            board_trash($b);
+            return mcp_text('Board «' . $b['name'] . '» in den Papierkorb gelegt; der Besitzer kann es in der Bibliothek dreissig Tage lang wiederherstellen.');
 
         case 'read_board':
             $b = mcp_board_ref($a);
@@ -347,18 +347,13 @@ function mcp_call(string $name, array $a): array {
 
         case 'delete_post':
             $b = mcp_board_ref($a);
-            $now = wb_now();
             if (!empty($a['comment_id'])) {
-                $n = db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NULL', [$now, $now, (int)$a['comment_id'], $b['id']]);
-                board_touch($b['id']);
-                return mcp_text($n ? 'Kommentar gelöscht.' : 'Kein solcher Kommentar.', !$n);
+                $r = comment_soft_delete($b, (int)$a['comment_id'], true);
+                return mcp_text($r >= 0 ? 'Kommentar gelöscht (der Besitzer kann das im Verlauf des Boards rückgängig machen).' : 'Kein solcher Kommentar.', $r < 0);
             }
             if (!empty($a['post_id'])) {
-                $pid = (int)$a['post_id'];
-                $n = db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NULL', [$now, $now, $pid, $b['id']]);
-                db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE post_id = ? AND deleted_at IS NULL', [$now, $now, $pid]);
-                board_touch($b['id']);
-                return mcp_text($n ? 'Beitrag gelöscht.' : 'Kein solcher Beitrag.', !$n);
+                $r = post_soft_delete($b, (int)$a['post_id'], true);
+                return mcp_text($r >= 0 ? 'Beitrag gelöscht (der Besitzer kann das im Verlauf des Boards rückgängig machen).' : 'Kein solcher Beitrag.', $r < 0);
             }
             throw new InvalidArgumentException('post_id oder comment_id angeben.');
 

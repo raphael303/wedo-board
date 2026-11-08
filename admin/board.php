@@ -5,7 +5,7 @@ admin_require_login();
 admin_check_csrf();
 
 $isNew = isset($_GET['new']);
-$board = $isNew ? null : board_by_key((string)($_GET['key'] ?? ''));
+$board = $isNew ? null : board_by_key((string)($_GET['key'] ?? ''), true);
 if (!$isNew && !$board) {
     http_response_code(404);
     admin_header('Nicht gefunden');
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($board) {
             switch ($action) {
-                case 'clear': board_clear($board); admin_flash('Alle Beiträge entfernt.'); break;
+                case 'clear': $u = board_clear($board); admin_flash('Alle Beiträge entfernt.', $u, $board['bkey']); break;
                 case 'close': board_update($board, ['status' => 'closed']); admin_flash('Board geschlossen.'); break;
                 case 'open':
                     $wasArchived = $board['status'] === 'archived';
@@ -71,28 +71,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: /admin/board.php?key=' . $copy['bkey']);
                     exit;
                 case 'delete':
-                    board_delete_forever($board);
-                    admin_flash('Board endgültig gelöscht.');
+                    $u = board_trash($board);
+                    admin_flash('Board «' . $board['name'] . '» in den Papierkorb gelegt (30 Tage wiederherstellbar).', $u, $board['bkey']);
                     header('Location: /admin/');
                     exit;
+                case 'restore':
+                    $b2 = board_restore($board);
+                    admin_flash('Board wiederhergestellt. Link: ' . $b2['url']);
+                    break;
+                case 'delete_forever':
+                    if ($board['deleted_at'] === null) { $error = 'Nur Boards im Papierkorb lassen sich endgültig löschen.'; break; }
+                    board_delete_forever($board);
+                    admin_flash('Board endgültig gelöscht.');
+                    header('Location: /admin/?status=trash');
+                    exit;
+                case 'undo':
+                    try {
+                        $entry = undo_apply($board, (int)($_POST['id'] ?? 0));
+                        admin_flash('Rückgängig gemacht: ' . $entry['label'] . '.');
+                    } catch (RuntimeException $ex) {
+                        admin_flash($ex->getMessage());
+                    }
+                    break;
                 case 'delete_post':
-                    $pid = (int)($_POST['id'] ?? 0);
-                    $now = wb_now();
-                    db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ?', [$now, $now, $pid, $board['id']]);
-                    db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE post_id = ? AND deleted_at IS NULL', [$now, $now, $pid]);
-                    board_touch($board['id']);
-                    admin_flash('Beitrag gelöscht.');
+                    $u = post_soft_delete($board, (int)($_POST['id'] ?? 0), true);
+                    admin_flash($u >= 0 ? 'Beitrag gelöscht.' : 'Beitrag nicht gefunden.', max(0, $u), $board['bkey']);
                     break;
                 case 'delete_bundle':
                     $g = bundle_by_id($board, (int)($_POST['id'] ?? 0));
-                    if ($g) { bundle_delete($board, $g); admin_flash('Bündel aufgelöst, Beiträge bleiben erhalten.'); }
+                    if ($g) { $u = bundle_delete($board, $g); admin_flash('Bündel aufgelöst, Beiträge bleiben erhalten.', $u, $board['bkey']); }
                     break;
                 case 'delete_comment':
-                    $cid = (int)($_POST['id'] ?? 0);
-                    $now = wb_now();
-                    db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ?', [$now, $now, $cid, $board['id']]);
-                    board_touch($board['id']);
-                    admin_flash('Kommentar gelöscht.');
+                    $u = comment_soft_delete($board, (int)($_POST['id'] ?? 0), true);
+                    admin_flash($u >= 0 ? 'Kommentar gelöscht.' : 'Kommentar nicht gefunden.', max(0, $u), $board['bkey']);
                     break;
             }
             header('Location: /admin/board.php?key=' . $board['bkey'] . ($action === 'delete_post' || $action === 'delete_comment' ? '#inhalt' : ''));
@@ -115,6 +126,23 @@ $export = $board ? board_export_data($board) : null;
 
 admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new');
 ?>
+<?php if ($board && $board['deleted_at'] !== null): ?>
+<div class="page-head">
+  <div>
+    <h1><?= e($board['name']) ?> <span class="pill status-trash">Papierkorb</span></h1>
+    <p class="muted">Am <?= e(admin_time($board['deleted_at'])) ?> gelöscht. Es wird <?= e(admin_time((new DateTime($board['deleted_at'], new DateTimeZone('UTC')))->modify('+30 days')->format('Y-m-d H:i:s'))) ?> endgültig entfernt, falls du es nicht wiederherstellst.</p>
+  </div>
+  <div class="page-actions">
+    <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="restore"><button class="btn" type="submit">Wiederherstellen</button></form>
+    <form method="post" data-confirm="Board jetzt endgültig löschen? Beiträge, Kommentare und Bilder sind danach weg."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete_forever"><button class="btn-danger" type="submit">Endgültig löschen</button></form>
+  </div>
+</div>
+<?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
+<section class="card" id="inhalt">
+  <h2>Inhalt <span class="muted"><?= count($export['posts']) ?> Beiträge</span></h2>
+  <?php foreach ($export['posts'] as $p): ?><p class="postitem-body"><strong><?= e($p['title'] ?: '—') ?></strong> · <?= e($p['author']) ?> · <?= nl2br(e(mb_strimwidth($p['body'], 0, 200, '…'))) ?></p><?php endforeach; ?>
+</section>
+<?php admin_footer(); exit; endif; ?>
 <?php if ($board): ?>
 <div class="page-head">
   <div>
@@ -157,7 +185,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
       <?php endif; ?>
       <a class="btn-ghost" href="/api/boards/<?= e($board['bkey']) ?>/export.md" target="_blank">Export Markdown</a>
       <a class="btn-ghost" href="/admin/export.php?key=<?= e($board['bkey']) ?>" target="_blank">Druckansicht / PDF</a>
-      <form method="post" data-confirm="Board endgültig löschen? Das kann nicht rückgängig gemacht werden."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete"><button class="btn-danger" type="submit">Endgültig löschen</button></form>
+      <form method="post" data-confirm="Board in den Papierkorb legen? Es ist danach für die Klasse nicht mehr erreichbar und wird nach 30 Tagen endgültig gelöscht."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete"><button class="btn-danger" type="submit">Löschen</button></form>
     </div>
   </section>
 </div>

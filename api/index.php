@@ -68,6 +68,16 @@ function guest_api(string $method, array $p): never {
     if ($method === 'GET' && $sub === 'state') {
         wb_json(['ok' => true] + board_state($board, $uid, isset($_GET['since']) ? (string)$_GET['since'] : null, $owner));
     }
+    if ($sub === 'history' && $method === 'GET') {
+        if (!wb_can('undo', $board)) wb_error('Nicht berechtigt.', 403);
+        wb_json(['ok' => true, 'entries' => undo_history($board, 10)]);
+    }
+    if ($sub === 'undo' && $method === 'POST' && $id > 0) {
+        if (!wb_can('undo', $board)) wb_error('Nicht berechtigt.', 403);
+        wb_check_csrf_header();
+        $entry = undo_apply($board, $id);
+        wb_json(['ok' => true, 'entry' => $entry, 'version' => board_by_id($board['id'])['last_activity_at']]);
+    }
 
     // Ab hier nur schreibende Aufrufe.
     if (!$owner) {
@@ -96,14 +106,13 @@ function guest_api(string $method, array $p): never {
         }
         if (!$owner && $post['author_key'] !== $uid) wb_error('Nicht dein Beitrag.', 403);
         if ($method === 'DELETE' || $action === 'delete') {
-            $now = wb_now();
-            db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE id = ?', [$now, $now, $id]);
-            db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE post_id = ? AND deleted_at IS NULL', [$now, $now, $id]);
-            wb_json(['ok' => true, 'version' => board_touch($board['id'])]);
+            $undoId = post_soft_delete($board, $id, $owner);
+            wb_json(['ok' => true, 'version' => board_by_id($board['id'])['last_activity_at'], 'undo_id' => $undoId > 0 ? $undoId : null]);
         }
         if ($method === 'POST' || $method === 'PATCH') {
-            $post = post_update($board, $post, $in, $owner);
-            wb_json(['ok' => true, 'post' => post_public($board, $post, $uid, $owner), 'version' => board_touch($board['id'])]);
+            $undoId = null;
+            $post = post_update($board, $post, $in, $owner, $undoId);
+            wb_json(['ok' => true, 'post' => post_public($board, $post, $uid, $owner), 'version' => board_touch($board['id']), 'undo_id' => $undoId]);
         }
     }
     if ($sub === 'comments' && $id > 0) {
@@ -112,8 +121,8 @@ function guest_api(string $method, array $p): never {
         if (!$owner && $c['author_key'] !== $uid) wb_error('Nicht dein Kommentar.', 403);
         $now = wb_now();
         if ($method === 'DELETE' || $action === 'delete') {
-            db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ?', [$now, $now, $id]);
-            wb_json(['ok' => true, 'version' => board_touch($board['id'])]);
+            $undoId = comment_soft_delete($board, $id, $owner);
+            wb_json(['ok' => true, 'version' => board_by_id($board['id'])['last_activity_at'], 'undo_id' => $undoId > 0 ? $undoId : null]);
         }
         $body = wb_clean_text($in['body'] ?? '', 2000);
         if ($body === '') wb_error('body_required', 422);
@@ -130,11 +139,12 @@ function guest_api(string $method, array $p): never {
         $g = bundle_by_id($board, $id);
         if (!$g) wb_error('Bündel nicht gefunden.', 404);
         if ($method === 'DELETE' || $action === 'delete') {
-            bundle_delete($board, $g);
-            wb_json(['ok' => true, 'version' => board_by_id($board['id'])['last_activity_at']]);
+            $undoId = bundle_delete($board, $g);
+            wb_json(['ok' => true, 'version' => board_by_id($board['id'])['last_activity_at'], 'undo_id' => $undoId ?: null]);
         }
-        $g = bundle_update($board, $g, $in);
-        wb_json(['ok' => true, 'bundle' => bundle_public($g), 'version' => board_by_id($board['id'])['last_activity_at']]);
+        $undoId = null;
+        $g = bundle_update($board, $g, $in, $undoId);
+        wb_json(['ok' => true, 'bundle' => bundle_public($g), 'version' => board_by_id($board['id'])['last_activity_at'], 'undo_id' => $undoId]);
     }
     if ($sub === 'react' && $method === 'POST') {
         if (!$board['settings']['reactions'] && !$owner) wb_error('Reaktionen sind ausgeschaltet.', 403);
@@ -192,9 +202,10 @@ function post_create(array $board, array $in, string $uid, string $name): array 
     return db_row('SELECT * FROM posts WHERE id = ?', [$id]);
 }
 
-function post_update(array $board, array $post, array $in, bool $owner): array {
+function post_update(array $board, array $post, array $in, bool $owner, ?int &$undoId = null): array {
     $fields = [];
     $params = [];
+    $snap = $owner && array_key_exists('bundle_id', $in) ? undo_snapshot($board, [], [(int)$post['id']]) : null;
     if (array_key_exists('title', $in)) {
         $t = wb_clean_text($in['title'], 200);
         $fields[] = 'title = ?'; $params[] = $t !== '' ? $t : null;
@@ -241,6 +252,9 @@ function post_update(array $board, array $post, array $in, bool $owner): array {
     db_exec('UPDATE posts SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
     $p = db_row('SELECT * FROM posts WHERE id = ?', [$post['id']]);
     if ($p['body'] === '' && !$p['image'] && !$p['link']) wb_error('body_required', 422);
+    if ($snap !== null && ($p['bundle_id'] !== $post['bundle_id'] || $p['column_id'] !== $post['column_id'])) {
+        $undoId = undo_log($board, 'assign', t($p['bundle_id'] !== null ? 'log_assign' : 'log_release', $board['lang'], ['n' => 1]), $snap);
+    }
     return $p;
 }
 
@@ -283,7 +297,7 @@ function owner_boards_api(string $method, array $p): never {
         wb_error('Unbekannter Aufruf.', 404);
     }
 
-    $board = board_find($key);
+    $board = board_find($key, true);
     if (!$board) wb_error('Board nicht gefunden.', 404);
 
     if ($action === '') {
@@ -292,9 +306,19 @@ function owner_boards_api(string $method, array $p): never {
             wb_json(['ok' => true, 'board' => board_owner_view(board_update($board, $in))]);
         }
         if ($method === 'DELETE') {
-            board_delete_forever($board);
-            wb_json(['ok' => true, 'deleted' => $key]);
+            $undoId = board_trash($board);
+            wb_json(['ok' => true, 'deleted' => $key, 'trash' => true, 'undo_id' => $undoId]);
         }
+    }
+    if ($action === 'history' && $method === 'GET') {
+        wb_json(['ok' => true, 'entries' => undo_history($board, max(1, min(50, (int)($_GET['limit'] ?? 10))))]);
+    }
+    if ($action === 'undo' && $method === 'POST' && (int)($p[3] ?? 0) > 0) {
+        wb_check_csrf_header();
+        wb_json(['ok' => true, 'entry' => undo_apply($board, (int)$p[3])]);
+    }
+    if ($action === 'restore' && $method === 'POST') {
+        wb_json(['ok' => true, 'board' => board_owner_view(board_restore($board))]);
     }
     if ($method === 'GET') {
         if ($action === 'export.json') {
@@ -321,20 +345,25 @@ function owner_boards_api(string $method, array $p): never {
         $g = bundle_by_id($board, $gid);
         if (!$g) wb_error('Bündel nicht gefunden.', 404);
         if ($method === 'DELETE' || ($p[4] ?? '') === 'delete') {
-            bundle_delete($board, $g);
-            wb_json(['ok' => true]);
+            $undoId = bundle_delete($board, $g);
+            wb_json(['ok' => true, 'undo_id' => $undoId ?: null]);
         }
-        wb_json(['ok' => true, 'bundle' => bundle_public(bundle_update($board, $g, $in))]);
+        $undoId = null;
+        $g = bundle_update($board, $g, $in, $undoId);
+        wb_json(['ok' => true, 'bundle' => bundle_public($g), 'undo_id' => $undoId]);
     }
     if ($action === 'organize' && $method === 'POST') {
         $list = is_array($in['bundles'] ?? null) ? $in['bundles'] : [];
         $replace = array_key_exists('replace', $in) ? filter_var($in['replace'], FILTER_VALIDATE_BOOLEAN) : true;
-        wb_json(['ok' => true, 'bundles' => bundle_organize($board, $list, $replace, (string)($in['author'] ?? 'Claude'))]);
+        $undoId = null;
+        $created = bundle_organize($board, $list, $replace, (string)($in['author'] ?? 'Claude'), $undoId);
+        wb_json(['ok' => true, 'bundles' => $created, 'undo_id' => $undoId]);
     }
     if ($action === 'assign' && $method === 'POST') {
         $gid = isset($in['bundle_id']) && (int)$in['bundle_id'] > 0 ? (int)$in['bundle_id'] : null;
-        $n = bundle_assign($board, $gid, array_map('intval', (array)($in['post_ids'] ?? [])));
-        wb_json(['ok' => true, 'assigned' => $n]);
+        $undoId = null;
+        $n = bundle_assign($board, $gid, array_map('intval', (array)($in['post_ids'] ?? [])), $undoId);
+        wb_json(['ok' => true, 'assigned' => $n, 'undo_id' => $undoId]);
     }
     if ($action === 'posts' && $method === 'POST' && (int)($p[3] ?? 0) === 0) {
         $post = owner_post_create($board, $in);
@@ -347,8 +376,8 @@ function owner_boards_api(string $method, array $p): never {
     if ($method === 'POST' || $method === 'DELETE') {
         switch ($action) {
             case 'clear':
-                board_clear($board);
-                wb_json(['ok' => true, 'board' => board_owner_view(board_by_id($board['id']))]);
+                $undoId = board_clear($board);
+                wb_json(['ok' => true, 'board' => board_owner_view(board_by_id($board['id'])), 'undo_id' => $undoId]);
             case 'close':
                 wb_json(['ok' => true, 'board' => board_owner_view(board_update($board, ['status' => 'closed']))]);
             case 'open':
@@ -358,26 +387,23 @@ function owner_boards_api(string $method, array $p): never {
             case 'duplicate':
                 wb_json(['ok' => true, 'board' => board_owner_view(board_duplicate($board, isset($in['name']) ? (string)$in['name'] : null))], 201);
             case 'delete':
-                board_delete_forever($board);
-                wb_json(['ok' => true, 'deleted' => $key]);
+                $undoId = board_trash($board);
+                wb_json(['ok' => true, 'deleted' => $key, 'trash' => true, 'undo_id' => $undoId]);
             case 'posts':
                 $pid = (int)($p[3] ?? 0);
                 $sub = $p[4] ?? '';
                 if ($pid > 0 && ($sub === 'delete' || $method === 'DELETE')) {
-                    $now = wb_now();
-                    db_exec('UPDATE posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ?', [$now, $now, $pid, $board['id']]);
-                    db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE post_id = ? AND deleted_at IS NULL', [$now, $now, $pid]);
-                    board_touch($board['id']);
-                    wb_json(['ok' => true]);
+                    $undoId = post_soft_delete($board, $pid, true);
+                    if ($undoId < 0) wb_error('Beitrag nicht gefunden.', 404);
+                    wb_json(['ok' => true, 'undo_id' => $undoId]);
                 }
                 break;
             case 'comments':
                 $cid = (int)($p[3] ?? 0);
                 if ($cid > 0) {
-                    $now = wb_now();
-                    db_exec('UPDATE comments SET deleted_at = ?, updated_at = ? WHERE id = ? AND board_id = ?', [$now, $now, $cid, $board['id']]);
-                    board_touch($board['id']);
-                    wb_json(['ok' => true]);
+                    $undoId = comment_soft_delete($board, $cid, true);
+                    if ($undoId < 0) wb_error('Kommentar nicht gefunden.', 404);
+                    wb_json(['ok' => true, 'undo_id' => $undoId]);
                 }
                 break;
         }

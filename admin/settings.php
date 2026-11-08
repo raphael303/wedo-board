@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: /admin/settings.php'); exit;
     } elseif ($action === 'backup') {
         $all = [];
-        foreach (db_all('SELECT * FROM boards ORDER BY id') as $b) $all[] = board_export_data(board_normalize($b));
+        foreach (db_all('SELECT * FROM boards WHERE deleted_at IS NULL ORDER BY id') as $b) $all[] = board_export_data(board_normalize($b));
         header('Content-Type: application/json; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . wb_app_slug() . '-backup-' . date('Y-m-d') . '.json"');
         echo json_encode(['exported_at' => date('c'), 'boards' => $all], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $csrf = wb_csrf_token();
 $token = (string)setting_get('api_token');
-$counts = db_row("SELECT (SELECT COUNT(*) FROM boards) AS boards, (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL) AS posts, (SELECT COUNT(*) FROM posts WHERE deleted_at IS NOT NULL) AS trashed");
+$counts = db_row("SELECT (SELECT COUNT(*) FROM boards WHERE deleted_at IS NULL) AS boards, (SELECT COUNT(*) FROM boards WHERE deleted_at IS NOT NULL) AS trashed_boards, (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL) AS posts, (SELECT COUNT(*) FROM posts WHERE deleted_at IS NOT NULL) AS trashed");
 admin_header('Einstellungen', 'settings');
 ?>
 <div class="page-head"><h1>Einstellungen</h1></div>
@@ -68,10 +68,10 @@ admin_header('Einstellungen', 'settings');
 
 <section class="card">
   <h2>Daten</h2>
-  <p class="muted"><?= (int)$counts['boards'] ?> Boards, <?= (int)$counts['posts'] ?> Beiträge, <?= (int)$counts['trashed'] ?> gelöschte Beiträge im Papierkorb.</p>
+  <p class="muted"><?= (int)$counts['boards'] ?> Boards, <?= (int)$counts['posts'] ?> Beiträge; im Papierkorb <?= (int)$counts['trashed_boards'] ?> Boards (<a href="/admin/?status=trash">anzeigen</a>) und <?= (int)$counts['trashed'] ?> Beiträge.</p>
   <div class="action-grid">
     <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="backup"><button class="btn-ghost" type="submit">Alle Boards als JSON sichern</button></form>
-    <form method="post" data-confirm="Gelöschte Beiträge und Kommentare, die älter als 30 Tage sind, endgültig entfernen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="purge"><button class="btn-ghost" type="submit">Papierkorb leeren (älter als 30 Tage)</button></form>
+    <form method="post" data-confirm="Gelöschte Boards, Beiträge und Kommentare, die älter als 30 Tage sind, endgültig entfernen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="purge"><button class="btn-ghost" type="submit">Papierkorb leeren (älter als 30 Tage)</button></form>
   </div>
   <p class="muted">Anzeigename «<?= e(wb_app_name()) ?>» und Adresse <code><?= e(wb_base_url()) ?></code> stammen aus <code>config.php</code><?php $lh = (array)wb_config('legacy_hosts', []); ?><?= $lh ? '; frühere Domains, die dorthin umleiten: ' . e(implode(', ', $lh)) : '' ?>. Die Checkliste für einen Domainwechsel steht in <code>DEVELOPMENT.md</code>.</p>
   <p class="muted">Version <?= WB_VERSION ?> · PHP <?= PHP_VERSION ?></p>

@@ -93,6 +93,7 @@
 
   async function call(path, opts = {}) {
     const init = { method: opts.method || 'POST', credentials: 'same-origin', headers: {} };
+    if (W.csrf) init.headers['X-CSRF'] = W.csrf;
     if (opts.form) init.body = opts.form;
     else if (opts.json) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.json); }
     const res = await fetch(api + path, init);
@@ -106,16 +107,60 @@
     return data;
   }
   function showError(e) {
-    const msg = S[e.message] ? t(e.message) : (e.message && e.message.length < 80 ? e.message : t('error_generic'));
-    notice(msg, true, 4000);
+    const msg = S[e.message] ? t(e.message) : (e.message && e.message.length < 160 ? e.message : t('error_generic'));
+    notice(msg, true, 6000);
   }
   let noticeTimer = null;
-  function notice(text, warn, ms) {
+  function notice(text, warn, ms, action) {
     const n = $('#notice');
     clearTimeout(noticeTimer);
     if (!text) { n.hidden = true; return; }
-    n.textContent = text; n.className = 'notice' + (warn ? ' warn' : ''); n.hidden = false;
+    n.replaceChildren(el('span', { text }));
+    if (action) n.append(el('button', { class: 'notice-action', type: 'button', text: action.label, onclick: () => { n.hidden = true; action.run(); } }));
+    n.className = 'notice' + (warn ? ' warn' : '') + (action ? ' has-action' : ''); n.hidden = false;
     if (ms) noticeTimer = setTimeout(() => { n.hidden = true; }, ms);
+  }
+
+  /* ---------- Rückgängig und Verlauf (Besitzer) ---------- */
+  function offerUndo(r, text) {
+    if (!r || !r.undo_id) return;
+    notice(text || t('undo'), false, 10000, { label: t('undo'), run: () => undo(r.undo_id) });
+  }
+  async function undo(id) {
+    try {
+      const r = await call('/undo/' + id, { method: 'POST' });
+      notice(t('undo_done'), false, 3000);
+      if (r.version) { await poll(); }
+      if (hdlg && hdlg.open) loadHistory();
+    } catch (e) { showError(e); }
+  }
+  const hdlg = $('#history-dialog');
+  function actorLabel(a) {
+    if (a === 'teacher') return t('actor_teacher');
+    if (a === 'claude') return t('actor_claude');
+    if (a && a.startsWith('ai:')) return t('actor_ai', { model: a.slice(3) });
+    return a || '';
+  }
+  async function loadHistory() {
+    const list = $('#history-list');
+    list.replaceChildren();
+    try {
+      const r = await call('/history', { method: 'GET' });
+      if (!r.entries.length) { list.append(el('li', { class: 'history-empty', text: t('history_empty') })); return; }
+      for (const e of r.entries) {
+        const li = el('li', { class: 'history-item' + (e.undone ? ' undone' : '') },
+          el('div', { class: 'history-main' },
+            el('span', { class: 'history-label', text: e.label }),
+            el('span', { class: 'history-meta', text: timeLabel(e.created_at) + ' · ' + actorLabel(e.actor) + (e.undone ? ' · ' + t('undone') : '') })));
+        if (e.can_undo) li.append(el('button', { class: 'btn-ghost small', type: 'button', text: t('undo'), onclick: () => undo(e.id) }));
+        list.append(li);
+      }
+    } catch (e) { showError(e); }
+  }
+  if (hdlg) {
+    $('#history-btn').addEventListener('click', () => { hdlg.showModal(); loadHistory(); });
+    $('#history-close').addEventListener('click', () => hdlg.close());
+    hdlg.addEventListener('close', () => render());
   }
 
   /* ---------- Rendern ---------- */
@@ -295,14 +340,14 @@
         if (post.bundle === newBundle && post.column === newColumn) return;
         const prev = { bundle: post.bundle, column: post.column };
         post.bundle = newBundle; post.column = newColumn; render();
-        try { const r = await call('/posts/' + id, { json: { bundle_id: newBundle || 0, column: newColumn } }); state.posts.set(id, r.post); state.version = r.version; render(); }
+        try { const r = await call('/posts/' + id, { json: { bundle_id: newBundle || 0, column: newColumn } }); state.posts.set(id, r.post); state.version = r.version; render(); offerUndo(r, t(newBundle ? 'log_assign' : 'log_release', { n: 1 })); }
         catch (e) { Object.assign(post, prev); render(); showError(e); }
       } else if (kind === 'bundle' && columnId) {
         const g = state.bundles.get(id);
         if (!g || g.column === columnId) return;
         const prev = g.column;
         g.column = columnId; postsInBundle(g.id).forEach(p => { p.column = columnId; }); render();
-        try { const r = await call('/bundles/' + id, { json: { column: columnId } }); state.bundles.set(id, r.bundle); state.version = r.version; poll(); }
+        try { const r = await call('/bundles/' + id, { json: { column: columnId } }); state.bundles.set(id, r.bundle); state.version = r.version; poll(); offerUndo(r, t('log_bundle_update', { title: g.title })); }
         catch (e) { g.column = prev; render(); showError(e); }
       }
     });
@@ -314,6 +359,7 @@
       const r = await call('/bundles/' + g.id, { method: 'DELETE' });
       state.bundles.delete(g.id); postsInBundle(g.id).forEach(p => { p.bundle = null; });
       state.version = r.version; render(); poll();
+      offerUndo(r, t('log_bundle_delete', { title: g.title }));
     } catch (e) { showError(e); }
   }
 
@@ -348,6 +394,7 @@
         state.bundles.set(r.bundle.id, r.bundle);
         state.version = r.version;
         bdlg.close(); render(); poll();
+        if (editingBundle) offerUndo(r, t('log_bundle_update', { title: r.bundle.title }));
       } catch (e) { showError(e); }
     });
     const nb = $('#new-bundle');
@@ -436,13 +483,13 @@
 
   async function deleteComment(c) {
     if (!confirm(t('delete_comment_confirm'))) return;
-    try { const r = await call('/comments/' + c.id, { method: 'DELETE' }); state.comments.delete(c.id); state.version = r.version; render(); }
+    try { const r = await call('/comments/' + c.id, { method: 'DELETE' }); state.comments.delete(c.id); state.version = r.version; render(); offerUndo(r, t('log_comment_delete')); }
     catch (e) { showError(e); }
   }
 
   async function deletePost(p) {
     if (!confirm(t('delete_confirm'))) return;
-    try { const r = await call('/posts/' + p.id, { method: 'DELETE' }); state.posts.delete(p.id); state.version = r.version; render(); }
+    try { const r = await call('/posts/' + p.id, { method: 'DELETE' }); state.posts.delete(p.id); state.version = r.version; render(); offerUndo(r, t('log_post_delete')); }
     catch (e) { showError(e); }
   }
 
@@ -460,6 +507,7 @@
   function updateStatusNotice() {
     if (!canWrite()) notice(t('board_closed'), true);
     else if ($('#notice').classList.contains('warn') && $('#notice').textContent === t('board_closed')) notice(null);
+    const hb = $('#history-btn'); if (hb) hb.hidden = false;
     $('#new-post').hidden = !canWrite();
     $('#fab').hidden = !canWrite();
   }
@@ -587,5 +635,5 @@
   applyState(Object.assign({ full: true }, W.state));
   render();
   timer = setTimeout(poll, 3000);
-  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open)) render(); }, 60000); // Zeitangaben auffrischen
+  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open) && !(hdlg && hdlg.open)) render(); }, 60000); // Zeitangaben auffrischen
 })();

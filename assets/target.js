@@ -395,11 +395,13 @@
       if (bump && !reduceMotion) { countEl.classList.remove('bump'); void countEl.offsetWidth; countEl.classList.add('bump'); }
     }
     const rv = $('#reveal');
+    const oh = $('#owner-hint');
+    if (oh) oh.hidden = !!state.revealed;
     if (rv) { rv.textContent = state.revealed ? t('target_hide') : t('target_reveal'); rv.classList.toggle('is-on', state.revealed); }
 
     const hint = $('#hint');
     if (past) { hint.textContent = ''; const pl = $('#past-label'); if (pl) pl.textContent = t('target_past', { n: state.round }); }
-    else if (me.owner) hint.textContent = state.revealed ? '' : t('target_hint_owner');
+    else if (me.owner) hint.textContent = ''; // Hinweis steht beim Knopf unten rechts, damit die Scheibe beim Anzeigen nicht springt
     else if (editing) hint.textContent = A.require_all ? t('target_hint') : t('target_hint_optional');
     else if (state.revealed) hint.textContent = state.mine ? t('target_hint_revealed') : '';
     else hint.textContent = state.mine ? t('target_hint_saved') : '';

@@ -78,6 +78,7 @@ $accessQr = wb_qr_svg($accessUrl);
 </div>
 
 <div class="target-count" id="count-box">
+  <?php if ($owner && $round === null): ?><span class="target-count-hint" id="owner-hint"><?= e(t('target_hint_owner', $lang)) ?></span><?php endif; ?>
   <span class="target-count-n" id="count" aria-live="polite"></span>
   <?php if ($owner && $round === null): ?><button class="btn-primary target-reveal" id="reveal" type="button"><?= e(t('target_reveal', $lang)) ?></button><?php endif; ?>
 </div>

@@ -135,8 +135,19 @@ function wb_backgrounds(): array {
     return ['morgen', 'meer', 'wald', 'daemmerung', 'graphit', 'papier'];
 }
 
+/** Alle wählbaren Emojis; pro Board ist eine Auswahl davon erlaubt (settings.emojis). */
 function wb_emojis(): array {
+    return array_merge(wb_default_emojis(), wb_traffic_emojis());
+}
+
+/** Standardauswahl für neue Boards (ohne Ampel). */
+function wb_default_emojis(): array {
     return ['👍', '❤️', '😂', '🤔', '👏', '⭐'];
+}
+
+/** Ampel: Pro Person und Beitrag (oder Kommentar) gilt höchstens eine der drei Farben. */
+function wb_traffic_emojis(): array {
+    return ['🔴', '🟡', '🟢'];
 }
 
 function wb_default_settings(): array {
@@ -147,7 +158,7 @@ function wb_default_settings(): array {
         'links' => true,
         'new_on_top' => true,
         'ai' => true,
-        'emojis' => wb_emojis(),
+        'emojis' => wb_default_emojis(),
     ];
 }
 

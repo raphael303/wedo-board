@@ -117,8 +117,14 @@ $renderGroup = function (array $group, bool $pullImpulses = true) use ($renderPo
     if ($pullImpulses) foreach ($group as $p) if ($p['owner'] && $p['bundle_id'] === null) $renderPost($p);
     $rest = $pullImpulses ? array_filter($group, fn($p) => !($p['owner'] && $p['bundle_id'] === null)) : $group;
     if (!$rest) return;
+    // Paare in Zeilen statt CSS-Spalten: Safari bricht mehrspaltige Bereiche beim Drucken falsch um.
     echo '<div class="grid">';
-    foreach ($rest as $p) $renderPost($p);
+    foreach (array_chunk(array_values($rest), 2) as $pair) {
+        echo '<div class="row">';
+        foreach ($pair as $p) $renderPost($p);
+        if (count($pair) === 1) echo '<div class="post-spacer"></div>';
+        echo '</div>';
+    }
     echo '</div>';
 };
 /** Beiträge einer Spalte oder des ganzen Boards nach Bündeln gegliedert. */
@@ -214,8 +220,10 @@ h2 .tag { font: 500 7.5pt var(--sans); color: var(--muted); border: 1px solid va
 .bundle { font: 600 9pt var(--sans); margin: 3mm 0 1.5mm; break-after: avoid; }
 .bundle small { font-weight: 400; color: var(--muted); }
 .bundle-sum { font-size: 9pt; color: #3b414b; margin: 0 0 2mm; break-after: avoid; }
-.grid { columns: 2; column-gap: 5mm; }
-.post { break-inside: avoid; border: 1px solid var(--line); border-radius: 2mm; padding: 2.8mm 3.2mm; margin: 0 0 4mm; }
+.grid { display: block; }
+.row { display: flex; gap: 5mm; align-items: stretch; break-inside: avoid; page-break-inside: avoid; margin: 0 0 4mm; }
+.row > .post, .row > .post-spacer { flex: 1 1 0; min-width: 0; margin: 0; }
+.post { break-inside: avoid; page-break-inside: avoid; border: 1px solid var(--line); border-radius: 2mm; padding: 2.8mm 3.2mm; margin: 0 0 4mm; }
 .post .head { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; margin-bottom: .8mm; }
 .post .num { font: 600 7.5pt var(--sans); color: var(--c); }
 .post .rx { font: 7.5pt var(--sans); color: var(--muted); }
@@ -233,12 +241,12 @@ h2 .tag { font: 500 7.5pt var(--sans); color: var(--muted); border: 1px solid va
 .post .img-large { max-height: 120mm; }
 .empty { font: 10pt var(--sans); color: var(--muted); }
 .colophon { margin-top: 8mm; font: 7.5pt/1.5 var(--sans); color: var(--muted); border-top: 1px solid var(--line); padding-top: 2mm; }
-.toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; gap: 2mm; justify-content: center; align-items: center; padding: 2.5mm; background: rgba(255,255,255,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); font: 10pt var(--sans); }
+.toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; gap: 2mm; justify-content: center; align-items: center; padding: 2.5mm; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--line); font: 10pt var(--sans); }
 .btn { font: 600 10pt var(--sans); border: 1px solid #c9cdd4; background: #fff; color: var(--ink); border-radius: 99px; padding: 1.6mm 4mm; cursor: pointer; text-decoration: none; display: inline-block; }
 .btn.primary { background: #1b1f24; color: #fff; border-color: #1b1f24; }
 .btn[disabled] { opacity: .45; cursor: default; }
 .linkbtn { font: inherit; background: none; border: 0; padding: 0; color: #2f6f9f; text-decoration: underline; cursor: pointer; }
-@media screen and (max-width: 230mm) { .page { margin: 14mm 0 0; padding: 10mm 6mm; box-shadow: none; } .grid { columns: 1; } .split, .quotes { grid-template-columns: 1fr; } }
+@media screen and (max-width: 230mm) { .page { margin: 14mm 0 0; padding: 10mm 6mm; box-shadow: none; } .row { flex-direction: column; gap: 4mm; } .post-spacer { display: none; } .split, .quotes { grid-template-columns: 1fr; } }
 @media print {
   html { background: none; }
   .page { margin: 0; padding: 0; max-width: none; box-shadow: none; }
@@ -347,6 +355,12 @@ h2 .tag { font: 500 7.5pt var(--sans); color: var(--muted); border: 1px solid va
 (function () {
   var printBtn = document.getElementById('print');
   printBtn.addEventListener('click', function () { window.print(); });
+  // Safari zeichnet die Seite nach dem Schliessen des Druckdialogs manchmal nicht neu: Neuaufbau erzwingen.
+  window.addEventListener('afterprint', function () {
+    var m = document.querySelector('main.page');
+    m.style.display = 'none'; void m.offsetHeight; m.style.display = '';
+    window.scrollBy(0, 1); window.scrollBy(0, -1);
+  });
   var base = location.pathname;
   var csrf = <?= json_encode($owner ? wb_csrf_token() : null) ?>;
   var mode = <?= json_encode($ai) ?>;

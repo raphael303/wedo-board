@@ -138,7 +138,7 @@ function db_schema(): array {
             board_id INT UNSIGNED NOT NULL,
             target_type ENUM('post','comment') NOT NULL,
             target_id INT UNSIGNED NOT NULL,
-            emoji VARCHAR(16) NOT NULL,
+            emoji VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
             author_key CHAR(32) NOT NULL,
             created_at DATETIME(6) NOT NULL,
             UNIQUE KEY uk_reaction (target_type, target_id, emoji, author_key),

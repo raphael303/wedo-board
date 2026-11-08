@@ -560,7 +560,7 @@
         onclick: () => { state.pickerOpen = open ? null : key; render(); } }, open ? el('span', { text: '×' }) : svg('react')));
       if (open) {
         const picker = el('div', { class: 'picker' });
-        for (const emoji of board.settings.emojis) picker.append(el('button', { type: 'button', text: emoji, onclick: () => { state.pickerOpen = null; react(type, id, emoji); } }));
+        for (const emoji of board.settings.emojis) picker.append(el('button', { type: 'button', text: emoji, class: TRAFFIC.includes(emoji) ? 'traffic' : null, onclick: () => { state.pickerOpen = null; react(type, id, emoji); } }));
         box.append(picker);
       }
     }
@@ -635,15 +635,24 @@
     catch (e) { showError(e); }
   }
 
+  const TRAFFIC = ['🔴', '🟡', '🟢'];
   async function react(type, id, emoji) {
     const key = type + ':' + id;
     if (!state.reactions.has(key)) state.reactions.set(key, new Map());
     const rx = state.reactions.get(key);
+    const before = new Map([...rx].map(([k, v]) => [k, Object.assign({}, v)]));
     const cur = rx.get(emoji) || { n: 0, mine: false };
     rx.set(emoji, cur.mine ? { n: cur.n - 1, mine: false } : { n: cur.n + 1, mine: true });
+    if (!cur.mine && TRAFFIC.includes(emoji)) {
+      // Ampel: nur eine Farbe pro Person; die bisherige eigene Farbe fällt weg.
+      for (const o of TRAFFIC) {
+        const r = rx.get(o);
+        if (o !== emoji && r && r.mine) rx.set(o, { n: r.n - 1, mine: false });
+      }
+    }
     render();
     try { const r = await call('/react', { json: { type, id, emoji } }); state.version = r.version; }
-    catch (e) { rx.set(emoji, cur); render(); showError(e); }
+    catch (e) { state.reactions.set(key, before); render(); showError(e); }
   }
 
   function updateStatusNotice() {

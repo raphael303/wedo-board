@@ -190,11 +190,19 @@ function guest_api(string $method, array $p): never {
         $exists = db_row("SELECT id FROM $table WHERE id = ? AND board_id = ? AND deleted_at IS NULL", [$tid, $board['id']]);
         if (!$exists) wb_error('Ziel nicht gefunden.', 404);
         $had = db_exec('DELETE FROM reactions WHERE target_type = ? AND target_id = ? AND emoji = ? AND author_key = ?', [$type, $tid, $emoji, $uid]);
+        $cleared = [];
+        if ($had === 0 && in_array($emoji, wb_traffic_emojis(), true)) {
+            // Ampel: eine andere Farbe derselben Person an diesem Element fällt weg.
+            $others = array_values(array_diff(wb_traffic_emojis(), [$emoji]));
+            foreach ($others as $o) {
+                if (db_exec('DELETE FROM reactions WHERE target_type = ? AND target_id = ? AND emoji = ? AND author_key = ?', [$type, $tid, $o, $uid]) > 0) $cleared[] = $o;
+            }
+        }
         if ($had === 0) {
             db_exec('INSERT INTO reactions (board_id, target_type, target_id, emoji, author_key, created_at) VALUES (?, ?, ?, ?, ?, ?)',
                 [$board['id'], $type, $tid, $emoji, $uid, wb_now()]);
         }
-        wb_json(['ok' => true, 'active' => $had === 0, 'version' => board_touch($board['id'])]);
+        wb_json(['ok' => true, 'active' => $had === 0, 'cleared' => $cleared, 'version' => board_touch($board['id'])]);
     }
     wb_error('Unbekannter Aufruf.', 404);
 }

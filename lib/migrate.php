@@ -131,6 +131,11 @@ function db_migrations(): array {
                 UNIQUE KEY ux_board_mode (board_id, mode)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        // Version 0.10.1: Emojis byte-genau vergleichen. Unter utf8mb4_unicode_ci gelten viele Emojis als gleich
+        // (zum Beispiel 👍 und 😂 oder 🔴 und 🟢), wodurch Reaktionen sich gegenseitig aufhoben und zusammengezählt wurden.
+        8 => [
+            "ALTER TABLE reactions MODIFY emoji VARCHAR(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL",
+        ],
     ];
 }
 

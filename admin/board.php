@@ -268,6 +268,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
           <label><input type="checkbox" name="emojis[]" value="<?= e($em) ?>" <?= in_array($em, $v['settings']['emojis'], true) ? 'checked' : '' ?>> <?= e($em) ?></label>
         <?php endforeach; ?>
       </div>
+      <p class="muted small">Ampel 🔴 🟡 🟢: Jede Person kann pro Beitrag nur eine Farbe wählen; eine neue Farbe ersetzt die bisherige.</p>
     </div>
     <div class="actions">
       <button class="btn" type="submit"><?= $board ? 'Speichern' : 'Board anlegen' ?></button>

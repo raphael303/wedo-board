@@ -1,6 +1,6 @@
 # Nablet – Arbeitsnotizen für die Weiterentwicklung
 
-Diese Datei ist für Claude (und Raphael) gedacht, wenn in einem neuen Chat an Nablet weitergearbeitet wird. Sie beschreibt, was `CONCEPT.md` (Was und Warum) und `API.md` (Schnittstelle) nicht enthalten: den Arbeitsablauf, die Umgebung und die Entscheidungen, die sich bewährt haben. Stand: 2026-11-08, Version 0.9.4 (Etappe 5 vollständig und abgenommen; die KI-Bündelung läuft produktiv mit `claude-opus-5-5`; aus Etappe 4 ist das Zugangs-Panel mit QR-Code und Kurzlink auf der Board-Seite dazugekommen; seit 0.9.4 blendet der Beamer-Modus keine Bedienelemente mehr aus).
+Diese Datei ist für Claude (und Raphael) gedacht, wenn in einem neuen Chat an Nablet weitergearbeitet wird. Sie beschreibt, was `CONCEPT.md` (Was und Warum) und `API.md` (Schnittstelle) nicht enthalten: den Arbeitsablauf, die Umgebung und die Entscheidungen, die sich bewährt haben. Stand: 2026-11-08, Version 0.9.5 (Etappe 5 vollständig und abgenommen; die KI-Bündelung läuft produktiv mit `claude-opus-5-5`; aus Etappe 4 ist das Zugangs-Panel mit QR-Code und Kurzlink auf der Board-Seite dazugekommen; seit 0.9.4 blendet der Beamer-Modus keine Bedienelemente mehr aus, seit 0.9.5 vergrössert er auch die Schrift nicht mehr).
 
 ## Lage der Dinge
 

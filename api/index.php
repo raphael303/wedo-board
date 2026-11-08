@@ -3,6 +3,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/lib/bootstrap.php';
 require WB_ROOT . '/lib/images.php';
 require WB_ROOT . '/lib/qr.php';
+require __DIR__ . '/activities.php';
 
 $route = trim((string)($_GET['route'] ?? ''), '/');
 $method = $_SERVER['REQUEST_METHOD'];
@@ -23,6 +24,10 @@ try {
         guest_api($method, $parts);
     } elseif ($head === 'boards') {
         owner_boards_api($method, $parts);
+    } elseif ($head === 'a') {
+        activity_guest_api($method, $parts);
+    } elseif ($head === 'activities') {
+        activity_owner_api($method, $parts);
     } elseif ($head === 'me' && $method === 'GET') {
         wb_require_owner();
         db_migrate();
@@ -41,7 +46,7 @@ try {
         wb_require_owner();
         wb_json(['ok' => true, 'purged' => board_purge_deleted(30)]);
     } elseif ($head === 'meta' && $method === 'GET') {
-        wb_json(['ok' => true, 'backgrounds' => wb_backgrounds(), 'emojis' => wb_emojis(), 'langs' => wb_langs(), 'types' => ['wall', 'columns']]);
+        wb_json(['ok' => true, 'backgrounds' => wb_backgrounds(), 'emojis' => wb_emojis(), 'langs' => wb_langs(), 'types' => ['wall', 'columns'], 'activity_types' => ACTIVITY_TYPES, 'target_color_modes' => TARGET_COLOR_MODES]);
     }
     wb_error('Unbekannter Aufruf.', 404);
 } catch (InvalidArgumentException $e) {

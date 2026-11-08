@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.10.2');
-define('WB_SCHEMA_VERSION', 8);
+define('WB_VERSION', '0.11.0');
+define('WB_SCHEMA_VERSION', 9);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {
@@ -58,4 +58,5 @@ require WB_ROOT . '/lib/blocks.php';
 require WB_ROOT . '/lib/ai/ai.php';
 require WB_ROOT . '/lib/export.php';
 require WB_ROOT . '/lib/summary.php';
+require WB_ROOT . '/lib/activities.php';
 require WB_ROOT . '/lib/migrate.php';

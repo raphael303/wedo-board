@@ -55,6 +55,30 @@ Bündel: `GET /api/boards/{key}/bundles` listet sie; `POST /api/boards/{key}/bun
 
 `POST /api/boards/{key}/block` mit `{guest_key, scope: "board"|"all", hide: bool, display_name}` sperrt einen Gast (`guest_key` ist sein Browser-Schlüssel `wb_uid`, den die Board-Seite dem Besitzer in `posts[].akey` und `comments[].akey` liefert; `display_name` ist optional und wird sonst aus seinen Beiträgen übernommen). Mit `hide` werden seine Beiträge und Kommentare auf diesem Board weich gelöscht. Antwort: `{block, undo_id}`; `block` enthält `id, board_id, board_key, board_name, guest_key, display_name, hide_content, created_at, lifted_at, active, hidden_posts`. `GET /api/blocks?status=active|all` listet Sperren, `POST /api/blocks/{id}/lift` hebt eine auf und stellt ausgeblendete Inhalte über den Protokolleintrag wieder her (Antwort `{block}`, bei nicht mehr möglicher Wiederherstellung mit `note`).
 
+## Zielscheiben (Aktivitäten)
+
+Aktivitäten sind eigene Formate neben den Boards; heute gibt es den Typ `target` (Feedbackzielscheibe). Überall, wo `{key}` steht, ist auch das Kurzwort erlaubt; Kurzwörter teilen sich Boards und Aktivitäten.
+
+Besitzer: `GET /api/activities?q=&status=&sort=&tag=&type=` listet Aktivitäten (`status` wie bei den Boards, inklusive `trash`). `POST /api/activities` legt eine an:
+
+```json
+{
+  "type": "target",
+  "name": "Feedback Projektwoche",
+  "aspects": ["Teamarbeit", "Zeitmanagement", "Inhalt verstanden", "Präsentation", "Spass"],
+  "color_mode": "sector",
+  "require_all": true,
+  "background": "meer",
+  "lang": "de",
+  "note": "Klasse 3b, Projektwoche, Rückmeldung, 13.11.2026",
+  "tags": "feedback, 3b, projektwoche"
+}
+```
+
+`aspects` sind 2 bis 12 Texte (je höchstens 60 Zeichen) oder Objekte `{id, label}`. `color_mode` ist `sector` (eine Farbe pro Sektor, Standard) oder `scale` (grün in der Mitte, rot am Rand). `require_all` (Standard `true`) verlangt einen Punkt in jedem Sektor. Antwort mit Status 201: `{activity}` mit `id, key, slug, type, name, aspects, color_mode, require_all, background, lang, status, revealed, round, response_count, note, tags, url, long_url, qr_svg, qr_png, created_at, updated_at, last_activity_at, deleted_at`. `GET /api/activities/{key}` liest, `PATCH /api/activities/{key}` (auch `POST`) ändert beliebige dieser Felder sowie `slug`, `status` und `revealed`; Aspekte ohne `id` behalten die `id` eines bestehenden Aspekts mit gleichem Wortlaut. `POST /api/activities/{key}/reveal` und `.../hide` zeigen oder verbergen die Punkte, `.../round` beginnt eine neue Runde (leer, verborgen; frühere Runden bleiben lesbar), `.../close`, `.../open`, `.../archive`, `.../duplicate` (mit optionalem `{name}`, ohne Antworten), `.../delete` (Papierkorb, auch `DELETE /api/activities/{key}`) und `.../restore`. `GET /api/activities/{key}/results?round=` liefert die Auswertung `{name, round, current_round, revealed, responses, scale, aspects: [{id, label, n, mean, median, min, max, rings}], rounds: [{round, responses, current, first_at, last_at}]}`; die Wertung reicht von 0 (Rand) bis 10 (Mitte), `rings` zählt die Punkte in den fünf Ringen von innen nach aussen. `GET /api/activities/{key}/results.md` liefert dasselbe als Markdown. `GET /api/activities/{key}/qr.svg` und `.../qr.png?px=12` sind öffentlich wie bei den Boards.
+
+Teilnehmende: `GET /api/a/{key}` liefert `{activity, me, state}`; `GET /api/a/{key}/state?since=<version>` liefert `{changed: false}` oder `{version, config_version, status, round, current_round, past, revealed, count, mine, points}`. `mine` ist die eigene Antwort der laufenden Runde (`{aspect_id: {r, t}}` oder `null`), `points` ist nur gefüllt, wenn die Punkte angezeigt sind: `[{a, r, t, m, g}]` mit Aspekt, Abstand von der Mitte (0 bis 1), Lage im Sektor (0 bis 1), `m = 1` für eigene Punkte und `g` als Nummer der Antwort. Solange die Punkte verborgen sind, bekommt auch der Besitzer nur `count`. Der Besitzer kann mit `round=<n>` eine frühere Runde lesen (dort sind die Punkte immer sichtbar). `POST /api/a/{key}/response` mit `{points: {aspect_id: {r, t}}}` speichert oder ersetzt die eigene Antwort und antwortet mit `{state}`; Fehler `target_incomplete` (bei `require_all` fehlt ein Sektor) oder `target_none` mit 422, bei geschlossener Scheibe 403 mit `code: "closed"`, bei einer Sperre für alle Boards 403 mit `code: "blocked"`. Es gilt dieselbe Begrenzung wie für Gäste der Boards. Der angemeldete Besitzer schaltet auf der Seite über `POST /api/a/{key}/reveal` mit `{revealed: bool}` und beginnt über `POST /api/a/{key}/round` eine neue Runde (beides mit CSRF-Header `X-CSRF`, Antwort `{state}`). `POST /api/a/{key}/identify` entspricht der Board-Route.
+
 ## QR-Codes (öffentlich)
 
 `GET /api/boards/{key}/qr.svg` und `GET /api/boards/{key}/qr.png?px=12` liefern den QR-Code mit dem Board-Link; `px` ist die Pixelgrösse eines Moduls (4 bis 40). Diese Adressen brauchen keinen Token, weil der Link ohnehin nur den Schlüssel enthält, und eignen sich direkt für `<img>` in Folien oder Arbeitsblättern.
@@ -65,7 +89,7 @@ Bündel: `GET /api/boards/{key}/bundles` listet sie; `POST /api/boards/{key}/bun
 
 ## Connector
 
-`POST <base_url>/mcp/<token>` ist ein MCP-Server (Streamable HTTP, zustandslos, JSON-Antworten). `delete_board` legt das Board in den Papierkorb; `delete_post`, `organize_board`, `assign_posts`, `update_bundle`, `delete_bundle` und `clear_board` werden protokolliert und sind vom Besitzer im Verlauf des Boards rückgängig zu machen. Der Connector selbst hat keine Rückgängig-Werkzeuge. Er bietet die Werkzeuge `list_boards`, `get_board`, `create_board`, `update_board`, `clear_board`, `duplicate_board`, `delete_board`, `read_board`, `delete_post`, `get_board_qr`, `create_post`, `create_comment`, `organize_board`, `create_bundle`, `update_bundle`, `delete_bundle` und `assign_posts`; die Beschreibungen und Parameter liefert `tools/list`. Die Adresse steht in der Bibliothek unter Einstellungen und wird in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen.
+`POST <base_url>/mcp/<token>` ist ein MCP-Server (Streamable HTTP, zustandslos, JSON-Antworten). `delete_board` legt das Board in den Papierkorb; `delete_post`, `organize_board`, `assign_posts`, `update_bundle`, `delete_bundle` und `clear_board` werden protokolliert und sind vom Besitzer im Verlauf des Boards rückgängig zu machen. Der Connector selbst hat keine Rückgängig-Werkzeuge. Er bietet die Werkzeuge `list_boards`, `get_board`, `create_board`, `update_board`, `clear_board`, `duplicate_board`, `delete_board`, `read_board`, `delete_post`, `get_board_qr`, `create_post`, `create_comment`, `organize_board`, `create_bundle`, `update_bundle`, `delete_bundle` und `assign_posts`, für Zielscheiben `list_targets`, `create_target`, `update_target` (mit `revealed` zum Anzeigen und Verbergen), `read_target`, `reset_target` und `delete_target` (nur mit `confirm=true`); `get_board_qr` nimmt auch das Kurzwort einer Zielscheibe. Die Beschreibungen und Parameter liefert `tools/list`. Die Adresse steht in der Bibliothek unter Einstellungen und wird in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen.
 
 ## Beispiel für Claude
 

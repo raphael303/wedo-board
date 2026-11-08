@@ -40,7 +40,7 @@ function wb_short_word(): string {
 }
 
 function wb_reserved_slugs(): array {
-    return ['admin', 'api', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about'];
+    return ['admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about'];
 }
 
 function wb_valid_slug(?string $s): ?string {

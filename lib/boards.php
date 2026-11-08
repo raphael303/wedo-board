@@ -24,7 +24,8 @@ function board_find(string $ref, bool $withTrash = false): ?array {
 
 function board_slug_taken(string $slug, ?int $exceptId = null): bool {
     $row = db_row("SELECT id FROM boards WHERE slug = ? AND status <> 'archived' AND deleted_at IS NULL" . ($exceptId ? ' AND id <> ?' : ''), $exceptId ? [$slug, $exceptId] : [$slug]);
-    return $row !== null;
+    // Kurzwörter teilen sich Boards und Aktivitäten (Zielscheiben).
+    return $row !== null || activity_slug_taken($slug);
 }
 
 function board_free_slug(): string {
@@ -339,6 +340,7 @@ function board_purge_deleted(int $days = 30): int {
         board_delete_forever(board_normalize($b));
         $n++;
     }
+    $n += activity_purge_deleted($days);
     undo_purge($days);
     return $n;
 }

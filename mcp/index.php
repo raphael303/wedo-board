@@ -80,7 +80,7 @@ function mcp_handle(array $msg): ?array {
                     'protocolVersion' => in_array($requested, $known, true) ? $requested : '2025-06-18',
                     'capabilities' => ['tools' => ['listChanged' => false]],
                     'serverInfo' => ['name' => wb_app_name(), 'version' => WB_VERSION],
-                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Bündelungen, Zuordnungen, Löschungen und Leeren werden protokolliert; der Besitzer kann sie auf der Board-Seite im Verlauf rückgängig machen, du brauchst dafür kein Werkzeug. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude.",
+                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Bündelungen, Zuordnungen, Löschungen und Leeren werden protokolliert; der Besitzer kann sie auf der Board-Seite im Verlauf rückgängig machen, du brauchst dafür kein Werkzeug. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude. Feedbackzielscheibe: Für Feedback oder Selbsteinschätzung zu mehreren Aspekten (zum Beispiel nach einer Projektwoche oder vor einer Prüfung) legst du mit create_target eine Zielscheibe an; das ist eine eigene Aktivität neben den Boards, kein Board. Jeder Aspekt wird ein Sektor, jede Person setzt pro Sektor einen Punkt, je näher an der Mitte, desto besser. Die Punkte bleiben verborgen, bis der Besitzer sie auf der Scheibe mit «Anzeigen» zeigt (oder du mit update_target revealed=true). Kurze Aspekte (ein bis drei Wörter, 2 bis 12 Stück) lesen sich am besten. Auch hier immer Notiz und Tags setzen. Zielscheiben teilen sich die Kurzwörter mit den Boards; get_board_qr liefert auch ihren QR-Code. read_target liefert die Auswertung (Wertung 0 bis 10 pro Aspekt, 10 = Mitte); reset_target beginnt eine neue Runde (frühere Runden bleiben lesbar, gut für Vorher-nachher).",
             ]];
             case 'notifications/initialized':
             case 'notifications/cancelled':
@@ -159,6 +159,18 @@ function mcp_tools(): array {
                 'links' => ['type' => 'boolean'], 'new_on_top' => ['type' => 'boolean'], 'ai' => ['type' => 'boolean'], 'emojis' => ['type' => 'array', 'items' => ['type' => 'string']],
                 'ampel' => ['type' => 'boolean', 'description' => 'Ampelsystem: true setzt die erlaubten Reaktionen auf 🔴 🟡 🟢, false stellt die Standardauswahl wieder her.'],
             ]],
+    ];
+    $targetParam = ['type' => 'string', 'description' => 'Kurzwort (slug) oder Schlüssel der Zielscheibe.'];
+    $targetFields = [
+        'name' => ['type' => 'string', 'description' => 'Titel, wie ihn die Klasse sieht.'],
+        'aspects' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Aspekte, je einer pro Sektor im Uhrzeigersinn ab zwölf Uhr; 2 bis 12, kurz (ein bis drei Wörter).'],
+        'color_mode' => ['type' => 'string', 'enum' => TARGET_COLOR_MODES, 'description' => 'sector = jede Sektorfarbe automatisch (Standard); scale = Punkte nach Lage gefärbt, grün in der Mitte, rot am Rand.'],
+        'require_all' => ['type' => 'boolean', 'description' => 'true (Standard) = Bestätigen erst, wenn in jedem Sektor ein Punkt gesetzt ist; false = Sektoren dürfen leer bleiben.'],
+        'background' => ['type' => 'string', 'enum' => wb_backgrounds(), 'description' => 'Farbverlauf hinter der Scheibe, Standard meer.'],
+        'lang' => ['type' => 'string', 'enum' => wb_langs()],
+        'note' => ['type' => 'string', 'description' => 'Notiz: Klasse, Fach, Thema, Datum, Lektionsbezug. Immer setzen.'],
+        'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Schlagwörter, zum Beispiel ["feedback", "3b", "projektwoche"]. Immer setzen.'],
+        'slug' => ['type' => 'string', 'description' => 'Eigenes Kurzwort (geteilt mit den Boards); leer für ein automatisches Wort.'],
     ];
     return [
         [
@@ -298,8 +310,46 @@ function mcp_tools(): array {
         ],
         [
             'name' => 'get_board_qr',
-            'description' => 'Liefert den QR-Code eines Boards als PNG-Bild (für Folien und Arbeitsblätter) sowie die Bildadressen zum Einbetten.',
-            'inputSchema' => ['type' => 'object', 'properties' => ['board' => $boardParam], 'required' => ['board']],
+            'description' => 'Liefert den QR-Code eines Boards oder einer Zielscheibe als PNG-Bild (für Folien und Arbeitsblätter) sowie die Bildadressen zum Einbetten.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['board' => ['type' => 'string', 'description' => 'Kurzwort oder Schlüssel des Boards oder der Zielscheibe.']], 'required' => ['board']],
+        ],
+        [
+            'name' => 'list_targets',
+            'description' => 'Listet Feedbackzielscheiben mit Kurzwort, Link, Aspekten, Anzahl Antworten, Status, Notiz und Tags.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'query' => ['type' => 'string', 'description' => 'Suchtext für Name, Aspekte, Notiz und Tags.'],
+                'status' => ['type' => 'string', 'enum' => ['active', 'open', 'closed', 'archived', 'all'], 'description' => 'Standard active.'],
+                'tag' => ['type' => 'string'],
+            ]],
+        ],
+        [
+            'name' => 'create_target',
+            'description' => 'Legt eine Feedbackzielscheibe an: ein Kreis in Sektoren, ein Sektor pro Aspekt; jede Person setzt pro Sektor einen Punkt, je näher an der Mitte, desto besser. Die Punkte sind verborgen, bis der Besitzer sie anzeigt. Liefert Kurzlink und QR-Adressen. Notiz und Tags immer mitgeben.',
+            'inputSchema' => ['type' => 'object', 'properties' => $targetFields, 'required' => ['name', 'aspects', 'note', 'tags']],
+        ],
+        [
+            'name' => 'update_target',
+            'description' => 'Ändert eine Zielscheibe: Name, Aspekte, Farben, Pflicht für alle Sektoren, Hintergrund, Sprache, Notiz, Tags, Kurzwort, Status oder revealed (true = Punkte anzeigen, false = verbergen). Nur angegebene Felder werden geändert. Aspekte mit gleichem Wortlaut (oder mit ihrer id aus read_target) behalten ihre Punkte.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['target' => $targetParam] + $targetFields + [
+                'aspects' => ['type' => 'array', 'items' => ['oneOf' => [['type' => 'string'], ['type' => 'object', 'properties' => ['id' => ['type' => 'string'], 'label' => ['type' => 'string']], 'required' => ['label']]]], 'description' => 'Aspekte als Texte oder als {id, label}, um einen Aspekt umzubenennen und seine Punkte zu behalten.'],
+                'status' => ['type' => 'string', 'enum' => ['open', 'closed', 'archived'], 'description' => 'open = Punkte setzen möglich; closed = nur anschauen; archived = für die Klasse unsichtbar, Kurzwort wird frei.'],
+                'revealed' => ['type' => 'boolean', 'description' => 'Punkte aller auf der Scheibe anzeigen (true) oder verbergen (false).'],
+            ], 'required' => ['target']],
+        ],
+        [
+            'name' => 'read_target',
+            'description' => 'Liest die Auswertung einer Zielscheibe: pro Aspekt Anzahl, Mittelwert, Median, Spanne (Wertung 0 bis 10, 10 = Mitte) und Verteilung auf fünf Ringe, dazu die Runden. Ohne round die laufende Runde.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['target' => $targetParam, 'round' => ['type' => 'integer', 'description' => 'Frühere Runde (aus rounds).'], 'format' => ['type' => 'string', 'enum' => ['markdown', 'json'], 'description' => 'Standard markdown.']], 'required' => ['target']],
+        ],
+        [
+            'name' => 'reset_target',
+            'description' => 'Beginnt eine neue Runde: Die Scheibe wird leer, die Punkte werden verborgen; die bisherigen Antworten bleiben als frühere Runde lesbar. Vorher beim Besitzer rückfragen, wenn nicht ausdrücklich gewünscht.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['target' => $targetParam], 'required' => ['target']],
+        ],
+        [
+            'name' => 'delete_target',
+            'description' => 'Legt eine Zielscheibe in den Papierkorb (dreissig Tage wiederherstellbar). Nur mit confirm=true nach ausdrücklicher Bestätigung des Besitzers; sonst archivieren (update_target mit status=archived).',
+            'inputSchema' => ['type' => 'object', 'properties' => ['target' => $targetParam, 'confirm' => ['type' => 'boolean']], 'required' => ['target', 'confirm']],
         ],
     ];
 }
@@ -401,12 +451,60 @@ function mcp_call(string $name, array $a): array {
             return mcp_text($n . ' Beiträge ' . ($gid ? 'zugeordnet.' : 'aus Bündeln gelöst.'));
 
         case 'get_board_qr':
-            $b = mcp_board_ref($a);
-            $v = board_owner_view($b);
+            $ref = trim((string)($a['board'] ?? ''));
+            if (!board_find($ref) && ($t = activity_find($ref))) $v = activity_owner_view($t);
+            else $v = board_owner_view(mcp_board_ref($a));
             return ['content' => [
                 ['type' => 'text', 'text' => 'QR-Code für ' . $v['url'] . "\nPNG: " . $v['qr_png'] . "?px=20\nSVG: " . $v['qr_svg']],
                 ['type' => 'image', 'data' => base64_encode(wb_qr_png($v['url'], 10)), 'mimeType' => 'image/png'],
             ]];
+        case 'list_targets':
+            $list = activities_list(['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'target']);
+            if (!$list) return mcp_text('Keine Zielscheiben gefunden.');
+            return mcp_json(['count' => count($list), 'targets' => array_map('mcp_target_summary', $list)]);
+
+        case 'create_target':
+            return mcp_json(['created' => true] + mcp_target_summary(activity_owner_view(activity_create(['type' => 'target'] + $a))));
+
+        case 'update_target':
+            $t = mcp_target_ref($a);
+            unset($a['target'], $a['type']);
+            return mcp_json(['updated' => true] + mcp_target_summary(activity_owner_view(activity_update($t, $a))));
+
+        case 'read_target':
+            $t = mcp_target_ref($a);
+            $round = !empty($a['round']) ? (int)$a['round'] : null;
+            if (($a['format'] ?? 'markdown') === 'json') return mcp_json(target_results($t, $round));
+            return mcp_text(target_results_markdown($t, $round));
+
+        case 'reset_target':
+            $t = activity_new_round(mcp_target_ref($a));
+            return mcp_text('Runde ' . $t['round'] . ' begonnen; die Scheibe ist leer und die Punkte sind verborgen. Frühere Runden liest read_target mit round.');
+
+        case 'delete_target':
+            if (empty($a['confirm'])) throw new InvalidArgumentException('Löschen braucht confirm=true nach Bestätigung durch den Besitzer.');
+            $t = mcp_target_ref($a);
+            activity_trash($t);
+            return mcp_text('Zielscheibe «' . $t['name'] . '» in den Papierkorb gelegt; der Besitzer kann sie in der Bibliothek dreissig Tage lang wiederherstellen.');
     }
     throw new InvalidArgumentException('Unbekanntes Werkzeug: ' . $name);
+}
+
+function mcp_target_ref(array $args): array {
+    $ref = trim((string)($args['target'] ?? $args['board'] ?? ''));
+    if ($ref === '') throw new InvalidArgumentException('Parameter «target» (Kurzwort oder Schlüssel) fehlt.');
+    $t = activity_find($ref);
+    if (!$t) throw new InvalidArgumentException('Keine aktive Zielscheibe mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_targets und status=archived über ihren Schlüssel.');
+    return $t;
+}
+
+function mcp_target_summary(array $v): array {
+    return [
+        'type' => 'target', 'name' => $v['name'], 'slug' => $v['slug'], 'url' => $v['url'], 'key' => $v['key'],
+        'aspects' => $v['aspects'], 'color_mode' => $v['color_mode'], 'require_all' => $v['require_all'],
+        'status' => $v['status'], 'revealed' => $v['revealed'], 'round' => $v['round'], 'responses' => $v['response_count'],
+        'background' => $v['background'], 'lang' => $v['lang'], 'note' => $v['note'], 'tags' => $v['tags'],
+        'qr_png' => $v['qr_png'], 'qr_svg' => $v['qr_svg'],
+        'created_at' => wb_local_time($v['created_at']), 'last_activity_at' => wb_local_time($v['last_activity_at']),
+    ];
 }

@@ -6,6 +6,11 @@ require_once WB_ROOT . '/lib/qr.php';
 $board = null;
 if (db_is_installed()) {
     $board = isset($_GET['slug']) ? board_by_slug((string)$_GET['slug']) : board_by_key((string)($_GET['key'] ?? ''));
+    // Boards und Aktivitäten teilen sich die Kurzwörter: Gehört das Wort zu einer Zielscheibe, zeigt activity.php sie.
+    if (!$board && isset($_GET['slug'])) {
+        $activity = activity_by_slug((string)$_GET['slug']);
+        if ($activity) { require __DIR__ . '/activity.php'; exit; }
+    }
 }
 $lang = wb_resolve_lang($board['lang'] ?? (string)wb_config('default_lang', 'de'));
 $uid = wb_client_uid();

@@ -230,6 +230,41 @@ function db_schema(): array {
             updated_at DATETIME(6) NOT NULL,
             UNIQUE KEY ux_board_mode (board_id, mode)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+        "CREATE TABLE IF NOT EXISTS activities (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            akey CHAR(16) NOT NULL,
+            slug VARCHAR(32) NULL,
+            owner_user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            type VARCHAR(24) NOT NULL DEFAULT 'target',
+            name VARCHAR(200) NOT NULL,
+            config_json TEXT NULL,
+            background VARCHAR(40) NOT NULL DEFAULT 'meer',
+            lang CHAR(2) NOT NULL DEFAULT 'de',
+            status ENUM('open','closed','archived') NOT NULL DEFAULT 'open',
+            revealed TINYINT(1) NOT NULL DEFAULT 0,
+            round INT UNSIGNED NOT NULL DEFAULT 1,
+            note TEXT NULL,
+            tags VARCHAR(600) NOT NULL DEFAULT '',
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            last_activity_at DATETIME(6) NOT NULL,
+            deleted_at DATETIME(6) NULL,
+            UNIQUE KEY uk_akey (akey),
+            KEY ix_slug (slug),
+            KEY ix_owner (owner_user_id),
+            KEY ix_activity (last_activity_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS activity_responses (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            activity_id INT UNSIGNED NOT NULL,
+            round INT UNSIGNED NOT NULL DEFAULT 1,
+            guest_key CHAR(32) NOT NULL,
+            data_json TEXT NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            UNIQUE KEY ux_activity_round_guest (activity_id, round, guest_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
 }
 

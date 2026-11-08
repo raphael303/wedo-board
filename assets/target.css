@@ -1,0 +1,130 @@
+/* Feedbackzielscheibe; baut auf board.css auf (Kopfzeile, Hintergründe, Knöpfe, Zugangs-Panel). */
+
+body.page-target { display: flex; flex-direction: column; min-height: 100dvh; overflow-x: hidden; }
+
+.target-stage {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  gap: 10px;
+  padding: 14px 12px calc(96px + env(safe-area-inset-bottom));
+}
+.target-hint, .target-past {
+  margin: 0; max-width: 38rem; text-align: center;
+  font-size: 0.95rem; font-weight: 550; line-height: 1.35;
+  color: var(--bar-ink);
+  background: var(--bar-bg);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  padding: 8px 14px; border-radius: 999px;
+}
+.target-past a { color: inherit; font-weight: 650; }
+
+/* Die Scheibe füllt die Breite, aber nie mehr als die verfügbare Höhe. */
+.target-disc {
+  width: min(100%, calc(100dvh - var(--bar-h) - 190px), 1100px);
+  min-width: min(100%, 300px);
+  aspect-ratio: 1;
+  position: relative;
+}
+@media (max-width: 640px) {
+  .target-disc { width: 100%; }
+}
+.target-svg {
+  display: block; width: 100%; height: auto; overflow: visible;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  filter: drop-shadow(0 14px 34px rgba(10, 20, 35, 0.22));
+}
+body.target-editing .target-svg { cursor: crosshair; }
+
+.target-svg .plate { fill: rgba(255, 255, 255, 0.72); stroke: rgba(255, 255, 255, 0.9); stroke-width: 1; }
+.target-svg .face { fill: #fbfcfd; }
+.target-svg .wedge { fill-opacity: 0.075; stroke: none; transition: fill-opacity 0.25s ease; }
+.target-svg.mode-scale .wedge { fill: transparent; }
+.target-svg .wedge.missing { fill-opacity: 0.16; }
+.target-svg.mode-scale .wedge.missing { fill: #1b1f24; fill-opacity: 0.035; }
+.target-svg .ring { fill: none; stroke: rgba(27, 31, 36, 0.13); stroke-width: 1.2; }
+.target-svg .ring-outer { stroke: rgba(27, 31, 36, 0.28); stroke-width: 1.6; }
+.target-svg .spoke { stroke: rgba(27, 31, 36, 0.22); stroke-width: 1.4; stroke-linecap: round; }
+.target-svg .bull { fill: #1b1f24; opacity: 0.75; }
+.target-svg .label { fill: #1b1f24; font-weight: 650; letter-spacing: 0.01em; dominant-baseline: middle; pointer-events: none; }
+.target-svg .label .label-mark { font-size: 0.8em; }
+body.target-editing .target-svg .label { opacity: 0.62; transition: opacity 0.2s ease; }
+body.target-editing .target-svg .label.done { opacity: 1; }
+
+/* Punkte: Lage über CSS-Transform, damit Einfliegen und Ausweichen weich laufen. */
+.target-svg .dot {
+  transition: transform 0.85s cubic-bezier(0.3, 1.35, 0.5, 1), opacity 0.4s ease;
+  will-change: transform;
+}
+.target-svg .dot.no-anim { transition: none !important; }
+.target-svg .dot.leaving { opacity: 0; transition: transform 0.6s cubic-bezier(0.5, 0, 0.75, 0), opacity 0.6s ease; }
+.target-svg .dot .core { stroke: rgba(255, 255, 255, 0.95); stroke-width: 1.6; }
+.target-svg .dot:not(.mine) .core { fill-opacity: 0.9; }
+.target-svg .dot.mine .core { stroke: #fff; stroke-width: 3.4; paint-order: stroke; filter: drop-shadow(0 0 1px rgba(27, 31, 36, 0.9)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+.target-svg .dot .halo { fill: none; stroke: rgba(27, 31, 36, 0.35); stroke-width: 1.5; stroke-dasharray: 3 4; transform-box: fill-box; transform-origin: center; animation: wt-spin 6s linear infinite; }
+.target-svg .dot.pop .core { transform-box: fill-box; transform-origin: center; animation: wt-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes wt-pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+@keyframes wt-spin { to { transform: rotate(360deg); } }
+
+.target-legend {
+  margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+  font-size: 0.82rem; color: var(--bar-ink); opacity: 0.85;
+}
+.target-legend .lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-left: 10px; }
+.target-legend .lg:first-child { margin-left: 0; }
+.target-legend .lg-center { background: #2fbf71; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8); }
+.target-legend .lg-edge { background: #e5484d; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8); }
+
+/* Bedienleiste unten in der Mitte (nur für Teilnehmende) */
+.target-dock {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px 8px 16px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 28px rgba(10, 20, 35, 0.22), 0 1px 2px rgba(10, 20, 35, 0.12);
+  max-width: calc(100vw - 24px);
+}
+.target-progress { font-size: 0.92rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.target-progress.complete { color: #157347; }
+.target-dock .btn-primary { padding: 11px 20px; font-size: 0.98rem; }
+.target-dock .btn-primary:disabled { opacity: 0.38; cursor: not-allowed; }
+.target-dock .btn-primary.is-saved { background: #fff; color: var(--ink); box-shadow: inset 0 0 0 1px rgba(27, 31, 36, 0.25); }
+.target-dock .btn-ghost { padding: 10px 14px; }
+
+/* Zähler unten rechts, beim Besitzer mit «Anzeigen» / «Verbergen» */
+.target-count {
+  position: fixed; z-index: 31; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px 6px 14px; border-radius: 999px;
+  background: rgba(27, 31, 36, 0.86); color: #fff;
+  box-shadow: 0 8px 24px rgba(10, 20, 35, 0.28);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.target-count:not(:has(.target-reveal)) { padding-right: 14px; }
+.target-count-n { font-weight: 650; font-size: 0.95rem; white-space: nowrap; font-variant-numeric: tabular-nums; display: inline-block; }
+.target-count-n.bump { animation: wt-bump 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes wt-bump { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
+.target-reveal { background: #fff; color: var(--ink); padding: 9px 16px; }
+.target-reveal:hover { background: #eef1f4; }
+.target-reveal.is-on { background: rgba(255, 255, 255, 0.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4); }
+.target-reveal:disabled { opacity: 0.6; }
+
+/* Auf dem Handy: Zähler oben über der Bedienleiste, damit sich nichts überdeckt. */
+@media (max-width: 640px) {
+  .target-count { right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); padding-top: 4px; padding-bottom: 4px; }
+  .target-count-n { font-size: 0.85rem; }
+  body:not(.target-editing) .target-dock[hidden] ~ .target-count { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .target-dock { left: 12px; right: 12px; transform: none; justify-content: space-between; }
+  .target-stage { padding-bottom: calc(140px + env(safe-area-inset-bottom)); }
+  .target-hint { font-size: 0.88rem; border-radius: 14px; }
+}
+@media (min-width: 900px) {
+  body.access-open .target-stage { padding-right: calc(var(--access-w) + 28px); }
+  body.access-open .target-count { right: calc(var(--access-w) + 34px); }
+  body.access-open .target-disc { width: min(100%, calc(100dvh - var(--bar-h) - 190px), 1100px); }
+}
+body.presenter .target-disc { width: min(100%, calc(100dvh - var(--bar-h) - 140px), 1400px); }
+body.presenter .target-legend { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .target-svg .dot, .target-svg .dot .halo, .target-count-n.bump { transition: none !important; animation: none !important; }
+}

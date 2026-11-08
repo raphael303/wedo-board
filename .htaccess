@@ -15,6 +15,9 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 # Inhaltlicher Export: /b/<key>/export
 RewriteRule ^b/([a-z0-9]{16})/export/?$ export.php?key=$1 [L,QSA]
 
+# Aktivitäten (Zielscheibe): /a/<key>
+RewriteRule ^a/([a-z0-9]{16})/?$ activity.php?key=$1 [L,QSA]
+
 # Board-Links: /b/<key>
 RewriteRule ^b/([a-z0-9]{16})/?$ board.php?key=$1 [L,QSA]
 
@@ -24,7 +27,7 @@ RewriteRule ^api/(.*)$ api/index.php?route=$1 [L,QSA]
 # Connector: /mcp/<token>
 RewriteRule ^mcp/([a-f0-9]{48})/?$ mcp/index.php?token=$1 [L,QSA]
 
-# Kurzlinks: /<kurzwort>
+# Kurzlinks: /<kurzwort> (board.php reicht Kurzwörter von Aktivitäten an activity.php weiter)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$ board.php?slug=$1 [L,QSA]

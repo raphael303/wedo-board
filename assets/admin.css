@@ -123,3 +123,13 @@ h3 { font-size: 0.95rem; margin: 18px 0 6px; }
 .usage { list-style: none; padding: 0; margin: 6px 0 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
 .bad { color: var(--danger); }
 .card h3 { font-size: 1rem; margin: 22px 0 8px; }
+
+/* Zielscheiben: Auswertung */
+.results { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.results th, .results td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: bottom; }
+.results th { font-weight: 600; color: var(--muted); border-top: 0; font-size: 0.82rem; }
+.results td:nth-child(n+2):nth-child(-n+5), .results th:nth-child(n+2):nth-child(-n+5) { text-align: right; font-variant-numeric: tabular-nums; }
+.rings { display: inline-flex; align-items: flex-end; gap: 3px; height: 28px; }
+.ring-bar { width: 14px; border-radius: 3px 3px 0 0; }
+.ring-1 { background: #2fbf71; } .ring-2 { background: #9ccc3b; } .ring-3 { background: #f2c12e; } .ring-4 { background: #f5862e; } .ring-5 { background: #e5484d; }
+@media (max-width: 640px) { .results th:nth-child(4), .results td:nth-child(4), .results th:nth-child(5), .results td:nth-child(5) { display: none; } }

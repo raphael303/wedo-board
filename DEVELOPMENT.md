@@ -1,6 +1,6 @@
 # Nablet – Arbeitsnotizen für die Weiterentwicklung
 
-Diese Datei ist für Claude (und Raphael) gedacht, wenn in einem neuen Chat an Nablet weitergearbeitet wird. Sie beschreibt, was `CONCEPT.md` (Was und Warum) und `API.md` (Schnittstelle) nicht enthalten: den Arbeitsablauf, die Umgebung und die Entscheidungen, die sich bewährt haben. Stand: 2026-11-08, Version 0.9.0 (Etappe 5 vollständig).
+Diese Datei ist für Claude (und Raphael) gedacht, wenn in einem neuen Chat an Nablet weitergearbeitet wird. Sie beschreibt, was `CONCEPT.md` (Was und Warum) und `API.md` (Schnittstelle) nicht enthalten: den Arbeitsablauf, die Umgebung und die Entscheidungen, die sich bewährt haben. Stand: 2026-11-08, Version 0.9.2 (Etappe 5 vollständig und abgenommen; die KI-Bündelung läuft produktiv mit `claude-opus-5-5`).
 
 ## Lage der Dinge
 

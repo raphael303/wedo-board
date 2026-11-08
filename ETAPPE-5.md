@@ -1,6 +1,6 @@
 # Etappe 5: KI-Bündelung, Rückgängig, Gäste sperren, Rollen und Domain-Unabhängigkeit
 
-**Umgesetzt** in den Lieferungen 5a (Version 0.5.0), 5b (0.6.0), 5c (0.7.0), 5d (0.8.0) und 5e (0.9.0) am 2026-11-08; die Inhalte sind in `CONCEPT.md`, `API.md` und `DEVELOPMENT.md` übernommen. Abweichung mit Rücksprache: Bei «Auf allen Boards sperren» werden Inhalte nur auf dem aktuellen Board ausgeblendet. Offen bis zur Abnahme durch Raphael: ein echter Lauf mit dem Anthropic-Adapter.
+**Umgesetzt** in den Lieferungen 5a (Version 0.5.0), 5b (0.6.0), 5c (0.7.0), 5d (0.8.0) und 5e (0.9.0) am 2026-11-08; die Inhalte sind in `CONCEPT.md`, `API.md` und `DEVELOPMENT.md` übernommen. Abweichung mit Rücksprache: Bei «Auf allen Boards sperren» werden Inhalte nur auf dem aktuellen Board ausgeblendet. Abgenommen am 2026-11-08 mit einem echten Lauf (Anthropic, `claude-opus-5-5`, Version 0.9.2).
 
 Beschlossen mit Raphael am 2026-11-08. Diese Datei ist der verbindliche Auftrag für die Umsetzung. Die hier beschriebenen Änderungen an Datenmodell und Schnittstelle sind freigegeben; was darüber hinausgeht, braucht weiterhin Rücksprache. Nach der Umsetzung werden die Inhalte in `CONCEPT.md`, `API.md` und `DEVELOPMENT.md` übernommen, und diese Datei wird oben als «umgesetzt» markiert.
 

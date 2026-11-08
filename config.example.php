@@ -10,14 +10,14 @@ return [
         'charset' => 'utf8mb4',
     ],
     // Anzeigename der App (Seitentitel, Bibliothek, Exporte, Connector).
-    'app_name' => 'Nablet',
+    'app_name' => 'Tafula',
     // Öffentliche Adresse ohne Schrägstrich am Ende. Alle Kurzlinks, QR-Codes und die
     // Connector-Adresse entstehen daraus; bei einem Domainwechsel nur diese Zeile ändern.
-    'base_url' => 'https://nablet.top',
+    'base_url' => 'https://tafula.top',
     // Frühere Domains: Anfragen an diese Hosts werden mit 301 auf base_url umgeleitet,
     // damit gedruckte QR-Codes und alte Links weiter funktionieren. Die www-Variante von
     // base_url wird automatisch umgeleitet.
-    'legacy_hosts' => ['board.wedo.science'],
+    'legacy_hosts' => [],
     // Geheimwert (Base64, 32 Byte) für die verschlüsselte Ablage von KI-Schlüsseln. Fehlt die Zeile, erzeugt
     // die App sie beim ersten Öffnen der KI-Einstellungen selbst und trägt sie hier ein, wenn die Datei
     // beschreibbar ist; sonst zeigt die Bibliothek die einzufügende Zeile an. Niemals ändern, sonst sind

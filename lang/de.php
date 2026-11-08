@@ -81,4 +81,13 @@ return [
     'undo_gone_bundle' => 'Ein betroffenes Bündel wurde inzwischen endgültig gelöscht; es wurde nichts verändert.',
     'undo_gone_content' => 'Ein Teil der Inhalte wurde inzwischen endgültig gelöscht; es wurde nichts verändert.',
     'undo_unknown' => 'Diese Aktion kann nicht rückgängig gemacht werden.',
+    'blocked' => 'Du kannst auf diesem Board im Moment nichts schreiben.',
+    'block_title' => 'Gast «{name}»',
+    'block_board' => 'Auf diesem Board sperren',
+    'block_all' => 'Auf allen Boards sperren',
+    'block_hide' => 'Beiträge und Kommentare dieses Gastes ausblenden',
+    'block_hint' => 'Gesperrte Gäste können weiter lesen, aber nichts mehr schreiben. Entsperren geht in der Bibliothek oder über Rückgängig.',
+    'block_done' => 'Gast «{name}» gesperrt',
+    'log_guest_block' => 'Gast «{name}» auf diesem Board gesperrt',
+    'log_guest_block_all' => 'Gast «{name}» auf allen Boards gesperrt',
 ];

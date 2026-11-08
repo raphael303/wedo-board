@@ -18,9 +18,10 @@ if (!$board || $board['status'] === 'archived') {
 }
 
 $name = wb_fantasy_name($uid, $board['bkey'], $board['lang']);
+$blocked = !$owner && guest_block_active($uid, $board['id']) !== null;
 $boot = [
     'board' => board_public($board, $lang),
-    'me' => ['name' => $name, 'hue' => wb_author_hue($name), 'owner' => $owner],
+    'me' => ['name' => $name, 'hue' => wb_author_hue($name), 'owner' => $owner, 'uid' => $uid, 'blocked' => $blocked, 'fresh' => !empty($GLOBALS['wb_uid_fresh'])],
     'strings' => wb_lang_strings($lang),
     'state' => board_state($board, $uid, null, $owner),
     'api' => '/api/b/' . $board['bkey'],
@@ -113,6 +114,21 @@ $boot = [
 <?php endif; ?>
 
 <?php if ($owner): ?>
+<dialog id="block-dialog" class="sheet">
+  <form id="block-form" method="dialog" novalidate>
+    <h2 class="sheet-title" id="block-title"></h2>
+    <input type="hidden" name="guest_key" value="">
+    <input type="hidden" name="display_name" value="">
+    <label class="radio-row"><input type="radio" name="scope" value="board" checked> <span><?= e(t('block_board', $lang)) ?></span></label>
+    <label class="radio-row"><input type="radio" name="scope" value="all"> <span><?= e(t('block_all', $lang)) ?></span></label>
+    <label class="check-row"><input type="checkbox" name="hide"> <span><?= e(t('block_hide', $lang)) ?></span></label>
+    <p class="hint-text"><?= e(t('block_hint', $lang)) ?></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn-ghost" id="block-cancel"><?= e(t('cancel', $lang)) ?></button>
+      <button type="submit" class="btn-primary" id="block-submit"><?= e(t('block_board', $lang)) ?></button>
+    </div>
+  </form>
+</dialog>
 <dialog id="history-dialog" class="sheet">
   <div class="sheet-body">
     <h2 class="sheet-title"><?= e(t('history', $lang)) ?></h2>

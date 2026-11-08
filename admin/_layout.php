@@ -63,6 +63,7 @@ function admin_header(string $title, string $active = ''): void {
   <?php if (wb_is_admin_session()): ?>
   <a href="/admin/" class="<?= $active === 'library' ? 'active' : '' ?>">Bibliothek</a>
   <a href="/admin/board.php?new=1" class="<?= $active === 'new' ? 'active' : '' ?>">Neues Board</a>
+  <a href="/admin/blocks.php" class="<?= $active === 'blocks' ? 'active' : '' ?>">Sperren</a>
   <a href="/admin/settings.php" class="<?= $active === 'settings' ? 'active' : '' ?>">Einstellungen</a>
   <a href="/admin/logout.php" class="nav-right">Abmelden</a>
   <?php endif; ?>

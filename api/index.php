@@ -27,6 +27,16 @@ try {
         wb_require_owner();
         db_migrate();
         wb_json(['ok' => true, 'owner' => true, 'version' => WB_VERSION, 'base_url' => wb_base_url()]);
+    } elseif ($head === 'blocks') {
+        wb_require_can('guest.block');
+        db_migrate();
+        $bid = (int)($parts[1] ?? 0);
+        if ($method === 'GET' && $bid === 0) {
+            wb_json(['ok' => true, 'blocks' => guest_blocks_list(($_GET['status'] ?? 'active') !== 'all')]);
+        }
+        if ($method === 'POST' && $bid > 0 && ($parts[2] ?? '') === 'lift') {
+            wb_json(['ok' => true, 'block' => guest_block_lift($bid)]);
+        }
     } elseif ($head === 'maintenance' && ($parts[1] ?? '') === 'purge' && $method === 'POST') {
         wb_require_owner();
         wb_json(['ok' => true, 'purged' => board_purge_deleted(30)]);
@@ -52,6 +62,7 @@ function guest_api(string $method, array $p): never {
     $owner = wb_can('board.manage', $board);
     $lang = wb_resolve_lang($board['lang']);
     $name = wb_fantasy_name($uid, $board['bkey'], $board['lang']);
+    $blocked = !$owner && guest_block_active($uid, $board['id']) !== null;
     $sub = $p[2] ?? '';
     $id = (int)($p[3] ?? 0);
     $action = $p[4] ?? '';
@@ -60,13 +71,19 @@ function guest_api(string $method, array $p): never {
         wb_json([
             'ok' => true,
             'board' => board_public($board, $lang),
-            'me' => ['name' => $name, 'hue' => wb_author_hue($name), 'owner' => $owner],
+            'me' => ['name' => $name, 'hue' => wb_author_hue($name), 'owner' => $owner, 'uid' => $uid, 'blocked' => $blocked, 'fresh' => !empty($GLOBALS['wb_uid_fresh'])],
             'strings' => wb_lang_strings($lang),
             'state' => board_state($board, $uid, null, $owner),
         ]);
     }
     if ($method === 'GET' && $sub === 'state') {
         wb_json(['ok' => true] + board_state($board, $uid, isset($_GET['since']) ? (string)$_GET['since'] : null, $owner));
+    }
+    if ($sub === 'identify' && $method === 'POST') {
+        // Der Browser kennt aus localStorage seinen früheren Schlüssel, das Cookie ging verloren: Cookie neu setzen.
+        $in = wb_read_json_body();
+        if (!wb_set_client_uid((string)($in['uid'] ?? ''))) wb_error('Ungültiger Schlüssel.', 422);
+        wb_json(['ok' => true]);
     }
     if ($sub === 'history' && $method === 'GET') {
         if (!wb_can('undo', $board)) wb_error('Nicht berechtigt.', 403);
@@ -78,10 +95,18 @@ function guest_api(string $method, array $p): never {
         $entry = undo_apply($board, $id);
         wb_json(['ok' => true, 'entry' => $entry, 'version' => board_by_id($board['id'])['last_activity_at']]);
     }
+    if ($sub === 'block' && $method === 'POST') {
+        if (!wb_can('guest.block', $board)) wb_error('Nicht berechtigt.', 403);
+        wb_check_csrf_header();
+        $in = wb_read_json_body();
+        $block = guest_block_create($board, (string)($in['guest_key'] ?? ''), (string)($in['display_name'] ?? ''), ($in['scope'] ?? 'board') === 'all', filter_var($in['hide'] ?? false, FILTER_VALIDATE_BOOLEAN));
+        wb_json(['ok' => true, 'block' => $block, 'undo_id' => $block['undo_id'], 'version' => board_by_id($board['id'])['last_activity_at']]);
+    }
 
     // Ab hier nur schreibende Aufrufe.
     if (!$owner) {
         if ($board['status'] !== 'open') wb_error('board_closed', 403);
+        if ($blocked) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
         rate_limit($uid);
     }
     $in = wb_read_json_body();
@@ -316,6 +341,10 @@ function owner_boards_api(string $method, array $p): never {
     if ($action === 'undo' && $method === 'POST' && (int)($p[3] ?? 0) > 0) {
         wb_check_csrf_header();
         wb_json(['ok' => true, 'entry' => undo_apply($board, (int)$p[3])]);
+    }
+    if ($action === 'block' && $method === 'POST') {
+        $block = guest_block_create($board, (string)($in['guest_key'] ?? ''), (string)($in['display_name'] ?? ''), ($in['scope'] ?? 'board') === 'all', filter_var($in['hide'] ?? false, FILTER_VALIDATE_BOOLEAN));
+        wb_json(['ok' => true, 'block' => $block, 'undo_id' => $block['undo_id']]);
     }
     if ($action === 'restore' && $method === 'POST') {
         wb_json(['ok' => true, 'board' => board_owner_view(board_restore($board))]);

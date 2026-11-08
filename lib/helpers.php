@@ -77,11 +77,27 @@ function wb_read_json_body(): array {
     return is_array($data) ? $data : [];
 }
 
+/** Setzt das Cookie wb_uid auf einen vom Browser gemeldeten, früheren Schlüssel (Wiedererkennen über localStorage). */
+function wb_set_client_uid(string $uid): bool {
+    if (!preg_match('/^[a-f0-9]{32}$/', $uid)) return false;
+    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    setcookie('wb_uid', $uid, ['expires' => time() + 60 * 60 * 24 * 365 * 2, 'path' => '/', 'secure' => $secure, 'httponly' => true, 'samesite' => 'Lax']);
+    $_COOKIE['wb_uid'] = $uid;
+    return true;
+}
+
 function wb_client_uid(): string {
-    // Jeder Browser erhält einen zufälligen Schlüssel in einem Cookie.
+    // Jeder Browser erhält einen zufälligen Schlüssel in einem Cookie. Fehlt das Cookie, gilt der Wert,
+    // den die Board-Seite aus localStorage im Header X-Guest-Key mitschickt; das Cookie wird dann neu gesetzt.
     $uid = $_COOKIE['wb_uid'] ?? '';
     if (!preg_match('/^[a-f0-9]{32}$/', $uid)) {
-        $uid = bin2hex(random_bytes(16));
+        $fromHeader = (string)($_SERVER['HTTP_X_GUEST_KEY'] ?? '');
+        if (preg_match('/^[a-f0-9]{32}$/', $fromHeader)) {
+            $uid = $fromHeader;
+        } else {
+            $uid = bin2hex(random_bytes(16));
+            $GLOBALS['wb_uid_fresh'] = true;
+        }
         $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
         setcookie('wb_uid', $uid, [
             'expires' => time() + 60 * 60 * 24 * 365 * 2,

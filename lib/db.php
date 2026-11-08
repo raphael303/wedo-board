@@ -158,6 +158,19 @@ function db_schema(): array {
             KEY ix_board_created (board_id, created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+        "CREATE TABLE IF NOT EXISTS guest_blocks (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            board_id INT UNSIGNED NULL,
+            guest_key CHAR(32) NOT NULL,
+            display_name VARCHAR(80) NOT NULL DEFAULT '',
+            hide_content TINYINT(1) NOT NULL DEFAULT 0,
+            created_at DATETIME(6) NOT NULL,
+            lifted_at DATETIME(6) NULL,
+            KEY ix_guest (guest_key, lifted_at),
+            KEY ix_board (board_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
         "CREATE TABLE IF NOT EXISTS rate_limits (
             author_key CHAR(32) NOT NULL,
             minute INT UNSIGNED NOT NULL,

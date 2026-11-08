@@ -81,4 +81,13 @@ return [
     'undo_gone_bundle' => 'An affected bundle has since been deleted permanently; nothing was changed.',
     'undo_gone_content' => 'Some of the content has since been deleted permanently; nothing was changed.',
     'undo_unknown' => 'This action cannot be undone.',
+    'blocked' => 'You cannot write on this board at the moment.',
+    'block_title' => 'Guest “{name}”',
+    'block_board' => 'Block on this board',
+    'block_all' => 'Block on all boards',
+    'block_hide' => 'Hide this guest’s posts and comments',
+    'block_hint' => 'Blocked guests can still read but no longer write. Unblock in the library or via undo.',
+    'block_done' => 'Guest “{name}” blocked',
+    'log_guest_block' => 'Guest “{name}” blocked on this board',
+    'log_guest_block_all' => 'Guest “{name}” blocked on all boards',
 ];

@@ -7,6 +7,20 @@
   const api = W.api;
   const me = W.me;
 
+  /* ---------- Identität: wb_uid in localStorage spiegeln ---------- */
+  let storedUid = null;
+  try {
+    storedUid = localStorage.getItem('wb_uid');
+    if (me.uid && /^[a-f0-9]{32}$/.test(me.uid)) {
+      if (me.fresh && storedUid && storedUid !== me.uid) {
+        // Cookie fehlte, aber der Browser kennt seinen alten Schlüssel: Cookie neu setzen und mit dem alten Namen laden.
+        fetch(api + '/identify', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: storedUid }) }).then(() => location.reload());
+      } else {
+        localStorage.setItem('wb_uid', me.uid); storedUid = me.uid;
+      }
+    }
+  } catch (e) { /* localStorage nicht verfügbar */ }
+
   const state = {
     version: W.state.version,
     status: W.state.status,
@@ -87,13 +101,14 @@
     return d.toLocaleDateString(board.lang === 'de' ? 'de-CH' : 'en-GB', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   function hostOf(url) { try { return new URL(url).host.replace(/^www\./, ''); } catch (e) { return url; } }
-  const canWrite = () => me.owner || state.status === 'open';
+  const canWrite = () => me.owner || (state.status === 'open' && !me.blocked);
   const commentsOn = () => board.settings.comments || me.owner;
   const reactionsOn = () => board.settings.reactions || me.owner;
 
   async function call(path, opts = {}) {
     const init = { method: opts.method || 'POST', credentials: 'same-origin', headers: {} };
     if (W.csrf) init.headers['X-CSRF'] = W.csrf;
+    if (storedUid) init.headers['X-Guest-Key'] = storedUid;
     if (opts.form) init.body = opts.form;
     else if (opts.json) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.json); }
     const res = await fetch(api + path, init);
@@ -102,11 +117,13 @@
     if (!res.ok || !data || !data.ok) {
       const err = new Error((data && data.error) || 'error_generic');
       err.status = res.status;
+      err.code = data && data.code;
       throw err;
     }
     return data;
   }
   function showError(e) {
+    if (e.code === 'blocked' && !me.owner) { me.blocked = true; render(); return; }
     const msg = S[e.message] ? t(e.message) : (e.message && e.message.length < 160 ? e.message : t('error_generic'));
     notice(msg, true, 6000);
   }
@@ -244,7 +261,7 @@
       art.addEventListener('dragend', () => art.classList.remove('dragging'));
     }
     const head = el('header', { class: 'post-head' },
-      el('span', { class: 'author' }, el('i', { class: 'dot' }), el('span', { class: 'name', text: p.author })),
+      authorEl(p),
       el('time', { text: timeLabel(p.created_at) + (p.edited ? ' · ' + t('edited') : ''), title: p.created_at }));
     if (p.editable && canWrite()) {
       head.append(el('div', { class: 'post-menu' },
@@ -284,6 +301,41 @@
     art.append(foot);
     if (open) art.append(renderComments(p));
     return art;
+  }
+
+  /* ---------- Gäste sperren (Besitzer) ---------- */
+  function authorEl(item) {
+    const inner = [el('i', { class: 'dot' }), el('span', { class: 'name', text: item.author })];
+    if (me.owner && item.akey) {
+      return el('button', { class: 'author author-btn', type: 'button', title: t('block_board'), onclick: (ev) => { ev.stopPropagation(); openBlockDialog(item); } }, ...inner);
+    }
+    return el('span', { class: 'author' }, ...inner);
+  }
+  const kdlg = $('#block-dialog');
+  function openBlockDialog(item) {
+    if (!kdlg) return;
+    const f = $('#block-form');
+    f.reset();
+    f.guest_key.value = item.akey; f.display_name.value = item.author;
+    $('#block-title').textContent = t('block_title', { name: item.author });
+    $('#block-submit').textContent = t('block_board');
+    kdlg.showModal();
+  }
+  if (kdlg) {
+    const f = $('#block-form');
+    f.addEventListener('change', () => { $('#block-submit').textContent = t(f.scope.value === 'all' ? 'block_all' : 'block_board'); });
+    $('#block-cancel').addEventListener('click', () => kdlg.close());
+    f.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const btn = $('#block-submit'); btn.disabled = true;
+      try {
+        const r = await call('/block', { json: { guest_key: f.guest_key.value, display_name: f.display_name.value, scope: f.scope.value, hide: f.hide.checked } });
+        kdlg.close();
+        await poll();
+        offerUndo(r, t('block_done', { name: f.display_name.value }));
+      } catch (e) { showError(e); } finally { btn.disabled = false; }
+    });
+    kdlg.addEventListener('close', () => render());
   }
 
   /* ---------- Bündel ---------- */
@@ -430,7 +482,7 @@
     const list = [...state.comments.values()].filter(c => c.post === p.id).sort((a, b) => a.id - b.id);
     for (const c of list) {
       const row = el('div', { class: 'comment', 'data-id': c.id, style: '--hue:' + c.hue });
-      row.append(el('span', { class: 'author' }, el('i', { class: 'dot' }), el('span', { class: 'name', text: c.author })));
+      row.append(authorEl(c));
       row.append(el('p', { class: 'comment-body', text: c.body }));
       if (c.editable && canWrite()) {
         row.append(el('div', { class: 'post-menu' },
@@ -505,7 +557,8 @@
   }
 
   function updateStatusNotice() {
-    if (!canWrite()) notice(t('board_closed'), true);
+    if (!me.owner && me.blocked) notice(t('blocked'), true);
+    else if (!canWrite()) notice(t('board_closed'), true);
     else if ($('#notice').classList.contains('warn') && $('#notice').textContent === t('board_closed')) notice(null);
     const hb = $('#history-btn'); if (hb) hb.hidden = false;
     $('#new-post').hidden = !canWrite();
@@ -635,5 +688,5 @@
   applyState(Object.assign({ full: true }, W.state));
   render();
   timer = setTimeout(poll, 3000);
-  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open) && !(hdlg && hdlg.open)) render(); }, 60000); // Zeitangaben auffrischen
+  setInterval(() => { if (!dlg.open && !(bdlg && bdlg.open) && !(hdlg && hdlg.open) && !(kdlg && kdlg.open)) render(); }, 60000); // Zeitangaben auffrischen
 })();

@@ -359,3 +359,9 @@ body.presenter .post { padding: 16px 18px 14px; }
 .history-empty { color: var(--muted); padding: 8px 0; }
 .btn-ghost.small { padding: 6px 12px; font-size: 0.85rem; white-space: nowrap; }
 body.presenter #history-btn { display: none; }
+
+/* Gäste sperren */
+.author-btn { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; border-radius: 6px; }
+.author-btn:hover .name { text-decoration: underline; }
+.radio-row, .check-row { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; cursor: pointer; }
+.radio-row input, .check-row input { width: 18px; height: 18px; margin: 0; }

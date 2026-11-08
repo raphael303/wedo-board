@@ -23,11 +23,11 @@ Prüfung des Tokens: `GET /api/me` → `{ok, owner: true, version, base_url}`. B
   "lang": "de",
   "note": "Klasse 3b, Biologie, Einstieg Photosynthese, 12.3.2027",
   "tags": "bio, 3b, einstieg",
-  "settings": {"comments": true, "reactions": true, "images": true, "links": true, "new_on_top": true, "emojis": ["👍", "❤️"]}
+  "settings": {"comments": true, "reactions": true, "images": true, "links": true, "new_on_top": true, "ai": true, "emojis": ["👍", "❤️"]}
 }
 ```
 
-`slug` ist optional ein eigenes Kurzwort für den Link; ohne Angabe entsteht ein aussprechbares Fünf-Buchstaben-Wort. `type` ist `wall` (frei, platzfüllendes Raster) oder `columns` (Spalten). `columns` ist eine Liste von Titeln oder von Objekten `{id, title}`; bei `columns` ohne Angabe entstehen drei Standardspalten. `background` ist einer von `morgen`, `meer`, `wald`, `daemmerung`, `graphit`, `papier`. `lang` ist `de` oder `en`. `tags` darf eine Zeichenkette mit Kommas oder eine Liste sein. Antwort: `{board: Board}` mit Status 201.
+`slug` ist optional ein eigenes Kurzwort für den Link; ohne Angabe entsteht ein aussprechbares Fünf-Buchstaben-Wort. `type` ist `wall` (frei, platzfüllendes Raster) oder `columns` (Spalten). `columns` ist eine Liste von Titeln oder von Objekten `{id, title}`; bei `columns` ohne Angabe entstehen drei Standardspalten. `background` ist einer von `morgen`, `meer`, `wald`, `daemmerung`, `graphit`, `papier`. `lang` ist `de` oder `en`. `tags` darf eine Zeichenkette mit Kommas oder eine Liste sein. `settings.ai` (Standard `true`) erlaubt KI-Funktionen für dieses Board; für heikle Boards wie persönliches Feedback auf `false` setzen, dann werden seine Beiträge nie an einen KI-Anbieter geschickt. Antwort: `{board: Board}` mit Status 201.
 
 Überall, wo `{key}` steht, ist auch das Kurzwort erlaubt. `GET /api/boards/{key}` liest ein Board. `PATCH /api/boards/{key}` (auch `POST`) ändert beliebige der obigen Felder, `slug` (leer = neues automatisches Wort) sowie `status` (`open`, `closed`, `archived`). Beim Ändern von `columns` bleiben Beiträge in ihrer Spalte, wenn die bestehende `id` mitgegeben wird; Titel ohne `id` ergeben neue Spalten, deren Beiträge in die erste Spalte rutschen.
 

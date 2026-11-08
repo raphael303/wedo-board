@@ -122,7 +122,7 @@ function board_normalize_columns($input): array {
 function board_normalize_settings($input, array $current): array {
     $s = $current;
     if (!is_array($input)) return $s;
-    foreach (['comments', 'reactions', 'images', 'links', 'new_on_top'] as $k) {
+    foreach (['comments', 'reactions', 'images', 'links', 'new_on_top', 'ai'] as $k) {
         if (array_key_exists($k, $input)) {
             $s[$k] = filter_var($input[$k], FILTER_VALIDATE_BOOLEAN);
         }

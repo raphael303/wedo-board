@@ -76,6 +76,38 @@ function db_migrations(): array {
                 KEY ix_board (board_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        // Etappe 5d: KI-Zugänge und Protokoll der KI-Aufrufe.
+        6 => [
+            "CREATE TABLE IF NOT EXISTS ai_credentials (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL DEFAULT 1,
+                provider VARCHAR(32) NOT NULL,
+                label VARCHAR(80) NOT NULL DEFAULT '',
+                api_key_enc TEXT NOT NULL,
+                model VARCHAR(120) NOT NULL DEFAULT '',
+                is_default TINYINT(1) NOT NULL DEFAULT 1,
+                last_test_at DATETIME(6) NULL,
+                last_test_ok TINYINT(1) NULL,
+                created_at DATETIME(6) NOT NULL,
+                updated_at DATETIME(6) NOT NULL,
+                KEY ix_user (user_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+            "CREATE TABLE IF NOT EXISTS ai_usage (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL DEFAULT 1,
+                board_id INT UNSIGNED NULL,
+                feature VARCHAR(40) NOT NULL,
+                provider VARCHAR(32) NOT NULL,
+                model VARCHAR(120) NOT NULL DEFAULT '',
+                input_tokens INT UNSIGNED NOT NULL DEFAULT 0,
+                output_tokens INT UNSIGNED NOT NULL DEFAULT 0,
+                duration_ms INT UNSIGNED NOT NULL DEFAULT 0,
+                ok TINYINT(1) NOT NULL DEFAULT 1,
+                error VARCHAR(500) NULL,
+                created_at DATETIME(6) NOT NULL,
+                KEY ix_user_created (user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
     ];
 }
 

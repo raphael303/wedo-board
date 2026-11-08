@@ -90,4 +90,10 @@ return [
     'block_done' => 'Guest “{name}” blocked',
     'log_guest_block' => 'Guest “{name}” blocked on this board',
     'log_guest_block_all' => 'Guest “{name}” blocked on all boards',
+    'ai_error_invalid_key' => 'The AI key is invalid or expired. Check it in the settings.',
+    'ai_error_rate_limit' => 'The AI provider’s limit has been reached. Please try again in a few minutes.',
+    'ai_error_overloaded' => 'The AI service is overloaded right now. Please try again shortly.',
+    'ai_error_timeout' => 'The AI service took too long to answer. Please try again, perhaps with fewer posts.',
+    'ai_error_invalid_response' => 'The AI model’s answer was unusable. Nothing was changed.',
+    'ai_error_network' => 'No connection to the AI provider.',
 ];

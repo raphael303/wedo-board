@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.7.0');
-define('WB_SCHEMA_VERSION', 5);
+define('WB_VERSION', '0.8.0');
+define('WB_SCHEMA_VERSION', 6);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {
@@ -55,4 +55,5 @@ require WB_ROOT . '/lib/boards.php';
 require WB_ROOT . '/lib/bundles.php';
 require WB_ROOT . '/lib/undo.php';
 require WB_ROOT . '/lib/blocks.php';
+require WB_ROOT . '/lib/ai/ai.php';
 require WB_ROOT . '/lib/migrate.php';

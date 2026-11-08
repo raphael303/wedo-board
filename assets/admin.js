@@ -14,6 +14,12 @@
     const f = ev.target.closest('form[data-confirm]');
     if (f && !confirm(f.dataset.confirm)) ev.preventDefault();
   });
+  const modelSel = document.querySelector('select[data-other]');
+  if (modelSel) {
+    const other = document.querySelector(modelSel.dataset.other);
+    const sync = () => { other.parentElement.hidden = modelSel.value !== '__other'; };
+    modelSel.addEventListener('change', sync); sync();
+  }
   const type = document.getElementById('type');
   if (type) {
     const row = document.getElementById('columns-row');

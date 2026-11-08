@@ -146,6 +146,7 @@ function wb_default_settings(): array {
         'images' => true,
         'links' => true,
         'new_on_top' => true,
+        'ai' => true,
         'emojis' => wb_emojis(),
     ];
 }

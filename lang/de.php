@@ -90,4 +90,10 @@ return [
     'block_done' => 'Gast «{name}» gesperrt',
     'log_guest_block' => 'Gast «{name}» auf diesem Board gesperrt',
     'log_guest_block_all' => 'Gast «{name}» auf allen Boards gesperrt',
+    'ai_error_invalid_key' => 'Der KI-Schlüssel ist ungültig oder abgelaufen. Prüfe ihn in den Einstellungen.',
+    'ai_error_rate_limit' => 'Das Limit des KI-Anbieters ist erreicht. Bitte in ein paar Minuten nochmals versuchen.',
+    'ai_error_overloaded' => 'Der KI-Dienst ist gerade überlastet. Bitte gleich nochmals versuchen.',
+    'ai_error_timeout' => 'Der KI-Dienst hat zu lange nicht geantwortet. Bitte nochmals versuchen, allenfalls mit weniger Beiträgen.',
+    'ai_error_invalid_response' => 'Die Antwort des KI-Modells war unbrauchbar. Es wurde nichts verändert.',
+    'ai_error_network' => 'Keine Verbindung zum KI-Anbieter.',
 ];

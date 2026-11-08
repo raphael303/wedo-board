@@ -18,6 +18,11 @@ return [
     // damit gedruckte QR-Codes und alte Links weiter funktionieren. Die www-Variante von
     // base_url wird automatisch umgeleitet.
     'legacy_hosts' => ['board.wedo.science'],
+    // Geheimwert (Base64, 32 Byte) für die verschlüsselte Ablage von KI-Schlüsseln. Fehlt die Zeile, erzeugt
+    // die App sie beim ersten Öffnen der KI-Einstellungen selbst und trägt sie hier ein, wenn die Datei
+    // beschreibbar ist; sonst zeigt die Bibliothek die einzufügende Zeile an. Niemals ändern, sonst sind
+    // gespeicherte Schlüssel unlesbar.
+    // 'app_secret' => '…',
     // Standardsprache für neue Boards: 'de' oder 'en'.
     'default_lang' => 'de',
     // Zeitzone für Zeitangaben.

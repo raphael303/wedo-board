@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'images' => !empty($_POST['s_images']),
                     'links' => !empty($_POST['s_links']),
                     'new_on_top' => !empty($_POST['s_new_on_top']),
+                    'ai' => !empty($_POST['s_ai']),
                     'emojis' => $_POST['emojis'] ?? [],
                 ],
             ];
@@ -256,6 +257,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
         <label><input type="checkbox" name="s_images" <?= $v['settings']['images'] ? 'checked' : '' ?>> Bilder</label>
         <label><input type="checkbox" name="s_links" <?= $v['settings']['links'] ? 'checked' : '' ?>> Links</label>
         <label><input type="checkbox" name="s_new_on_top" <?= $v['settings']['new_on_top'] ? 'checked' : '' ?>> Neue Beiträge zuoberst</label>
+        <label title="Ausschalten für heikle Boards wie persönliches Feedback: dann werden keine Beiträge dieses Boards an einen KI-Anbieter geschickt."><input type="checkbox" name="s_ai" <?= !empty($v['settings']['ai']) ? 'checked' : '' ?>> KI-Funktionen erlaubt</label>
       </div>
     </div>
     <div class="row">

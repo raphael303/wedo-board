@@ -1,6 +1,6 @@
 # Etappe 5: KI-Bündelung, Rückgängig, Gäste sperren, Rollen und Domain-Unabhängigkeit
 
-**Stand der Umsetzung:** 5a (Version 0.5.0), 5b (Version 0.6.0) und 5c (Version 0.7.0) umgesetzt. 5d und 5e offen.
+**Stand der Umsetzung:** 5a (Version 0.5.0), 5b (Version 0.6.0), 5c (Version 0.7.0) und 5d (Version 0.8.0) umgesetzt. 5e offen.
 
 Beschlossen mit Raphael am 2026-11-08. Diese Datei ist der verbindliche Auftrag für die Umsetzung. Die hier beschriebenen Änderungen an Datenmodell und Schnittstelle sind freigegeben; was darüber hinausgeht, braucht weiterhin Rücksprache. Nach der Umsetzung werden die Inhalte in `CONCEPT.md`, `API.md` und `DEVELOPMENT.md` übernommen, und diese Datei wird oben als «umgesetzt» markiert.
 

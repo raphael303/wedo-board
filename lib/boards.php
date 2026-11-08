@@ -129,9 +129,19 @@ function board_normalize_settings($input, array $current): array {
     }
     if (isset($input['emojis'])) {
         $allowed = wb_emojis();
-        $list = is_array($input['emojis']) ? $input['emojis'] : preg_split('/[\s,]+/u', (string)$input['emojis']);
+        $raw = $input['emojis'];
+        // Kurzformen: «ampel» für das Ampelsystem (nur 🔴 🟡 🟢), «standard» für die Standardauswahl.
+        if (is_string($raw) && in_array(mb_strtolower(trim($raw)), ['ampel', 'traffic'], true)) $raw = wb_traffic_emojis();
+        elseif (is_string($raw) && in_array(mb_strtolower(trim($raw)), ['standard', 'default'], true)) $raw = wb_default_emojis();
+        $list = is_array($raw) ? $raw : preg_split('/[\s,]+/u', (string)$raw);
         $list = array_values(array_intersect($allowed, array_map('trim', $list ?: [])));
-        $s['emojis'] = $list ?: $allowed;
+        $s['emojis'] = $list ?: wb_default_emojis();
+    }
+    // Schalter ampel (nicht gespeichert): true = nur Ampel, false = zurück zur Standardauswahl, falls nur die Ampel aktiv war.
+    if (array_key_exists('ampel', $input)) {
+        $on = filter_var($input['ampel'], FILTER_VALIDATE_BOOLEAN);
+        if ($on) $s['emojis'] = wb_traffic_emojis();
+        elseif ($s['emojis'] === wb_traffic_emojis()) $s['emojis'] = wb_default_emojis();
     }
     return $s;
 }

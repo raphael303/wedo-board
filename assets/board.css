@@ -99,9 +99,10 @@ img { display: block; max-width: 100%; }
 }
 
 /* Freies Layout: umbrechendes Raster */
-.wall { column-width: 290px; column-gap: var(--gap); }
-/* display: block statt inline-block: Chrome verteilt inline-blocks bei wenigen Karten falsch auf die Spalten. */
-.wall .post { display: block; width: 100%; margin: 0 0 var(--gap); break-inside: avoid; }
+/* Freies Layout: board.js verteilt die Karten auf eigene Spalten (.wall-col), siehe layoutWalls(). */
+.wall { display: flex; gap: var(--gap); align-items: flex-start; }
+.wall-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.wall .post { display: block; width: 100%; margin: 0 0 var(--gap); }
 
 /* Spaltenlayout */
 .type-columns .board { padding-bottom: var(--gap); }
@@ -228,7 +229,7 @@ img { display: block; max-width: 100%; }
   overflow-wrap: anywhere;
   margin-right: 6px;
 }
-.wall .bundle { display: block; width: calc(100% - 6px); margin: 0 6px var(--gap) 0; break-inside: avoid; }
+.wall .bundle { display: block; width: calc(100% - 6px); margin: 0 6px var(--gap) 0; }
 .bundle-head { display: flex; align-items: center; gap: 8px; }
 .bundle-icon { color: var(--muted); display: inline-flex; }
 .bundle-icon svg { width: 18px; height: 18px; }
@@ -246,8 +247,8 @@ img { display: block; max-width: 100%; }
 .bundle-posts { margin: 10px -8px -4px; padding: 10px 8px 4px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 .bundle-posts .post { box-shadow: none; border: 1px solid var(--line); background: var(--paper-solid); }
 .bundle.wide { display: block; margin: 0 6px var(--gap) 0; }
-.bundle.wide .bundle-posts.wall { display: block; column-width: 290px; column-gap: var(--gap); }
-.bundle.wide .bundle-posts.wall .post { display: block; width: 100%; margin: 0 0 var(--gap); break-inside: avoid; }
+.bundle.wide .bundle-posts.wall { display: flex; flex-direction: row; gap: var(--gap); }
+.bundle.wide .bundle-posts.wall .post { display: block; width: 100%; margin: 0 0 var(--gap); }
 .wall-flow > .wall { margin-bottom: 0; }
 .bundle.drop-target { outline: 2px dashed var(--ink); outline-offset: -3px; background: rgba(255, 255, 255, 0.95); }
 .wall.drop-target { outline: 2px dashed rgba(255, 255, 255, 0.7); outline-offset: 6px; }
@@ -287,9 +288,7 @@ img { display: block; max-width: 100%; }
   .bar .btn-primary, .me-name { display: none; }
   .fab { display: block; }
   .board { padding-left: 12px; padding-right: 12px; }
-  .wall { column-width: auto; column-count: 1; }
 }
-@media (min-width: 641px) and (max-width: 900px) { .wall { column-count: 2; column-width: auto; } }
 
 /* Spaltenwahl im Eingabedialog */
 .column-choice { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

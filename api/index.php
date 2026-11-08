@@ -191,12 +191,10 @@ function guest_api(string $method, array $p): never {
         if (!$exists) wb_error('Ziel nicht gefunden.', 404);
         $had = db_exec('DELETE FROM reactions WHERE target_type = ? AND target_id = ? AND emoji = ? AND author_key = ?', [$type, $tid, $emoji, $uid]);
         $cleared = [];
-        if ($had === 0 && in_array($emoji, wb_traffic_emojis(), true)) {
-            // Ampel: eine andere Farbe derselben Person an diesem Element fällt weg.
-            $others = array_values(array_diff(wb_traffic_emojis(), [$emoji]));
-            foreach ($others as $o) {
-                if (db_exec('DELETE FROM reactions WHERE target_type = ? AND target_id = ? AND emoji = ? AND author_key = ?', [$type, $tid, $o, $uid]) > 0) $cleared[] = $o;
-            }
+        if ($had === 0) {
+            // Eine Reaktion pro Person und Element: eine neue ersetzt die bisherige.
+            foreach (db_all('SELECT emoji FROM reactions WHERE target_type = ? AND target_id = ? AND author_key = ?', [$type, $tid, $uid]) as $r) $cleared[] = $r['emoji'];
+            if ($cleared) db_exec('DELETE FROM reactions WHERE target_type = ? AND target_id = ? AND author_key = ?', [$type, $tid, $uid]);
         }
         if ($had === 0) {
             db_exec('INSERT INTO reactions (board_id, target_type, target_id, emoji, author_key, created_at) VALUES (?, ?, ?, ?, ?, ?)',

@@ -217,7 +217,45 @@
     }
     if (me.owner) enableDropZone(container, null);
     root.append(container);
+    layoutWalls(root);
   }
+
+  /*
+   * Raster für das freie Layout (Masonry): Karten kommen der Reihe nach in die jeweils kürzeste Spalte. Eigene
+   * Spalten statt CSS-Spalten, weil Chrome und Safari CSS-Spalten mit wenigen Karten unterschiedlich und teils
+   * falsch umbrechen (Stapel, abgeschnittene Schatten). Die Spaltenzahl folgt der Breite wie zuvor (290 px pro Spalte).
+   */
+  const WALL_MIN = 290;
+  function wallCount(width) {
+    if (window.innerWidth <= 640) return 1;
+    if (window.innerWidth <= 900) return Math.min(2, Math.max(1, Math.floor(width / 200)));
+    const gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 16;
+    return Math.max(1, Math.floor((width + gap) / (WALL_MIN + gap)));
+  }
+  function layoutWalls(root) {
+    for (const wall of root.querySelectorAll('.wall')) {
+      const cards = [...wall.children].filter((c) => !c.classList.contains('wall-col'));
+      const n = wallCount(wall.clientWidth);
+      wall.dataset.cols = String(n);
+      const cols = [];
+      for (let i = 0; i < n; i++) { const c = el('div', { class: 'wall-col' }); cols.push(c); wall.append(c); }
+      const heights = new Array(n).fill(0);
+      for (const card of cards) {
+        let k = 0;
+        for (let i = 1; i < n; i++) if (heights[i] < heights[k] - 1) k = i;
+        cols[k].append(card);
+        heights[k] += card.offsetHeight;
+      }
+    }
+  }
+  let wallResizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(wallResizeTimer);
+    wallResizeTimer = setTimeout(() => {
+      const w = document.querySelector('#board .wall');
+      if (w && Number(w.dataset.cols) !== wallCount(w.clientWidth)) render();
+    }, 150);
+  });
 
   function renderColumns(root, posts) {
     const tabs = el('div', { class: 'column-tabs', role: 'tablist' });
@@ -643,12 +681,9 @@
     const before = new Map([...rx].map(([k, v]) => [k, Object.assign({}, v)]));
     const cur = rx.get(emoji) || { n: 0, mine: false };
     rx.set(emoji, cur.mine ? { n: cur.n - 1, mine: false } : { n: cur.n + 1, mine: true });
-    if (!cur.mine && TRAFFIC.includes(emoji)) {
-      // Ampel: nur eine Farbe pro Person; die bisherige eigene Farbe fällt weg.
-      for (const o of TRAFFIC) {
-        const r = rx.get(o);
-        if (o !== emoji && r && r.mine) rx.set(o, { n: r.n - 1, mine: false });
-      }
+    if (!cur.mine) {
+      // Eine Reaktion pro Person und Element: die bisherige eigene fällt weg.
+      for (const [o, r] of rx) if (o !== emoji && r.mine) rx.set(o, { n: r.n - 1, mine: false });
     }
     render();
     try { const r = await call('/react', { json: { type, id, emoji } }); state.version = r.version; }

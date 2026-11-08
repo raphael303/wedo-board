@@ -153,10 +153,11 @@ function mcp_tools(): array {
         'note' => ['type' => 'string', 'description' => 'Notiz für Besitzer und Claude: Klasse, Fach, Thema, Datum, Lektionsbezug. Immer setzen.'],
         'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Schlagwörter, zum Beispiel ["bio", "3b", "einstieg"]. Immer setzen.'],
         'slug' => ['type' => 'string', 'description' => 'Eigenes Kurzwort für den Link (3–32 Zeichen, a-z, 0-9, Bindestrich). Leer lassen für ein automatisches aussprechbares Wort.'],
-        'settings' => ['type' => 'object', 'description' => 'Optionale Schalter: comments, reactions, images, links, new_on_top, ai (KI-Funktionen für dieses Board erlaubt; für heikle Boards wie persönliches Feedback ausschalten; jeweils boolean), emojis (Liste erlaubter Emojis aus ' . implode(' ', wb_emojis()) . ').',
+        'settings' => ['type' => 'object', 'description' => 'Optionale Schalter: comments, reactions, images, links, new_on_top, ai (KI-Funktionen für dieses Board erlaubt; für heikle Boards wie persönliches Feedback ausschalten; jeweils boolean), emojis (Liste erlaubter Emojis aus ' . implode(' ', wb_emojis()) . '), ampel (true = Ampelsystem: nur 🔴 🟡 🟢 als Reaktionen, etwa für Selbsteinschätzung oder Zustimmung; false = zurück zur Standardauswahl). Jede Person gibt pro Beitrag höchstens eine Reaktion ab.',
             'properties' => [
                 'comments' => ['type' => 'boolean'], 'reactions' => ['type' => 'boolean'], 'images' => ['type' => 'boolean'],
                 'links' => ['type' => 'boolean'], 'new_on_top' => ['type' => 'boolean'], 'ai' => ['type' => 'boolean'], 'emojis' => ['type' => 'array', 'items' => ['type' => 'string']],
+                'ampel' => ['type' => 'boolean', 'description' => 'Ampelsystem: true setzt die erlaubten Reaktionen auf 🔴 🟡 🟢, false stellt die Standardauswahl wieder her.'],
             ]],
     ];
     return [

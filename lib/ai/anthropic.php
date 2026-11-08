@@ -23,15 +23,29 @@ function ai_anthropic_structured(array $credential, string $system, string $user
         'tool_choice' => ['type' => 'tool', 'name' => $options['tool_name']],
     ];
     [$status, $json] = ai_anthropic_request('POST', '/messages', (string)$credential['api_key'], $body, (int)$options['timeout']);
-    if ($status === 400 && $body['max_tokens'] > 4096 && stripos((string)($json['error']['message'] ?? ''), 'max_tokens') !== false) {
+    $errMsg = (string)($json['error']['message'] ?? '');
+    if ($status === 400 && $body['max_tokens'] > 4096 && stripos($errMsg, 'max_tokens') !== false) {
         // Ältere Modelle erlauben höchstens 4096 Ausgabe-Token: einmal mit dieser Grenze wiederholen.
         $body['max_tokens'] = 4096;
+        [$status, $json] = ai_anthropic_request('POST', '/messages', (string)$credential['api_key'], $body, (int)$options['timeout']);
+        $errMsg = (string)($json['error']['message'] ?? '');
+    }
+    if ($status === 400 && stripos($errMsg, 'tool_choice') !== false) {
+        // Manche Modelle erlauben kein erzwungenes Werkzeug: freiwillige Wahl mit ausdrücklicher Aufforderung,
+        // und als Ausweg wird reines JSON im Antworttext akzeptiert.
+        $body['tool_choice'] = ['type' => 'auto'];
+        $body['messages'][0]['content'] = $user . "\n\nAntworte ausschliesslich mit einem Aufruf des Werkzeugs «" . $options['tool_name'] . "». Falls du das Werkzeug nicht aufrufen kannst, antworte nur mit dem JSON-Objekt nach dessen Schema, ohne weiteren Text.";
         [$status, $json] = ai_anthropic_request('POST', '/messages', (string)$credential['api_key'], $body, (int)$options['timeout']);
     }
     ai_anthropic_check_status($status, $json);
     $input = null;
+    $text = '';
     foreach ($json['content'] ?? [] as $block) {
         if (($block['type'] ?? '') === 'tool_use' && ($block['name'] ?? '') === $options['tool_name']) { $input = $block['input'] ?? null; break; }
+        if (($block['type'] ?? '') === 'text') $text .= (string)($block['text'] ?? '');
+    }
+    if (!is_array($input) && $text !== '') {
+        $input = ai_anthropic_json_from_text($text);
     }
     if (!is_array($input)) {
         throw new AiException('invalid_response', 'Das Modell hat kein strukturiertes Ergebnis geliefert' . (($json['stop_reason'] ?? '') === 'max_tokens' ? ' (Antwort zu lang).' : '.'));
@@ -42,6 +56,17 @@ function ai_anthropic_structured(array $credential, string $system, string $user
         'output_tokens' => (int)($json['usage']['output_tokens'] ?? 0),
         'model' => (string)($json['model'] ?? $model),
     ];
+}
+
+/** Liest ein JSON-Objekt aus einem Antworttext (auch in ```json-Zäunen oder mit Text davor und danach). */
+function ai_anthropic_json_from_text(string $text): ?array {
+    $t = trim($text);
+    if (preg_match('/```(?:json)?\s*(\{.*\})\s*```/su', $t, $m)) $t = $m[1];
+    $start = strpos($t, '{');
+    $end = strrpos($t, '}');
+    if ($start === false || $end === false || $end <= $start) return null;
+    $d = json_decode(substr($t, $start, $end - $start + 1), true);
+    return is_array($d) ? $d : null;
 }
 
 /** Modell-Liste des Anbieters über dessen Endpunkt; dient zugleich als Verbindungstest. */

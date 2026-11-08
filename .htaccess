@@ -28,7 +28,7 @@ RewriteRule ^([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$ board.php?slug=$1 [L,QSA]
 </IfModule>
 
 # Interne Dateien sperren
-<FilesMatch "^(config\.php|config\.example\.php|CONCEPT\.md|API\.md|README\.md|DEVELOPMENT\.md|\.gitignore)$">
+<FilesMatch "^(config\.php|config\.example\.php|[^/]*\.md|\.gitignore)$">
   Require all denied
 </FilesMatch>
 RedirectMatch 404 ^/(lib|lang|vendor|\.git)(/|$)

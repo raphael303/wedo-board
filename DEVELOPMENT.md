@@ -39,4 +39,4 @@ Keine Benutzerkonten für die Klasse; Identität ist das Cookie `wb_uid` (gespie
 
 ## Offene Ideen
 
-Ein separater Link-Kürzer (eigenes Projekt, eigene Subdomain, gleiche Bauweise, eigener Connector). Umbenennung des Repositories und der internen Bezeichnung «wedo board» in «nablet». Server-Sent Events bei grossen Gruppen. Abstimmungen, Moderation vor Veröffentlichung, weitere Hintergründe, freies Verschieben von Karten (bewusst noch nicht, weil es die Robustheit über Bildschirmgrössen kostet).
+Ein separater Link-Kürzer (eigenes Projekt, eigene Subdomain, gleiche Bauweise, eigener Connector). Umbenennung des Repositories und der internen Bezeichnung «wedo board» in «nablet». Leistungsoptimierungen nach `KAPAZITAET.md` (Messwerte, Grenzen des cyon-Pakets, geordnete Massnahmen); Server-Sent Events erst auf einem eigenen Server, weil sie auf cyon pro Verbindung einen PHP-Prozess festhalten. Abstimmungen, Moderation vor Veröffentlichung, weitere Hintergründe, freies Verschieben von Karten (bewusst noch nicht, weil es die Robustheit über Bildschirmgrössen kostet).

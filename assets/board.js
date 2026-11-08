@@ -747,6 +747,33 @@
   document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) document.body.classList.remove('presenter'); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && document.body.classList.contains('presenter')) document.body.classList.remove('presenter'); });
 
+  /* ---------- Zugangs-Panel (Kurzlink und QR-Code) ---------- */
+  const access = $('#access'), accessBtn = $('#access-btn'), accessBig = $('#access-big');
+  const accessStore = 'wb_access:' + board.key;
+  function setAccess(on, remember) {
+    access.hidden = !on;
+    document.body.classList.toggle('access-open', on);
+    accessBtn.setAttribute('aria-expanded', on ? 'true' : 'false');
+    accessBtn.classList.toggle('is-active', on);
+    accessBtn.title = on ? t('access_hide') : t('access');
+    accessBtn.setAttribute('aria-label', accessBtn.title);
+    if (remember) { try { localStorage.setItem(accessStore, on ? '1' : '0'); } catch (e) { /* ohne Speicher nur für diese Sitzung */ } }
+  }
+  let accessInitial = false;
+  try { accessInitial = localStorage.getItem(accessStore) === '1'; } catch (e) { /* ignorieren */ }
+  setAccess(accessInitial, false);
+  accessBtn.addEventListener('click', () => setAccess(access.hidden, true));
+  $('#access-close').addEventListener('click', () => setAccess(false, true));
+  $('#access-enlarge').addEventListener('click', () => { if (accessBig.showModal) accessBig.showModal(); });
+  $('#access-big-close').addEventListener('click', () => accessBig.close());
+  accessBig.addEventListener('click', (ev) => { if (ev.target === accessBig || ev.target.closest('.access-big-inner')) accessBig.close(); });
+  $('#access-copy').addEventListener('click', async (ev) => {
+    const b = ev.currentTarget, url = b.dataset.url;
+    try { await navigator.clipboard.writeText(url); } catch (e) { window.prompt(t('access_copy'), url); return; }
+    b.textContent = t('access_copied');
+    setTimeout(() => { b.textContent = t('access_copy'); }, 1600);
+  });
+
   /* ---------- Abfrage ---------- */
   let failures = 0, timer = null;
   async function poll() {

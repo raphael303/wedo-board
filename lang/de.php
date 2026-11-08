@@ -124,4 +124,11 @@ return [
     'ai_rest_title' => 'Weiteres',
     'ai_bundle_untitled' => 'Bündel',
     'log_ai_organize' => '{m} Beiträge zugeordnet, {n} Bündel erstellt',
+    'access' => 'Zugang einblenden',
+    'access_hide' => 'Zugang ausblenden',
+    'access_join' => 'Mach mit',
+    'access_hint' => 'QR-Code scannen oder Adresse eingeben',
+    'access_copy' => 'Link kopieren',
+    'access_copied' => 'Kopiert',
+    'access_enlarge' => 'Gross anzeigen',
 ];

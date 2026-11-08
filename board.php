@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/lib/bootstrap.php';
+require_once WB_ROOT . '/lib/qr.php';
 
 $board = null;
 if (db_is_installed()) {
@@ -27,6 +28,10 @@ $boot = [
     'api' => '/api/b/' . $board['bkey'],
     'csrf' => $owner ? wb_csrf_token() : null,
 ];
+// Zugangs-Panel: Kurzlink ohne Protokoll anzeigen, QR-Code direkt einbetten (kein zusätzlicher Abruf).
+$accessUrl = (string)$board['url'];
+$accessLabel = preg_replace('~^https?://(www\.)?~i', '', $accessUrl);
+$accessQr = wb_qr_svg($accessUrl);
 ?>
 <!doctype html>
 <html lang="<?= e($lang) ?>">
@@ -44,6 +49,9 @@ $boot = [
   <div class="bar-tools">
     <span class="me" title="<?= e(t('you_are', $lang)) ?>"><i class="dot" style="--hue:<?= wb_author_hue($name) ?>"></i><span class="me-name"><?= e($name) ?></span></span>
     <a class="bar-btn" href="?lang=<?= $lang === 'de' ? 'en' : 'de' ?>" title="<?= e(t('language', $lang)) ?>"><?= $lang === 'de' ? 'EN' : 'DE' ?></a>
+    <button class="bar-btn" id="access-btn" type="button" aria-controls="access" aria-expanded="false" title="<?= e(t('access', $lang)) ?>" aria-label="<?= e(t('access', $lang)) ?>">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+    </button>
     <button class="bar-btn" id="presenter" type="button" title="<?= e(t('presenter', $lang)) ?>" aria-label="<?= e(t('presenter', $lang)) ?>">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
     </button>
@@ -57,6 +65,25 @@ $boot = [
 <div id="notice" class="notice" hidden></div>
 
 <main id="board" class="board" aria-live="polite"></main>
+
+<aside id="access" class="access" hidden aria-label="<?= e(t('access_join', $lang)) ?>">
+  <div class="access-head">
+    <span class="access-title"><?= e(t('access_join', $lang)) ?></span>
+    <button class="access-x" id="access-close" type="button" title="<?= e(t('access_hide', $lang)) ?>" aria-label="<?= e(t('access_hide', $lang)) ?>">×</button>
+  </div>
+  <button class="access-qr" id="access-enlarge" type="button" title="<?= e(t('access_enlarge', $lang)) ?>" aria-label="<?= e(t('access_enlarge', $lang)) ?>"><?= $accessQr ?></button>
+  <p class="access-url"><?= e($accessLabel) ?></p>
+  <p class="access-hint"><?= e(t('access_hint', $lang)) ?></p>
+  <button class="btn-ghost small access-copy" id="access-copy" type="button" data-url="<?= e($accessUrl) ?>"><?= e(t('access_copy', $lang)) ?></button>
+</aside>
+
+<dialog id="access-big" class="access-big">
+  <div class="access-big-inner">
+    <div class="access-big-qr"><?= $accessQr ?></div>
+    <p class="access-big-url"><?= e($accessLabel) ?></p>
+  </div>
+  <button type="button" class="lightbox-close" id="access-big-close" aria-label="<?= e(t('close', $lang)) ?>">×</button>
+</dialog>
 
 <button class="fab" id="fab" type="button" aria-label="<?= e(t('new_post', $lang)) ?>">+</button>
 

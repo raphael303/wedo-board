@@ -124,4 +124,11 @@ return [
     'ai_rest_title' => 'Other',
     'ai_bundle_untitled' => 'Bundle',
     'log_ai_organize' => '{m} posts assigned, {n} bundles created',
+    'access' => 'Show access',
+    'access_hide' => 'Hide access',
+    'access_join' => 'Join in',
+    'access_hint' => 'Scan the QR code or type the address',
+    'access_copy' => 'Copy link',
+    'access_copied' => 'Copied',
+    'access_enlarge' => 'Show large',
 ];

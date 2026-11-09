@@ -1,0 +1,54 @@
+/* Rückmelde-Dialog: eigenständig, damit er auf Startseite, Board, Aktivitäten und Bibliothek gleich aussieht. */
+.tfb-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(15, 18, 22, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1b1f24;
+}
+.tfb-box {
+  background: #fff; border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 100%; max-width: 480px; max-height: calc(100vh - 32px); overflow: auto;
+  padding: 22px 22px 18px; box-sizing: border-box; text-align: left;
+}
+.tfb-title { margin: 0 0 12px; font-size: 1.2rem; font-weight: 650; letter-spacing: -0.01em; }
+.tfb-form { display: flex; flex-direction: column; gap: 6px; margin: 0; }
+.tfb-label { margin: 8px 0 2px; font-size: 0.88rem; font-weight: 600; color: #3a4048; }
+.tfb-chips { display: flex; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; margin: 0; }
+.tfb-chip { position: relative; cursor: pointer; }
+.tfb-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.tfb-chip span {
+  display: inline-block; padding: 6px 13px; border-radius: 999px;
+  border: 1px solid #cfd5dc; background: #f6f7f9; font-size: 0.9rem;
+}
+.tfb-chip input:checked + span { background: #1b1f24; border-color: #1b1f24; color: #fff; }
+.tfb-chip input:focus-visible + span { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.tfb-form textarea, .tfb-form input[type="email"] {
+  width: 100%; box-sizing: border-box; font: inherit; color: inherit;
+  border: 1px solid #cfd5dc; border-radius: 9px; padding: 9px 11px; background: #fff;
+}
+.tfb-form textarea { resize: vertical; min-height: 110px; }
+.tfb-form textarea:focus, .tfb-form input[type="email"]:focus { outline: 2px solid #3b82f6; outline-offset: 0; border-color: transparent; }
+.tfb-trap { position: absolute !important; left: -10000px !important; width: 1px; height: 1px; opacity: 0; }
+.tfb-hint { margin: 10px 0 0; font-size: 0.8rem; color: #5d6670; }
+.tfb-msg { margin: 6px 0 0; font-size: 0.88rem; min-height: 0; }
+.tfb-msg:empty { display: none; }
+.tfb-bad { color: #b42318; }
+.tfb-done { margin: 4px 0 8px; }
+.tfb-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.tfb-actions button {
+  font: inherit; font-weight: 600; border-radius: 9px; padding: 8px 16px; cursor: pointer; border: 1px solid transparent;
+}
+.tfb-primary { background: #1b1f24; color: #fff; }
+.tfb-primary:disabled { opacity: 0.55; cursor: default; }
+.tfb-ghost { background: transparent; color: #1b1f24; border-color: #cfd5dc !important; }
+.tfb-ghost:hover { background: #f1f3f5; }
+@media (max-width: 420px) {
+  .tfb-overlay { padding: 8px; align-items: flex-end; }
+  .tfb-box { padding: 18px 16px 14px; border-radius: 14px 14px 10px 10px; }
+}
+/* Unauffälliger Link im Fuss (Startseite, Bibliothek). */
+a.tfb-link { color: inherit; opacity: 0.8; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+a.tfb-link:hover { opacity: 1; }
+.tfb-title, .tfb-box button, .tfb-box textarea, .tfb-box input { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }

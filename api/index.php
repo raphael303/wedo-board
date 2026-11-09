@@ -45,6 +45,8 @@ try {
     } elseif ($head === 'maintenance' && ($parts[1] ?? '') === 'purge' && $method === 'POST') {
         wb_require_owner();
         wb_json(['ok' => true, 'purged' => board_purge_deleted(30)]);
+    } elseif ($head === 'feedback') {
+        feedback_api($method, $parts);
     } elseif ($head === 'meta' && $method === 'GET') {
         wb_json(['ok' => true, 'backgrounds' => wb_backgrounds(), 'emojis' => wb_emojis(), 'langs' => wb_langs(), 'types' => ['wall', 'columns'], 'activity_types' => ACTIVITY_TYPES, 'target_color_modes' => TARGET_COLOR_MODES]);
     }
@@ -56,6 +58,53 @@ try {
 } catch (Throwable $e) {
     error_log(wb_app_name() . ' api: ' . $e->getMessage());
     wb_error('Serverfehler.', 500);
+}
+
+/* ======================= Rückmeldungen ======================= */
+
+function feedback_api(string $method, array $p): never {
+    $id = (int)($p[1] ?? 0);
+    $action = (string)($p[2] ?? '');
+    if ($method === 'POST' && $id === 0) {
+        // Einreichen: offen für alle Seiten (Gäste, Startseite, Bibliothek).
+        $in = wb_read_json_body();
+        $lang = in_array($in['lang'] ?? '', wb_langs(), true) ? (string)$in['lang'] : 'de';
+        $uid = wb_client_uid();
+        try {
+            if (!wb_can('board.manage')) rate_limit($uid, 10);
+            $r = feedback_create($in, $uid, feedback_client_ip());
+        } catch (InvalidArgumentException | RuntimeException $e) {
+            $code = $e->getMessage();
+            wb_error(t($code, $lang), $code === 'feedback_rate' ? 429 : 422, ['code' => $code]);
+        }
+        wb_json(['ok' => true, 'id' => $r['id']], 201);
+    }
+    wb_require_owner();
+    db_migrate();
+    if ($method === 'GET' && $id === 0) {
+        $list = feedback_list(['status' => $_GET['status'] ?? 'all', 'kind' => $_GET['kind'] ?? '', 'since' => $_GET['since'] ?? '', 'q' => $_GET['q'] ?? '', 'limit' => $_GET['limit'] ?? 200]);
+        wb_json(['ok' => true, 'counts' => feedback_counts(), 'feedback' => array_map(fn($f) => feedback_view($f, true), $list)]);
+    }
+    $fb = $id > 0 ? feedback_get($id) : null;
+    if (!$fb) wb_error('Rückmeldung nicht gefunden.', 404);
+    if ($method === 'GET' && $action === '') {
+        wb_json(['ok' => true, 'feedback' => feedback_view(feedback_with_refs($fb), true)]);
+    }
+    wb_check_csrf_header();
+    if (($method === 'PATCH' || $method === 'POST') && $action === '') {
+        $in = wb_read_json_body();
+        $via = in_array($in['approved_via'] ?? '', ['mail', 'library'], true) ? (string)$in['approved_via'] : 'library';
+        wb_json(['ok' => true, 'feedback' => feedback_view(feedback_with_refs(feedback_update($id, $in, $via)), true)]);
+    }
+    if ($method === 'POST' && $action === 'restore') {
+        feedback_restore($id);
+        wb_json(['ok' => true, 'feedback' => feedback_view(feedback_with_refs(feedback_get($id)), true)]);
+    }
+    if ($method === 'DELETE' && $action === '') {
+        feedback_trash($id);
+        wb_json(['ok' => true]);
+    }
+    wb_error('Unbekannter Aufruf.', 404);
 }
 
 /* ======================= Gäste ======================= */
@@ -226,7 +275,8 @@ function rate_limit(string $uid, int $max = 30): void {
     db_exec('INSERT INTO rate_limits (author_key, minute, cnt) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE cnt = cnt + 1', [$uid, $minute]);
     $row = db_row('SELECT cnt FROM rate_limits WHERE author_key = ? AND minute = ?', [$uid, $minute]);
     if ((int)$row['cnt'] > $max) wb_error('error_rate', 429);
-    if (random_int(0, 50) === 0) db_exec('DELETE FROM rate_limits WHERE minute < ?', [$minute - 5]);
+    // 61 Minuten aufbewahren: Rückmeldungen zählen pro IP und Stunde in derselben Tabelle.
+    if (random_int(0, 50) === 0) db_exec('DELETE FROM rate_limits WHERE minute < ?', [$minute - 61]);
 }
 
 function post_create(array $board, array $in, string $uid, string $name): array {

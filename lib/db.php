@@ -276,6 +276,31 @@ function db_schema(): array {
             undone_at DATETIME(6) NULL,
             KEY ix_activity_round (activity_id, round, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS feedback (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            kind VARCHAR(16) NOT NULL DEFAULT 'bug',
+            text TEXT NOT NULL,
+            contact_email VARCHAR(200) NULL,
+            context TEXT NULL,
+            board_id INT UNSIGNED NULL,
+            activity_id INT UNSIGNED NULL,
+            browser_key CHAR(32) NOT NULL DEFAULT '',
+            status VARCHAR(16) NOT NULL DEFAULT 'new',
+            analysis MEDIUMTEXT NULL,
+            proposal MEDIUMTEXT NULL,
+            needs_consult TINYINT(1) NOT NULL DEFAULT 0,
+            duplicate_of INT UNSIGNED NULL,
+            digest_message_id VARCHAR(300) NULL,
+            approved_at DATETIME(6) NULL,
+            approved_via VARCHAR(16) NULL,
+            branch VARCHAR(120) NULL,
+            `commit` VARCHAR(64) NULL,
+            created_at DATETIME(6) NOT NULL,
+            updated_at DATETIME(6) NOT NULL,
+            deleted_at DATETIME(6) NULL,
+            KEY ix_status (status, id),
+            KEY ix_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
 }
 

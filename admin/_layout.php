@@ -63,6 +63,7 @@ function admin_header(string $title, string $active = ''): void {
 <meta name="robots" content="noindex">
 <title><?= e($title) ?> – <?= e(wb_app_name()) ?></title>
 <link rel="stylesheet" href="/assets/admin.css?v=<?= WB_VERSION ?>">
+<?= feedback_head('de', ['page' => 'library', 'owner' => wb_is_admin_session(), 'mask_path' => wb_admin_url()]) ?>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231b1f24'/><rect x='7' y='7' width='8' height='11' rx='2' fill='%23fff'/><rect x='17' y='7' width='8' height='6' rx='2' fill='%23fff'/><rect x='17' y='15' width='8' height='10' rx='2' fill='%23fff'/><rect x='7' y='20' width='8' height='5' rx='2' fill='%23fff'/></svg>">
 </head>
 <body>
@@ -74,6 +75,7 @@ function admin_header(string $title, string $active = ''): void {
   <a href="<?= e(wb_admin_url()) ?>targets.php" class="<?= $active === 'targets' ? 'active' : '' ?>">Zielscheiben</a>
   <a href="<?= e(wb_admin_url()) ?>wordclouds.php" class="<?= $active === 'wordclouds' ? 'active' : '' ?>">Wortwolken</a>
   <a href="<?= e(wb_admin_url()) ?>blocks.php" class="<?= $active === 'blocks' ? 'active' : '' ?>">Sperren</a>
+  <a href="<?= e(wb_admin_url()) ?>feedback.php" class="<?= $active === 'feedback' ? 'active' : '' ?>">Rückmeldungen<?php $fbOpen = admin_feedback_new_count(); if ($fbOpen > 0): ?> <span class="badge"><?= $fbOpen ?></span><?php endif; ?></a>
   <a href="<?= e(wb_admin_url()) ?>settings.php" class="<?= $active === 'settings' ? 'active' : '' ?>">Einstellungen</a>
   <a href="<?= e(wb_admin_url()) ?>logout.php" class="nav-right">Abmelden</a>
   <?php endif; ?>
@@ -85,6 +87,7 @@ function admin_header(string $title, string $active = ''): void {
 
 function admin_footer(): void {
     ?></main>
+<footer class="admin-foot"><a class="tfb-link" href="#" data-feedback>Rückmeldung</a> · Version <?= e(WB_VERSION) ?></footer>
 <script src="/assets/admin.js?v=<?= WB_VERSION ?>"></script>
 </body>
 </html><?php
@@ -96,6 +99,15 @@ function admin_actor_label(?string $actor): string {
     if ($actor === 'claude') return 'Claude';
     if ($actor !== null && str_starts_with($actor, 'ai:')) return 'KI (' . substr($actor, 3) . ')';
     return (string)$actor;
+}
+
+/** Anzahl neuer Rückmeldungen für das Menü (0, solange die Tabelle fehlt). */
+function admin_feedback_new_count(): int {
+    try {
+        return (int)(db_row("SELECT COUNT(*) AS n FROM feedback WHERE status = 'new' AND deleted_at IS NULL")['n'] ?? 0);
+    } catch (Throwable $e) {
+        return 0;
+    }
 }
 
 function admin_status_label(string $s): string {

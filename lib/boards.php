@@ -341,6 +341,7 @@ function board_purge_deleted(int $days = 30): int {
         $n++;
     }
     $n += activity_purge_deleted($days);
+    $n += feedback_purge_deleted($days);
     undo_purge($days);
     return $n;
 }

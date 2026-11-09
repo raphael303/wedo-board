@@ -38,6 +38,7 @@ $host = (string)parse_url(wb_base_url(), PHP_URL_HOST);
 <meta name="theme-color" content="#f6f3ec">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231b1f24'/%3E%3Crect x='7' y='8' width='8' height='8' rx='2' fill='%23ffd666'/%3E%3Crect x='17' y='8' width='8' height='12' rx='2' fill='%2398dbb4'/%3E%3Crect x='7' y='18' width='8' height='6' rx='2' fill='%23a9cdfb'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/landing.css?v=<?= WB_VERSION ?>">
+<?= feedback_head('de', ['page' => 'start']) ?>
 </head>
 <body>
 
@@ -186,7 +187,7 @@ $host = (string)parse_url(wb_base_url(), PHP_URL_HOST);
 <footer class="foot">
   <div class="wrap foot-in">
     <span>© <?= date('Y') ?> R. Huber · <?= e($app) ?> ist ein privates, nicht kommerzielles Projekt.</span>
-    <span class="muted">Version <?= e(WB_VERSION) ?></span>
+    <span class="muted"><a class="tfb-link" href="#" data-feedback>Rückmeldung</a> · Version <?= e(WB_VERSION) ?></span>
   </div>
 </footer>
 

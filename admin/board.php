@@ -9,7 +9,7 @@ $board = $isNew ? null : board_by_key((string)($_GET['key'] ?? ''), true);
 if (!$isNew && !$board) {
     http_response_code(404);
     admin_header('Nicht gefunden');
-    echo '<section class="card"><h1>Board nicht gefunden</h1><p><a href="/admin/">Zur Bibliothek</a></p></section>';
+    echo '<section class="card"><h1>Board nicht gefunden</h1><p><a href="' . e(wb_admin_url()) . '">Zur Bibliothek</a></p></section>';
     admin_footer();
     exit;
 }
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $board = board_create($in);
                 admin_flash('Board angelegt.');
             }
-            header('Location: /admin/board.php?key=' . $board['bkey']);
+            header('Location: ' . wb_admin_url() . 'board.php?key=' . $board['bkey']);
             exit;
         }
         if ($board) {
@@ -69,12 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 case 'duplicate':
                     $copy = board_duplicate($board);
                     admin_flash('Kopie angelegt.');
-                    header('Location: /admin/board.php?key=' . $copy['bkey']);
+                    header('Location: ' . wb_admin_url() . 'board.php?key=' . $copy['bkey']);
                     exit;
                 case 'delete':
                     $u = board_trash($board);
                     admin_flash('Board «' . $board['name'] . '» in den Papierkorb gelegt (30 Tage wiederherstellbar).', $u, $board['bkey']);
-                    header('Location: /admin/');
+                    header('Location: ' . wb_admin_url());
                     exit;
                 case 'restore':
                     $b2 = board_restore($board);
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($board['deleted_at'] === null) { $error = 'Nur Boards im Papierkorb lassen sich endgültig löschen.'; break; }
                     board_delete_forever($board);
                     admin_flash('Board endgültig gelöscht.');
-                    header('Location: /admin/?status=trash');
+                    header('Location: ' . wb_admin_url() . '?status=trash');
                     exit;
                 case 'undo':
                     try {
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     admin_flash($u >= 0 ? 'Kommentar gelöscht.' : 'Kommentar nicht gefunden.', max(0, $u), $board['bkey']);
                     break;
             }
-            header('Location: /admin/board.php?key=' . $board['bkey'] . ($action === 'delete_post' || $action === 'delete_comment' ? '#inhalt' : ''));
+            header('Location: ' . wb_admin_url() . 'board.php?key=' . $board['bkey'] . ($action === 'delete_post' || $action === 'delete_comment' ? '#inhalt' : ''));
             exit;
         }
     } catch (InvalidArgumentException $ex) {
@@ -186,7 +186,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
       <?php endif; ?>
       <a class="btn-ghost" href="/api/boards/<?= e($board['bkey']) ?>/export.md" target="_blank">Export Markdown</a>
       <a class="btn-ghost" href="/b/<?= e($board['bkey']) ?>/export?ai=<?= summary_unavailable_reason($board, 'board') === null ? 'board' : 'none' ?>" target="_blank">Export / PDF (ohne Namen)</a>
-      <a class="btn-ghost" href="/admin/export.php?key=<?= e($board['bkey']) ?>" target="_blank">Druckansicht mit Namen</a>
+      <a class="btn-ghost" href="<?= e(wb_admin_url()) ?>export.php?key=<?= e($board['bkey']) ?>" target="_blank">Druckansicht mit Namen</a>
       <form method="post" data-confirm="Board in den Papierkorb legen? Es ist danach für die Klasse nicht mehr erreichbar und wird nach 30 Tagen endgültig gelöscht."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="delete"><button class="btn-danger" type="submit">Löschen</button></form>
     </div>
   </section>
@@ -272,7 +272,7 @@ admin_header($board ? $board['name'] : 'Neues Board', $board ? 'library' : 'new'
     </div>
     <div class="actions">
       <button class="btn" type="submit"><?= $board ? 'Speichern' : 'Board anlegen' ?></button>
-      <?php if (!$board): ?><a class="btn-ghost" href="/admin/">Abbrechen</a><?php endif; ?>
+      <?php if (!$board): ?><a class="btn-ghost" href="<?= e(wb_admin_url()) ?>">Abbrechen</a><?php endif; ?>
     </div>
   </form>
 </section>

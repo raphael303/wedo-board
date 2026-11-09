@@ -3,6 +3,16 @@ declare(strict_types=1);
 require __DIR__ . '/lib/bootstrap.php';
 require_once WB_ROOT . '/lib/qr.php';
 
+// Eigener Pfad der Bibliothek (config: admin_path): /<pfad> leitet auf /<pfad>/ um, /<pfad>/ zeigt die Bibliothek.
+if (isset($_GET['slug']) && strtolower((string)$_GET['slug']) === wb_admin_path() && wb_admin_path() !== 'admin') {
+    if (!str_ends_with((string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/')) {
+        header('Location: ' . wb_admin_url(), true, 302);
+        exit;
+    }
+    require __DIR__ . '/admin/index.php';
+    exit;
+}
+
 $board = null;
 if (db_is_installed()) {
     $board = isset($_GET['slug']) ? board_by_slug((string)$_GET['slug']) : board_by_key((string)($_GET['key'] ?? ''));
@@ -72,7 +82,7 @@ $accessQr = wb_qr_svg($accessUrl);
     <button class="bar-btn" id="presenter" type="button" title="<?= e(t('presenter', $lang)) ?>" aria-label="<?= e(t('presenter', $lang)) ?>">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
     </button>
-    <?php if ($owner): ?><a class="bar-btn" href="/admin/board.php?key=<?= e($board['bkey']) ?>" title="Bibliothek" aria-label="Bibliothek"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a><?php endif; ?>
+    <?php if ($owner): ?><a class="bar-btn" href="<?= e(wb_admin_url()) ?>board.php?key=<?= e($board['bkey']) ?>" title="Bibliothek" aria-label="Bibliothek"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a><?php endif; ?>
     <?php if ($owner): ?><button class="bar-btn" id="history-btn" type="button" title="<?= e(t('history', $lang)) ?>" aria-label="<?= e(t('history', $lang)) ?>"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg></button><?php endif; ?>
     <?php if ($owner): ?><button class="btn-ghost bar-ghost" id="new-bundle" type="button"><?= e(t('bundle_new', $lang)) ?></button><button class="btn-ghost bar-ghost" id="ai-bundle" type="button"><?= e(t('ai_bundle', $lang)) ?></button><?php endif; ?>
     <button class="btn-primary" id="new-post" type="button"><?= e(t('new_post', $lang)) ?></button>
@@ -163,7 +173,7 @@ $accessQr = wb_qr_svg($accessUrl);
     <h2 class="sheet-title"><?= e(t('ai_title', $lang)) ?></h2>
     <div id="ai-unavailable" hidden>
       <p class="ai-msg" id="ai-unavailable-text"></p>
-      <div class="sheet-actions"><button type="button" class="btn-ghost ai-close"><?= e(t('close', $lang)) ?></button><a class="btn-primary" id="ai-settings-link" href="/admin/settings.php#ki"><?= e(t('ai_to_settings', $lang)) ?></a></div>
+      <div class="sheet-actions"><button type="button" class="btn-ghost ai-close"><?= e(t('close', $lang)) ?></button><a class="btn-primary" id="ai-settings-link" data-admin="<?= e(wb_admin_url()) ?>" href="<?= e(wb_admin_url()) ?>settings.php#ki"><?= e(t('ai_to_settings', $lang)) ?></a></div>
     </div>
     <div id="ai-body" hidden>
       <label class="field-label" for="ai-instruction"><?= e(t('ai_instruction', $lang)) ?></label>

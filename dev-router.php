@@ -28,6 +28,10 @@ if (preg_match('~^/mcp/([a-f0-9]{48})/?$~', $uri, $m)) {
     require __DIR__ . '/mcp/index.php';
     return true;
 }
+if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/([a-z_]+\.php)$~', $uri, $m) && !is_dir(__DIR__ . '/' . $m[1]) && file_exists(__DIR__ . '/admin/' . $m[2])) {
+    require __DIR__ . '/admin/' . $m[2];
+    return true;
+}
 if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$~', $uri, $m) && !is_dir(__DIR__ . '/' . $m[1]) && !file_exists(__DIR__ . '/' . $m[1])) {
     $_GET['slug'] = $m[1];
     require __DIR__ . '/board.php';

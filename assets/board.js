@@ -398,7 +398,8 @@
       if (!st.available) {
         $('#ai-unavailable-text').textContent = t('ai_unavailable_' + st.reason);
         const link = $('#ai-settings-link');
-        link.href = st.reason === 'board_off' ? '/admin/board.php?key=' + board.key : '/admin/settings.php#ki';
+        const adm = link.dataset.admin || '/admin/';
+        link.href = st.reason === 'board_off' ? adm + 'board.php?key=' + board.key : adm + 'settings.php#ki';
         link.textContent = t(st.reason === 'board_off' ? 'ai_to_board_settings' : 'ai_to_settings');
         link.hidden = st.reason === 'forbidden';
         aiShow('ai-unavailable'); return;

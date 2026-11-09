@@ -10,7 +10,7 @@ $act = $isNew ? null : activity_by_key((string)($_GET['key'] ?? ''), true);
 if (!$isNew && !$act) {
     http_response_code(404);
     admin_header('Nicht gefunden');
-    echo '<section class="card"><h1>Zielscheibe nicht gefunden</h1><p><a href="/admin/targets.php">Zu den Zielscheiben</a></p></section>';
+    echo '<section class="card"><h1>Zielscheibe nicht gefunden</h1><p><a href="' . e(wb_admin_url()) . 'targets.php">Zu den Zielscheiben</a></p></section>';
     admin_footer();
     exit;
 }
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
             if ($act) { $act = activity_update($act, $in); admin_flash('Gespeichert.'); }
             else { $act = activity_create($in); admin_flash('Zielscheibe angelegt.'); }
-            header('Location: /admin/target.php?key=' . $act['akey']);
+            header('Location: ' . wb_admin_url() . 'target.php?key=' . $act['akey']);
             exit;
         }
         if ($act) {
@@ -70,12 +70,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 case 'duplicate':
                     $copy = activity_duplicate($act);
                     admin_flash('Kopie angelegt.');
-                    header('Location: /admin/target.php?key=' . $copy['akey']);
+                    header('Location: ' . wb_admin_url() . 'target.php?key=' . $copy['akey']);
                     exit;
                 case 'delete':
                     activity_trash($act);
                     admin_flash('Zielscheibe «' . $act['name'] . '» in den Papierkorb gelegt (30 Tage wiederherstellbar).');
-                    header('Location: /admin/targets.php');
+                    header('Location: ' . wb_admin_url() . 'targets.php');
                     exit;
                 case 'restore':
                     $a2 = activity_restore($act);
@@ -85,10 +85,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($act['deleted_at'] === null) { $error = 'Nur Zielscheiben im Papierkorb lassen sich endgültig löschen.'; break; }
                     activity_delete_forever($act);
                     admin_flash('Zielscheibe endgültig gelöscht.');
-                    header('Location: /admin/targets.php?status=trash');
+                    header('Location: ' . wb_admin_url() . 'targets.php?status=trash');
                     exit;
             }
-            if (!$error) { header('Location: /admin/target.php?key=' . $act['akey']); exit; }
+            if (!$error) { header('Location: ' . wb_admin_url() . 'target.php?key=' . $act['akey']); exit; }
         }
     } catch (InvalidArgumentException $ex) {
         $error = $ex->getMessage();
@@ -267,7 +267,7 @@ admin_header($act ? $act['name'] : 'Neue Zielscheibe', 'targets');
     </div>
     <div class="actions">
       <button class="btn" type="submit"><?= $act ? 'Speichern' : 'Zielscheibe anlegen' ?></button>
-      <?php if (!$act): ?><a class="btn-ghost" href="/admin/targets.php">Abbrechen</a><?php endif; ?>
+      <?php if (!$act): ?><a class="btn-ghost" href="<?= e(wb_admin_url()) ?>targets.php">Abbrechen</a><?php endif; ?>
     </div>
   </form>
 </section>

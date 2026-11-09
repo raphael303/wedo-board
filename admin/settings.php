@@ -16,16 +16,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setting_set('admin_password_hash', $hash);
             $_SESSION['admin_hash'] = $hash;
             admin_flash('Passwort geändert.');
-            header('Location: /admin/settings.php'); exit;
+            header('Location: ' . wb_admin_url() . 'settings.php'); exit;
         }
     } elseif ($action === 'token') {
         setting_set('api_token', bin2hex(random_bytes(24)));
         admin_flash('Neuer API‑Token erzeugt. Der alte gilt nicht mehr; trage den neuen im Connector ein.');
-        header('Location: /admin/settings.php'); exit;
+        header('Location: ' . wb_admin_url() . 'settings.php'); exit;
     } elseif ($action === 'purge') {
         $n = board_purge_deleted(30);
         admin_flash("$n gelöschte Elemente endgültig entfernt.");
-        header('Location: /admin/settings.php'); exit;
+        header('Location: ' . wb_admin_url() . 'settings.php'); exit;
     } elseif (str_starts_with($action, 'ai_')) {
         try {
             switch ($action) {
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (InvalidArgumentException | RuntimeException $ex) {
             admin_flash('Fehler: ' . $ex->getMessage());
         }
-        header('Location: /admin/settings.php#ki'); exit;
+        header('Location: ' . wb_admin_url() . 'settings.php#ki'); exit;
     } elseif ($action === 'backup') {
         $all = [];
         foreach (db_all('SELECT * FROM boards WHERE deleted_at IS NULL ORDER BY id') as $b) $all[] = board_export_data(board_normalize($b));
@@ -193,7 +193,7 @@ admin_header('Einstellungen', 'settings');
 
 <section class="card">
   <h2>Daten</h2>
-  <p class="muted"><?= (int)$counts['boards'] ?> Boards, <?= (int)$counts['posts'] ?> Beiträge; im Papierkorb <?= (int)$counts['trashed_boards'] ?> Boards (<a href="/admin/?status=trash">anzeigen</a>) und <?= (int)$counts['trashed'] ?> Beiträge.</p>
+  <p class="muted"><?= (int)$counts['boards'] ?> Boards, <?= (int)$counts['posts'] ?> Beiträge; im Papierkorb <?= (int)$counts['trashed_boards'] ?> Boards (<a href="<?= e(wb_admin_url()) ?>?status=trash">anzeigen</a>) und <?= (int)$counts['trashed'] ?> Beiträge.</p>
   <div class="action-grid">
     <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="backup"><button class="btn-ghost" type="submit">Alle Boards als JSON sichern</button></form>
     <form method="post" data-confirm="Gelöschte Boards, Beiträge und Kommentare, die älter als 30 Tage sind, endgültig entfernen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="purge"><button class="btn-ghost" type="submit">Papierkorb leeren (älter als 30 Tage)</button></form>

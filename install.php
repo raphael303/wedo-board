@@ -14,7 +14,7 @@ try {
 
 if (!$errors && db_is_installed()) {
     http_response_code(403);
-    echo '<!doctype html><meta charset="utf-8"><title>' . e(wb_app_name()) . '</title><body style="font-family:system-ui;padding:2rem;max-width:40rem"><h1>Bereits installiert</h1><p>Die Installation wurde abgeschlossen. Aus Sicherheitsgründen kannst du diese Seite löschen. Zur <a href="admin/">Bibliothek</a>.</p></body>';
+    echo '<!doctype html><meta charset="utf-8"><title>' . e(wb_app_name()) . '</title><body style="font-family:system-ui;padding:2rem;max-width:40rem"><h1>Bereits installiert</h1><p>Die Installation wurde abgeschlossen. Aus Sicherheitsgründen kannst du diese Seite löschen.</p></body>';
     exit;
 }
 
@@ -75,7 +75,7 @@ code{background:#f3f4f6;padding:.15rem .4rem;border-radius:4px;word-break:break-
   <p>Die Datenbank ist eingerichtet. Dein Schlüssel für die Schnittstelle (API‑Token) lautet:</p>
   <p><code><?= e($token) ?></code></p>
   <p>Du findest ihn jederzeit wieder in der Bibliothek unter «Einstellungen». Lösche jetzt die Datei <code>install.php</code> vom Server oder lasse sie liegen; sie ist ab sofort gesperrt.</p>
-  <p><a href="admin/">Zur Bibliothek</a></p>
+  <p><a href="<?= e(wb_admin_url()) ?>">Zur Bibliothek</a> (<code><?= e(wb_base_url() . wb_admin_url()) ?></code>, Pfad über <code>admin_path</code> in config.php)</p>
 <?php else: ?>
   <h1><?= e(wb_app_name()) ?> einrichten</h1>
   <?php foreach ($errors as $err): ?><p class="err"><?= e($err) ?></p><?php endforeach; ?>

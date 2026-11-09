@@ -19,7 +19,7 @@ admin_header('Bibliothek', 'library');
 ?>
 <div class="page-head">
   <h1>Bibliothek</h1>
-  <a class="btn" href="/admin/board.php?new=1">Neues Board</a>
+  <a class="btn" href="<?= e(wb_admin_url()) ?>board.php?new=1">Neues Board</a>
 </div>
 
 <form class="filters" method="get">
@@ -52,14 +52,14 @@ admin_header('Bibliothek', 'library');
 <?php if (!$boards): ?>
   <section class="card empty">
     <p>Keine Boards gefunden.<?= $status === 'active' ? ' Archivierte Boards findest du über den Filter «Archiv», gelöschte im «Papierkorb».' : '' ?></p>
-    <a class="btn" href="/admin/board.php?new=1">Erstes Board anlegen</a>
+    <a class="btn" href="<?= e(wb_admin_url()) ?>board.php?new=1">Erstes Board anlegen</a>
   </section>
 <?php else: ?>
 <ul class="boardlist">
   <?php foreach ($boards as $b): ?>
   <li class="boardrow bg-<?= e($b['background']) ?>">
     <div class="boardrow-main">
-      <a class="boardrow-name" href="/admin/board.php?key=<?= e($b['key']) ?>"><?= e($b['name']) ?></a>
+      <a class="boardrow-name" href="<?= e(wb_admin_url()) ?>board.php?key=<?= e($b['key']) ?>"><?= e($b['name']) ?></a>
       <div class="boardrow-meta">
         <?php if ($b['deleted_at']): ?><span class="pill status-trash">Papierkorb</span><?php else: ?><span class="pill status-<?= e($b['status']) ?>"><?= e(admin_status_label($b['status'])) ?></span><?php endif; ?>
         <span><?= $b['type'] === 'columns' ? count($b['columns']) . ' Spalten' : 'Frei' ?></span>
@@ -71,12 +71,12 @@ admin_header('Bibliothek', 'library');
     </div>
     <div class="boardrow-actions">
       <?php if ($b['deleted_at']): ?>
-      <form method="post" action="/admin/board.php?key=<?= e($b['key']) ?>"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="restore"><button class="btn-ghost" type="submit">Wiederherstellen</button></form>
-      <form method="post" action="/admin/board.php?key=<?= e($b['key']) ?>" data-confirm="Board jetzt endgültig löschen?"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="delete_forever"><button class="btn-ghost danger" type="submit">Endgültig löschen</button></form>
+      <form method="post" action="<?= e(wb_admin_url()) ?>board.php?key=<?= e($b['key']) ?>"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="restore"><button class="btn-ghost" type="submit">Wiederherstellen</button></form>
+      <form method="post" action="<?= e(wb_admin_url()) ?>board.php?key=<?= e($b['key']) ?>" data-confirm="Board jetzt endgültig löschen?"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="delete_forever"><button class="btn-ghost danger" type="submit">Endgültig löschen</button></form>
       <?php else: ?>
       <a class="btn-ghost" href="<?= e($b['url']) ?>" target="_blank" rel="noopener">Öffnen</a>
       <button class="btn-ghost" type="button" data-copy="<?= e($b['url']) ?>">Link kopieren</button>
-      <a class="btn-ghost" href="/admin/board.php?key=<?= e($b['key']) ?>#qr">QR</a>
+      <a class="btn-ghost" href="<?= e(wb_admin_url()) ?>board.php?key=<?= e($b['key']) ?>#qr">QR</a>
       <?php endif; ?>
     </div>
   </li>

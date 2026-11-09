@@ -8,8 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['login_tries'] = ($_SESSION['login_tries'] ?? 0) + 1;
     if ($_SESSION['login_tries'] > 20) { sleep(2); }
     if (wb_admin_login((string)($_POST['password'] ?? ''))) {
-        $next = (string)($_POST['next'] ?? '/admin/');
-        if (!str_starts_with($next, '/admin')) $next = '/admin/';
+        $next = (string)($_POST['next'] ?? wb_admin_url());
+        if (!str_starts_with($next, wb_admin_url())) $next = wb_admin_url();
         header('Location: ' . $next);
         exit;
     }
@@ -21,7 +21,7 @@ admin_header('Anmelden');
   <h1>Anmelden</h1>
   <?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
   <form method="post">
-    <input type="hidden" name="next" value="<?= e((string)($_GET['next'] ?? '/admin/')) ?>">
+    <input type="hidden" name="next" value="<?= e((string)($_GET['next'] ?? wb_admin_url())) ?>">
     <label for="pw">Admin‑Passwort</label>
     <input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
     <div class="actions"><button class="btn" type="submit">Anmelden</button></div>

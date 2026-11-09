@@ -16,7 +16,7 @@ git clone https://github.com/raphael303/wedo-board.git .
 cp config.example.php config.php
 ```
 
-Trage in `config.php` Datenbankname, Benutzer und Passwort ein, setze `app_name` (Anzeigename) und `base_url` (öffentliche Adresse) und trage frühere Domains in `legacy_hosts` ein. Rufe danach `https://tafula.top/install.php` auf, wähle ein Admin-Passwort und notiere den angezeigten API-Token (er ist später auch in der Bibliothek unter Einstellungen sichtbar). Die Installationsseite sperrt sich danach selbst. Die Bibliothek liegt unter `https://tafula.top/admin/`.
+Trage in `config.php` Datenbankname, Benutzer und Passwort ein, setze `app_name` (Anzeigename) und `base_url` (öffentliche Adresse), trage frühere Domains in `legacy_hosts` ein und wähle mit `admin_path` einen eigenen Pfad für die Bibliothek (sonst `/admin/`). Rufe danach `https://tafula.top/install.php` auf, wähle ein Admin-Passwort und notiere den angezeigten API-Token (er ist später auch in der Bibliothek unter Einstellungen sichtbar). Die Installationsseite sperrt sich danach selbst. Die Bibliothek liegt unter `https://tafula.top/admin/`.
 
 Ohne SSH geht es auch mit dem Dateimanager oder FTP: Repository als ZIP von GitHub laden, in den Subdomain-Ordner entpacken, `config.php` anlegen, `install.php` aufrufen.
 

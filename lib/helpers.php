@@ -39,8 +39,22 @@ function wb_short_word(): string {
     return $c[random_int(0, 14)] . $v[random_int(0, 4)] . $c[random_int(0, 14)] . $v[random_int(0, 4)] . $c[random_int(0, 14)];
 }
 
+/**
+ * Pfad der Bibliothek (config: admin_path, Standard «admin»). Ein eigener Pfad versteckt die Bibliothek vor
+ * Neugierigen; er ist kein Passwortersatz. Der Ordner heisst weiterhin admin/, .htaccess leitet um.
+ */
+function wb_admin_path(): string {
+    $p = strtolower(trim((string)wb_config('admin_path', 'admin'), "/ \t"));
+    return preg_match('/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/', $p) ? $p : 'admin';
+}
+
+/** Adresse einer Bibliotheksseite, z. B. wb_admin_url('board.php?key=…'). Endet ohne Argument mit «/». */
+function wb_admin_url(string $rest = ''): string {
+    return '/' . wb_admin_path() . '/' . ltrim($rest, '/');
+}
+
 function wb_reserved_slugs(): array {
-    return ['admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about'];
+    return [wb_admin_path(), 'admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about'];
 }
 
 function wb_valid_slug(?string $s): ?string {

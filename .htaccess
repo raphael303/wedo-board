@@ -27,6 +27,12 @@ RewriteRule ^api/(.*)$ api/index.php?route=$1 [L,QSA]
 # Connector: /mcp/<token>
 RewriteRule ^mcp/([a-f0-9]{48})/?$ mcp/index.php?token=$1 [L,QSA]
 
+# Bibliothek unter eigenem Pfad (config.php: admin_path): /<pfad>/<seite>.php -> admin/<seite>.php.
+# Die Seiten prüfen selbst, ob der Pfad stimmt (sonst 404). /<pfad> und /<pfad>/ übernimmt board.php.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/([a-z_]+\.php)$ admin/$2 [L,QSA]
+
 # Kurzlinks: /<kurzwort> (board.php reicht Kurzwörter von Aktivitäten an activity.php weiter)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'lift'
     } catch (InvalidArgumentException $ex) {
         admin_flash($ex->getMessage());
     }
-    header('Location: /admin/blocks.php');
+    header('Location: ' . wb_admin_url() . 'blocks.php');
     exit;
 }
 $showAll = isset($_GET['all']);
@@ -21,7 +21,7 @@ admin_header('Sperren', 'blocks');
 ?>
 <div class="page-head">
   <h1>Gesperrte Gäste</h1>
-  <a class="btn-ghost" href="/admin/blocks.php<?= $showAll ? '' : '?all=1' ?>"><?= $showAll ? 'Nur aktive Sperren' : 'Auch aufgehobene anzeigen' ?></a>
+  <a class="btn-ghost" href="<?= e(wb_admin_url()) ?>blocks.php<?= $showAll ? '' : '?all=1' ?>"><?= $showAll ? 'Nur aktive Sperren' : 'Auch aufgehobene anzeigen' ?></a>
 </div>
 <section class="card">
   <p class="muted">Gäste werden auf der Board-Seite gesperrt: als angemeldeter Besitzer auf den Fantasienamen eines Beitrags oder Kommentars klicken. Eine Sperre gilt für den Browser des Gastes (Cookie und localStorage); ein anderer Browser oder ein privates Fenster umgeht sie. Gesperrte Gäste lesen weiter, schreiben aber nicht mehr. Entsperren bringt ausgeblendete Inhalte zurück.</p>
@@ -44,7 +44,7 @@ admin_header('Sperren', 'blocks');
         <form method="post" class="inline"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="lift"><input type="hidden" name="id" value="<?= $b['id'] ?>"><button class="btn-ghost small" type="submit">Entsperren</button></form>
         <?php endif; ?>
       </div>
-      <?php if ($b['board_key']): ?><p class="postitem-body muted"><a href="/admin/board.php?key=<?= e($b['board_key']) ?>">Zum Board</a></p><?php endif; ?>
+      <?php if ($b['board_key']): ?><p class="postitem-body muted"><a href="<?= e(wb_admin_url()) ?>board.php?key=<?= e($b['board_key']) ?>">Zum Board</a></p><?php endif; ?>
     </li>
     <?php endforeach; ?>
   </ul>

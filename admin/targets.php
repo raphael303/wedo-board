@@ -17,7 +17,7 @@ admin_header('Zielscheiben', 'targets');
     <h1>Zielscheiben</h1>
     <p class="muted">Feedback auf einer Scheibe: Jede Person setzt pro Aspekt einen Punkt, je näher an der Mitte, desto besser. Die Punkte bleiben verborgen, bis du sie anzeigst.</p>
   </div>
-  <a class="btn" href="/admin/target.php?new=1">Neue Zielscheibe</a>
+  <a class="btn" href="<?= e(wb_admin_url()) ?>target.php?new=1">Neue Zielscheibe</a>
 </div>
 
 <form class="filters" method="get">
@@ -42,14 +42,14 @@ admin_header('Zielscheiben', 'targets');
 <?php if (!$list): ?>
   <section class="card empty">
     <p>Keine Zielscheiben gefunden.</p>
-    <a class="btn" href="/admin/target.php?new=1">Erste Zielscheibe anlegen</a>
+    <a class="btn" href="<?= e(wb_admin_url()) ?>target.php?new=1">Erste Zielscheibe anlegen</a>
   </section>
 <?php else: ?>
 <ul class="boardlist">
   <?php foreach ($list as $a): ?>
   <li class="boardrow bg-<?= e($a['background']) ?>">
     <div class="boardrow-main">
-      <a class="boardrow-name" href="/admin/target.php?key=<?= e($a['key']) ?>"><?= e($a['name']) ?></a>
+      <a class="boardrow-name" href="<?= e(wb_admin_url()) ?>target.php?key=<?= e($a['key']) ?>"><?= e($a['name']) ?></a>
       <div class="boardrow-meta">
         <?php if ($a['deleted_at']): ?><span class="pill status-trash">Papierkorb</span><?php else: ?><span class="pill status-<?= e($a['status']) ?>"><?= e(admin_status_label($a['status'])) ?></span><?php endif; ?>
         <span><?= count($a['aspects']) ?> Aspekte</span>
@@ -63,12 +63,12 @@ admin_header('Zielscheiben', 'targets');
     </div>
     <div class="boardrow-actions">
       <?php if ($a['deleted_at']): ?>
-      <form method="post" action="/admin/target.php?key=<?= e($a['key']) ?>"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="restore"><button class="btn-ghost" type="submit">Wiederherstellen</button></form>
-      <form method="post" action="/admin/target.php?key=<?= e($a['key']) ?>" data-confirm="Zielscheibe jetzt endgültig löschen?"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="delete_forever"><button class="btn-ghost danger" type="submit">Endgültig löschen</button></form>
+      <form method="post" action="<?= e(wb_admin_url()) ?>target.php?key=<?= e($a['key']) ?>"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="restore"><button class="btn-ghost" type="submit">Wiederherstellen</button></form>
+      <form method="post" action="<?= e(wb_admin_url()) ?>target.php?key=<?= e($a['key']) ?>" data-confirm="Zielscheibe jetzt endgültig löschen?"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="delete_forever"><button class="btn-ghost danger" type="submit">Endgültig löschen</button></form>
       <?php else: ?>
       <a class="btn-ghost" href="<?= e($a['url']) ?>" target="_blank" rel="noopener">Öffnen</a>
       <button class="btn-ghost" type="button" data-copy="<?= e($a['url']) ?>">Link kopieren</button>
-      <a class="btn-ghost" href="/admin/target.php?key=<?= e($a['key']) ?>#qr">QR</a>
+      <a class="btn-ghost" href="<?= e(wb_admin_url()) ?>target.php?key=<?= e($a['key']) ?>#qr">QR</a>
       <?php endif; ?>
     </div>
   </li>

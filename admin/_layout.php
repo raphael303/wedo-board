@@ -1,6 +1,14 @@
 <?php
 declare(strict_types=1);
-require dirname(__DIR__) . '/lib/bootstrap.php';
+require_once dirname(__DIR__) . '/lib/bootstrap.php';
+
+// Die Bibliothek ist nur unter <base_url>/<admin_path>/ erreichbar (config.php, Standard «admin»).
+// Aufrufe über den echten Ordnernamen /admin/ ergeben 404, wenn admin_path anders lautet.
+if (!str_starts_with((string)parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH), wb_admin_url())) {
+    http_response_code(404);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Nicht gefunden.');
+}
 
 if (!db_is_installed()) {
     header('Location: /install.php');
@@ -15,7 +23,7 @@ $adminLang = 'de';
 
 function admin_require_login(): void {
     if (!wb_is_admin_session()) {
-        header('Location: /admin/login.php?next=' . urlencode($_SERVER['REQUEST_URI'] ?? '/admin/'));
+        header('Location: ' . wb_admin_url() . 'login.php?next=' . urlencode($_SERVER['REQUEST_URI'] ?? wb_admin_url()));
         exit;
     }
 }
@@ -59,18 +67,18 @@ function admin_header(string $title, string $active = ''): void {
 </head>
 <body>
 <nav class="nav">
-  <a class="brand" href="/admin/"><?= e(wb_app_name()) ?></a>
+  <a class="brand" href="<?= e(wb_admin_url()) ?>"><?= e(wb_app_name()) ?></a>
   <?php if (wb_is_admin_session()): ?>
-  <a href="/admin/" class="<?= $active === 'library' ? 'active' : '' ?>">Bibliothek</a>
-  <a href="/admin/board.php?new=1" class="<?= $active === 'new' ? 'active' : '' ?>">Neues Board</a>
-  <a href="/admin/targets.php" class="<?= $active === 'targets' ? 'active' : '' ?>">Zielscheiben</a>
-  <a href="/admin/blocks.php" class="<?= $active === 'blocks' ? 'active' : '' ?>">Sperren</a>
-  <a href="/admin/settings.php" class="<?= $active === 'settings' ? 'active' : '' ?>">Einstellungen</a>
-  <a href="/admin/logout.php" class="nav-right">Abmelden</a>
+  <a href="<?= e(wb_admin_url()) ?>" class="<?= $active === 'library' ? 'active' : '' ?>">Bibliothek</a>
+  <a href="<?= e(wb_admin_url()) ?>board.php?new=1" class="<?= $active === 'new' ? 'active' : '' ?>">Neues Board</a>
+  <a href="<?= e(wb_admin_url()) ?>targets.php" class="<?= $active === 'targets' ? 'active' : '' ?>">Zielscheiben</a>
+  <a href="<?= e(wb_admin_url()) ?>blocks.php" class="<?= $active === 'blocks' ? 'active' : '' ?>">Sperren</a>
+  <a href="<?= e(wb_admin_url()) ?>settings.php" class="<?= $active === 'settings' ? 'active' : '' ?>">Einstellungen</a>
+  <a href="<?= e(wb_admin_url()) ?>logout.php" class="nav-right">Abmelden</a>
   <?php endif; ?>
 </nav>
 <main class="wrap">
-<?php if ($flash): ?><div class="flash"><?= e($flash) ?><?php if ($flashUndo): ?> <form method="post" action="/admin/board.php?key=<?= e($flashUndo['key']) ?>" class="inline"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="undo"><input type="hidden" name="id" value="<?= (int)$flashUndo['id'] ?>"><button class="link-undo" type="submit">Rückgängig</button></form><?php endif; ?></div><?php endif; ?>
+<?php if ($flash): ?><div class="flash"><?= e($flash) ?><?php if ($flashUndo): ?> <form method="post" action="<?= e(wb_admin_url()) ?>board.php?key=<?= e($flashUndo['key']) ?>" class="inline"><input type="hidden" name="csrf" value="<?= e(wb_csrf_token()) ?>"><input type="hidden" name="action" value="undo"><input type="hidden" name="id" value="<?= (int)$flashUndo['id'] ?>"><button class="link-undo" type="submit">Rückgängig</button></form><?php endif; ?></div><?php endif; ?>
 <?php
 }
 

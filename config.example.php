@@ -18,6 +18,10 @@ return [
     // damit gedruckte QR-Codes und alte Links weiter funktionieren. Die www-Variante von
     // base_url wird automatisch umgeleitet.
     'legacy_hosts' => [],
+    // Pfad der Bibliothek ohne Schrägstriche (3 bis 32 Zeichen: a-z, 0-9, Bindestrich). Ein eigener Pfad
+    // versteckt die Bibliothek vor Neugierigen (Bibliothek dann unter base_url/<pfad>/, /admin/ ergibt 404);
+    // er ersetzt das Passwort nicht. Fehlt die Zeile, gilt «admin».
+    // 'admin_path' => 'mein-pfad',
     // Geheimwert (Base64, 32 Byte) für die verschlüsselte Ablage von KI-Schlüsseln. Fehlt die Zeile, erzeugt
     // die App sie beim ersten Öffnen der KI-Einstellungen selbst und trägt sie hier ein, wenn die Datei
     // beschreibbar ist; sonst zeigt die Bibliothek die einzufügende Zeile an. Niemals ändern, sonst sind

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.11.1');
+define('WB_VERSION', '0.12.0');
 define('WB_SCHEMA_VERSION', 9);
 
 $configFile = WB_ROOT . '/config.php';

@@ -156,7 +156,7 @@ if ($id > 0) {
   <dl class="fb-ctx">
     <?php if ($fb['needs_consult']): ?><dt>Rücksprache</dt><dd>betrifft Datenmodell oder Schnittstelle</dd><?php endif; ?>
     <?php if ($fb['duplicate_of']): ?><dt>Duplikat von</dt><dd><a href="?id=<?= $fb['duplicate_of'] ?>">Rückmeldung <?= $fb['duplicate_of'] ?></a></dd><?php endif; ?>
-    <?php if ($fb['approved_at']): ?><dt>Freigegeben</dt><dd><?= e(admin_time($fb['approved_at'])) ?> über <?= $fb['approved_via'] === 'mail' ? 'Mail' : 'Bibliothek' ?></dd><?php endif; ?>
+    <?php if ($fb['approved_at']): ?><dt>Freigegeben</dt><dd><?= e(admin_time($fb['approved_at'])) ?> über <?= $fb['approved_via'] === 'chat' ? 'Claude-Sitzung' : 'Bibliothek' ?></dd><?php endif; ?>
     <?php if ($fb['digest_message_id']): ?><dt>Sammelmail</dt><dd><code><?= e($fb['digest_message_id']) ?></code></dd><?php endif; ?>
     <?php if ($fb['branch']): ?><dt>Zweig</dt><dd><code><?= e($fb['branch']) ?></code></dd><?php endif; ?>
     <?php if ($fb['commit']): ?><dt>Commit</dt><dd><code><?= e($fb['commit']) ?></code></dd><?php endif; ?>
@@ -178,7 +178,7 @@ admin_header('Rückmeldungen', 'feedback');
 <div class="page-head">
   <div>
     <h1>Rückmeldungen</h1>
-    <p class="muted">Fehler und Wünsche aus dem Formular «Rückmeldung», das auf allen Seiten steht. Ein geplanter Claude-Lauf analysiert neue Rückmeldungen, schreibt Analyse und Vorschlag hierher und schickt alle zwei Tage eine Sammelmail. Freigeben geht per Mail («do it 12») oder hier. Die Texte stammen von anonymen Personen.</p>
+    <p class="muted">Fehler und Wünsche aus dem Formular «Rückmeldung», das auf allen Seiten steht. Ein geplanter Claude-Lauf analysiert neue Rückmeldungen, schreibt Analyse und Vorschlag hierher und schickt alle zwei Tage eine Sammelmail mit einem Text, den du einer Claude-Sitzung im Projekt geben kannst. Freigeben geht dort oder hier; Mails werden nie gelesen. Die Texte stammen von anonymen Personen.</p>
   </div>
 </div>
 

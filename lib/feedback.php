@@ -178,7 +178,7 @@ function feedback_counts(): array {
 
 /**
  * Felder ändern (Bibliothek, Schnittstelle, Connector). Nur angegebene Felder.
- * approved_via: «library» oder «mail»; wird beim Wechsel auf «approved» mit approved_at gesetzt.
+ * approved_via: «library» (Bibliothek) oder «chat» (Claude-Sitzung über Connector oder Schnittstelle); wird beim Wechsel auf «approved» mit approved_at gesetzt.
  * «approved» bei vorhandenem Zweig bedeutet: Ausrollen freigegeben (siehe CONCEPT.md).
  */
 function feedback_update(int $id, array $in, ?string $approvedVia = null): array {
@@ -193,7 +193,7 @@ function feedback_update(int $id, array $in, ?string $approvedVia = null): array
         $params[] = $status;
         if ($status === 'approved') {
             $via = $approvedVia ?? (string)($in['approved_via'] ?? 'library');
-            if (!in_array($via, ['mail', 'library'], true)) $via = 'library';
+            if (!in_array($via, ['chat', 'library'], true)) $via = 'library';
             $set[] = 'approved_at = ?';
             $params[] = wb_now();
             $set[] = 'approved_via = ?';

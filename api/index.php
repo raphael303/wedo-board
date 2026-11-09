@@ -93,7 +93,7 @@ function feedback_api(string $method, array $p): never {
     wb_check_csrf_header();
     if (($method === 'PATCH' || $method === 'POST') && $action === '') {
         $in = wb_read_json_body();
-        $via = in_array($in['approved_via'] ?? '', ['mail', 'library'], true) ? (string)$in['approved_via'] : 'library';
+        $via = in_array($in['approved_via'] ?? '', ['chat', 'library'], true) ? (string)$in['approved_via'] : 'library';
         wb_json(['ok' => true, 'feedback' => feedback_view(feedback_with_refs(feedback_update($id, $in, $via)), true)]);
     }
     if ($method === 'POST' && $action === 'restore') {

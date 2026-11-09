@@ -79,6 +79,32 @@ Besitzer: `GET /api/activities?q=&status=&sort=&tag=&type=` listet Aktivitäten 
 
 Teilnehmende: `GET /api/a/{key}` liefert `{activity, me, state}`; `GET /api/a/{key}/state?since=<version>` liefert `{changed: false}` oder `{version, config_version, status, round, current_round, past, revealed, count, mine, points}`. `mine` ist die eigene Antwort der laufenden Runde (`{aspect_id: {r, t}}` oder `null`), `points` ist nur gefüllt, wenn die Punkte angezeigt sind: `[{a, r, t, m, g}]` mit Aspekt, Abstand von der Mitte (0 bis 1), Lage im Sektor (0 bis 1), `m = 1` für eigene Punkte und `g` als Nummer der Antwort. Solange die Punkte verborgen sind, bekommt auch der Besitzer nur `count`. Der Besitzer kann mit `round=<n>` eine frühere Runde lesen (dort sind die Punkte immer sichtbar). `POST /api/a/{key}/response` mit `{points: {aspect_id: {r, t}}}` speichert oder ersetzt die eigene Antwort und antwortet mit `{state}`; Fehler `target_incomplete` (bei `require_all` fehlt ein Sektor) oder `target_none` mit 422, bei geschlossener Scheibe 403 mit `code: "closed"`, bei einer Sperre für alle Boards 403 mit `code: "blocked"`. Es gilt dieselbe Begrenzung wie für Gäste der Boards. Der angemeldete Besitzer schaltet auf der Seite über `POST /api/a/{key}/reveal` mit `{revealed: bool}` und beginnt über `POST /api/a/{key}/round` eine neue Runde (beides mit CSRF-Header `X-CSRF`, Antwort `{state}`). `POST /api/a/{key}/identify` entspricht der Board-Route.
 
+## Wortwolken (Aktivitäten)
+
+Wortwolken sind Aktivitäten vom Typ `wordcloud` und benutzen dieselben Routen wie die Zielscheiben für Liste (`GET /api/activities?type=wordcloud`), Anlegen, Lesen, Ändern, `reveal`, `hide`, `round`, `close`, `open`, `archive`, `duplicate`, `delete`, `restore` und QR-Codes. Anlegen:
+
+```json
+{
+  "type": "wordcloud",
+  "name": "Was fällt dir zu Energie ein?",
+  "max_terms": 3,
+  "live": true,
+  "ai": true,
+  "background": "meer",
+  "lang": "de",
+  "note": "Klasse 3b, Physik, Einstieg Energie, 16.11.2026",
+  "tags": "physik, 3b, einstieg"
+}
+```
+
+`name` ist die Frage über der Wolke. `max_terms` sind 1 bis 10 Begriffe pro Person (Standard 3). `live` (Standard `true`) lässt die Wolke bei allen sichtbar wachsen; mit `false` bleibt sie verborgen, bis `revealed` gesetzt ist. `ai` (Standard `true`) erlaubt das KI-Zusammenlegen. Das `activity`-Objekt enthält statt der Aspekte `max_terms, live, ai` und als `response_count` die Zahl der Personen.
+
+`GET /api/activities/{key}/results?round=` liefert `{name, round, current_round, visible, responses, entries, distinct, terms: [{id, label, n, hidden, fixed, variants: [{key, text, n}]}], grouping: {actor, label, at}, rounds}`; `n` zählt Personen, `key` ist die Grundform einer Eingabe (Kleinbuchstaben, ohne Satzzeichen am Rand), `id` die Grundform des häufigsten Mitglieds, `fixed` heisst von Hand korrigiert. `GET .../results.md` liefert dasselbe als Markdown, `GET .../history?limit=10` die letzten Einteilungen `{entries: [{id, actor, label, created_at, undone}]}`.
+
+Zusammenlegen (Besitzer): `POST /api/activities/{key}/merge` lässt die KI zusammenlegen und antwortet mit `{grouping_id, groups, added_to_fixed, terms_before, terms_after, merged, label, model, input_tokens, output_tokens, duration_ms}` (Fehler des Anbieters mit 502 und `code` wie bei der Bündelung, Voraussetzungen mit 422). `POST .../groups` mit `{groups: [{label, members: [Eingaben oder Grundformen], hidden}]}` schreibt eine Einteilung von Claude; sie ersetzt wie die KI alle nicht von Hand festgelegten Gruppen, unbekannte Eingaben stehen in `unknown`. `POST .../group` mit `{action: "rename", term, label}`, `{action: "release", variant}`, `{action: "hide", term}` oder `{action: "show", term}` korrigiert einzeln und markiert die Gruppe als von Hand festgelegt. `POST .../undo` macht die neueste Einteilung der laufenden Runde rückgängig (`{undone: label}`, 400, wenn es nichts gibt). Gleiche Anzeigebegriffe werden beim Speichern vereint.
+
+Teilnehmende: `GET /api/a/{key}` und `GET /api/a/{key}/state?since=` liefern bei Wortwolken `{version, config_version, status, round, current_round, past, revealed, visible, count, entries, mine, terms}`; `count` sind Personen, `mine` die eigenen Begriffe, `terms` (nur wenn `visible`) `[{id, label, n, m, v}]` mit `m = 1` für Begriffe, an denen man selbst beteiligt ist, und `v` als Liste `[text, n, key]` der zusammengelegten Eingaben. Der Besitzer erhält zusätzlich `owner: {hidden, hidden_count, undo}`. `POST /api/a/{key}/terms` mit `{text}` fügt einen Begriff hinzu (422 mit `code` `wc_empty`, `wc_duplicate` oder `wc_limit`), `POST /api/a/{key}/terms/remove` mit `{index, text}` entfernt einen eigenen; beide antworten mit `{state}`, bei geschlossener Wolke 403 `closed`, bei Sperre für alle Boards 403 `blocked`. Der angemeldete Besitzer benutzt auf der Seite `POST /api/a/{key}/merge`, `.../group` und `.../undo` (mit CSRF-Header, Antwort zusätzlich `{state}`) sowie `GET .../ai-status`.
+
 ## QR-Codes (öffentlich)
 
 `GET /api/boards/{key}/qr.svg` und `GET /api/boards/{key}/qr.png?px=12` liefern den QR-Code mit dem Board-Link; `px` ist die Pixelgrösse eines Moduls (4 bis 40). Diese Adressen brauchen keinen Token, weil der Link ohnehin nur den Schlüssel enthält, und eignen sich direkt für `<img>` in Folien oder Arbeitsblättern.
@@ -89,7 +115,7 @@ Teilnehmende: `GET /api/a/{key}` liefert `{activity, me, state}`; `GET /api/a/{k
 
 ## Connector
 
-`POST <base_url>/mcp/<token>` ist ein MCP-Server (Streamable HTTP, zustandslos, JSON-Antworten). `delete_board` legt das Board in den Papierkorb; `delete_post`, `organize_board`, `assign_posts`, `update_bundle`, `delete_bundle` und `clear_board` werden protokolliert und sind vom Besitzer im Verlauf des Boards rückgängig zu machen. Der Connector selbst hat keine Rückgängig-Werkzeuge. Er bietet die Werkzeuge `list_boards`, `get_board`, `create_board`, `update_board`, `clear_board`, `duplicate_board`, `delete_board`, `read_board`, `delete_post`, `get_board_qr`, `create_post`, `create_comment`, `organize_board`, `create_bundle`, `update_bundle`, `delete_bundle` und `assign_posts`, für Zielscheiben `list_targets`, `create_target`, `update_target` (mit `revealed` zum Anzeigen und Verbergen), `read_target`, `reset_target` und `delete_target` (nur mit `confirm=true`); `get_board_qr` nimmt auch das Kurzwort einer Zielscheibe. Die Beschreibungen und Parameter liefert `tools/list`. Die Adresse steht in der Bibliothek unter Einstellungen und wird in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen.
+`POST <base_url>/mcp/<token>` ist ein MCP-Server (Streamable HTTP, zustandslos, JSON-Antworten). `delete_board` legt das Board in den Papierkorb; `delete_post`, `organize_board`, `assign_posts`, `update_bundle`, `delete_bundle` und `clear_board` werden protokolliert und sind vom Besitzer im Verlauf des Boards rückgängig zu machen. Der Connector selbst hat keine Rückgängig-Werkzeuge. Er bietet die Werkzeuge `list_boards`, `get_board`, `create_board`, `update_board`, `clear_board`, `duplicate_board`, `delete_board`, `read_board`, `delete_post`, `get_board_qr`, `create_post`, `create_comment`, `organize_board`, `create_bundle`, `update_bundle`, `delete_bundle` und `assign_posts`, für Zielscheiben `list_targets`, `create_target`, `update_target` (mit `revealed` zum Anzeigen und Verbergen), `read_target`, `reset_target` und `delete_target` (nur mit `confirm=true`), für Wortwolken `list_wordclouds`, `create_wordcloud`, `update_wordcloud` (mit `revealed` und `new_round`), `read_wordcloud`, `merge_wordcloud` und `delete_wordcloud` (nur mit `confirm=true`); `get_board_qr` nimmt auch das Kurzwort einer Zielscheibe oder Wortwolke. Die Beschreibungen und Parameter liefert `tools/list`. Die Adresse steht in der Bibliothek unter Einstellungen und wird in den Claude-Einstellungen als eigener Connector ohne Anmeldung eingetragen.
 
 ## Beispiel für Claude
 

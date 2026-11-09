@@ -265,6 +265,17 @@ function db_schema(): array {
             updated_at DATETIME(6) NOT NULL,
             UNIQUE KEY ux_activity_round_guest (activity_id, round, guest_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS activity_groupings (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            activity_id INT UNSIGNED NOT NULL,
+            round INT UNSIGNED NOT NULL DEFAULT 1,
+            groups_json MEDIUMTEXT NOT NULL,
+            actor VARCHAR(80) NOT NULL DEFAULT '',
+            label VARCHAR(200) NOT NULL DEFAULT '',
+            created_at DATETIME(6) NOT NULL,
+            undone_at DATETIME(6) NULL,
+            KEY ix_activity_round (activity_id, round, id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
 }
 

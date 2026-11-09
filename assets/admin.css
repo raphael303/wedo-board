@@ -133,3 +133,8 @@ h3 { font-size: 0.95rem; margin: 18px 0 6px; }
 .ring-bar { width: 14px; border-radius: 3px 3px 0 0; }
 .ring-1 { background: #2fbf71; } .ring-2 { background: #9ccc3b; } .ring-3 { background: #f2c12e; } .ring-4 { background: #f5862e; } .ring-5 { background: #e5484d; }
 @media (max-width: 640px) { .results th:nth-child(4), .results td:nth-child(4), .results th:nth-child(5), .results td:nth-child(5) { display: none; } }
+/* Wortwolke: Begriffe und Verlauf */
+.results.wc-results td:nth-child(3), .results.wc-results th:nth-child(3) { text-align: left; color: var(--muted); }
+.wc-results td { vertical-align: middle; }
+@media (max-width: 640px) { .wc-results th:nth-child(4), .wc-results td:nth-child(4) { display: table-cell; } }
+.history { margin: 6px 0 0; padding-left: 18px; font-size: 0.9rem; line-height: 1.6; }

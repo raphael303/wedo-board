@@ -1,0 +1,108 @@
+/* Wortwolke; baut auf board.css und target.css auf (Kopfzeile, Hintergründe, Knöpfe, Zähler, Zugangs-Panel). */
+
+.wc-stage { align-items: stretch; padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+body:not(:has(.wc-dock:not([hidden]))) .wc-stage { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+.wc-question {
+  margin: 4px auto 0; max-width: 60rem; text-align: center;
+  font-size: clamp(1.25rem, 2.6vw, 2.1rem); font-weight: 750; line-height: 1.2; letter-spacing: -0.01em;
+  color: var(--bar-ink);
+  text-wrap: balance;
+}
+.wc-stage .target-hint { align-self: center; }
+
+.wc-panel {
+  flex: 1; position: relative; min-height: 46dvh;
+  width: 100%; max-width: 1500px; margin: 0 auto;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 14px 34px rgba(10, 20, 35, 0.18), 0 1px 2px rgba(10, 20, 35, 0.1);
+}
+.wc-cloud { position: absolute; inset: 0; overflow: hidden; font-family: var(--font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif); }
+.wc-empty {
+  position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 24px; font-size: 1.05rem; font-weight: 550; color: var(--muted, #5b6470);
+}
+
+.wc-word {
+  position: absolute; left: 0; top: 0;
+  margin: 0; padding: 0 0.06em; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 700; line-height: 1; white-space: nowrap; letter-spacing: -0.01em;
+  transition: transform 0.7s cubic-bezier(0.3, 1.25, 0.5, 1), font-size 0.7s cubic-bezier(0.3, 1.25, 0.5, 1), opacity 0.45s ease, color 0.4s ease;
+  will-change: transform;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 0.15em;
+}
+.wc-word.no-anim { transition: none !important; }
+.wc-word:hover, .wc-word:focus-visible { outline: none; background: rgba(27, 31, 36, 0.06); }
+.wc-word.mine { text-decoration: underline; text-decoration-thickness: clamp(2px, 0.04em, 4px); text-underline-offset: 0.12em; }
+
+/* Eingabe unten (nur Teilnehmende) */
+.wc-dock {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  width: min(560px, calc(100vw - 24px));
+  display: flex; flex-direction: column; gap: 8px;
+}
+.wc-mine { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.wc-mine li {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 4px 4px 4px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94); color: var(--ink, #1b1f24);
+  font-size: 0.92rem; font-weight: 600;
+  box-shadow: 0 4px 14px rgba(10, 20, 35, 0.16);
+}
+.wc-mine button {
+  width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; cursor: pointer;
+  font-size: 1.1rem; line-height: 1; color: var(--muted, #5b6470);
+}
+.wc-mine button:hover { background: rgba(27, 31, 36, 0.08); color: #c92a2a; }
+.wc-form {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px 6px 16px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 28px rgba(10, 20, 35, 0.22), 0 1px 2px rgba(10, 20, 35, 0.12);
+}
+.wc-form input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 1.05rem; padding: 8px 0; color: var(--ink, #1b1f24);
+}
+.wc-form input:disabled { opacity: 0.7; }
+.wc-form.is-full input::placeholder { color: #157347; opacity: 1; font-size: 0.88rem; }
+.wc-progress { font-size: 0.85rem; font-weight: 600; color: var(--muted, #5b6470); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wc-form .btn-primary { padding: 10px 18px; }
+.wc-form .btn-primary:disabled { opacity: 0.38; cursor: not-allowed; }
+
+/* Werkzeuge des Besitzers in der Kopfzeile */
+.wc-merge.is-busy { opacity: 0.75; cursor: progress; }
+
+/* Fenster für einen Begriff */
+.wc-dialog { border: 0; border-radius: 18px; padding: 0; width: min(420px, calc(100vw - 24px)); box-shadow: 0 24px 60px rgba(10, 20, 35, 0.35); }
+.wc-dialog::backdrop { background: rgba(10, 20, 35, 0.35); }
+.wc-dialog-inner { padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.wc-dialog h3 { margin: 0; font-size: 1.3rem; line-height: 1.2; }
+.wc-dialog h3 small { font-size: 0.8rem; font-weight: 550; color: var(--muted, #5b6470); margin-left: 6px; }
+.wc-dialog-sub { margin: 0; font-size: 0.82rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #5b6470); }
+.wc-variants { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow: auto; }
+.wc-variants li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid rgba(27, 31, 36, 0.07); }
+.wc-variants small { color: var(--muted, #5b6470); margin-left: 4px; }
+.wc-rename { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; color: var(--muted, #5b6470); }
+.wc-rename-row { display: flex; gap: 6px; }
+.wc-rename input { flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 8px 10px; border: 1px solid rgba(27, 31, 36, 0.2); border-radius: 10px; color: var(--ink, #1b1f24); }
+.wc-dialog-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.wc-dialog .small { padding: 5px 10px; font-size: 0.85rem; }
+
+@media (max-width: 640px) {
+  .wc-stage { padding-left: 8px; padding-right: 8px; }
+  .wc-panel { min-height: 52dvh; border-radius: 16px; }
+  .page-wordcloud .target-count { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .page-wordcloud:has(.wc-dock:not([hidden])) .target-count { display: none; }
+  .wc-dock { left: 12px; right: 12px; width: auto; transform: none; }
+  .wc-progress { display: none; }
+}
+@media (min-width: 900px) {
+  body.access-open .wc-dock { left: calc((100vw - var(--access-w) - 28px) / 2); }
+}
+body.presenter .wc-question { font-size: clamp(1.5rem, 3vw, 2.6rem); }
+@media (prefers-reduced-motion: reduce) {
+  .wc-word { transition: none !important; }
+}

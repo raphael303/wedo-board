@@ -173,6 +173,21 @@ function db_migrations(): array {
                 UNIQUE KEY ux_activity_round_guest (activity_id, round, guest_key)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        // Wortwolke: Zusammenlegungen pro Runde als Verlauf. Jede Änderung (KI, Claude, Lehrperson) schreibt die ganze
+        // Einteilung als neue Zeile; gültig ist die neueste nicht rückgängig gemachte. Die Rohbegriffe bleiben unverändert.
+        10 => [
+            "CREATE TABLE IF NOT EXISTS activity_groupings (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                activity_id INT UNSIGNED NOT NULL,
+                round INT UNSIGNED NOT NULL DEFAULT 1,
+                groups_json MEDIUMTEXT NOT NULL,
+                actor VARCHAR(80) NOT NULL DEFAULT '',
+                label VARCHAR(200) NOT NULL DEFAULT '',
+                created_at DATETIME(6) NOT NULL,
+                undone_at DATETIME(6) NULL,
+                KEY ix_activity_round (activity_id, round, id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
     ];
 }
 

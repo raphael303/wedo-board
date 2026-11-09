@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.12.0');
-define('WB_SCHEMA_VERSION', 9);
+define('WB_VERSION', '0.13.0');
+define('WB_SCHEMA_VERSION', 10);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {
@@ -59,4 +59,5 @@ require WB_ROOT . '/lib/ai/ai.php';
 require WB_ROOT . '/lib/export.php';
 require WB_ROOT . '/lib/summary.php';
 require WB_ROOT . '/lib/activities.php';
+require WB_ROOT . '/lib/wordcloud.php';
 require WB_ROOT . '/lib/migrate.php';

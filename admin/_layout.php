@@ -72,6 +72,7 @@ function admin_header(string $title, string $active = ''): void {
   <a href="<?= e(wb_admin_url()) ?>" class="<?= $active === 'library' ? 'active' : '' ?>">Bibliothek</a>
   <a href="<?= e(wb_admin_url()) ?>board.php?new=1" class="<?= $active === 'new' ? 'active' : '' ?>">Neues Board</a>
   <a href="<?= e(wb_admin_url()) ?>targets.php" class="<?= $active === 'targets' ? 'active' : '' ?>">Zielscheiben</a>
+  <a href="<?= e(wb_admin_url()) ?>wordclouds.php" class="<?= $active === 'wordclouds' ? 'active' : '' ?>">Wortwolken</a>
   <a href="<?= e(wb_admin_url()) ?>blocks.php" class="<?= $active === 'blocks' ? 'active' : '' ?>">Sperren</a>
   <a href="<?= e(wb_admin_url()) ?>settings.php" class="<?= $active === 'settings' ? 'active' : '' ?>">Einstellungen</a>
   <a href="<?= e(wb_admin_url()) ?>logout.php" class="nav-right">Abmelden</a>
@@ -87,6 +88,14 @@ function admin_footer(): void {
 <script src="/assets/admin.js?v=<?= WB_VERSION ?>"></script>
 </body>
 </html><?php
+}
+
+/** Urheber einer protokollierten Änderung lesbar machen. */
+function admin_actor_label(?string $actor): string {
+    if ($actor === 'teacher') return 'Lehrperson';
+    if ($actor === 'claude') return 'Claude';
+    if ($actor !== null && str_starts_with($actor, 'ai:')) return 'KI (' . substr($actor, 3) . ')';
+    return (string)$actor;
 }
 
 function admin_status_label(string $s): string {

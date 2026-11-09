@@ -63,6 +63,7 @@ foreach (array_keys(AI_PROVIDERS) as $p) {
     require_once __DIR__ . '/' . $p . '.php';
 }
 require_once __DIR__ . '/organize.php';
+require_once __DIR__ . '/wordcloud.php';
 
 /* ---------- Geheimnis und Verschlüsselung ---------- */
 

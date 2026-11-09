@@ -24,6 +24,7 @@ function ai_fake_structured(array $credential, string $system, string $user, arr
         case 'fake-slow': sleep(2); break;
     }
     if (($options['tool_name'] ?? '') === 'zusammenfassung') return ai_fake_summary($credential, $system, $user, $options);
+    if (($options['tool_name'] ?? '') === 'wortwolke') return ai_fake_wordcloud($user);
     $posts = [];
     if (preg_match('~<beitraege>(.*?)</beitraege>~su', $user, $m)) {
         foreach (preg_split('/\n+/', trim($m[1])) as $line) {
@@ -131,4 +132,34 @@ function ai_fake_summary(array $credential, string $system, string $user, array 
         'output_tokens' => (int)(strlen(json_encode($data)) / 4),
         'model' => (string)($options['model'] ?? $credential['model'] ?? 'fake-1'),
     ];
+}
+
+/**
+ * Wortwolke ohne Netz: legt Begriffe mit gleichen ersten vier Buchstaben zusammen (Anzeigebegriff = häufigster),
+ * korrigiert «Fahrad» zu «Fahrrad», ordnet Begriffe mit «fest» der ersten festen Gruppe zu und liefert zum Prüfen
+ * eine unbekannte und eine doppelte Nummer.
+ */
+function ai_fake_wordcloud(string $user): array {
+    $terms = [];
+    if (preg_match('~<begriffe>(.*?)</begriffe>~su', $user, $m)) {
+        foreach (preg_split('/\n+/', trim($m[1])) as $line) {
+            if (preg_match('/^#(\d+)\s+(.*)\s+\((\d+)\)$/u', trim($line), $tm)) $terms[] = ['n' => (int)$tm[1], 'text' => $tm[2], 'c' => (int)$tm[3]];
+        }
+    }
+    $hasFixed = str_contains($user, '<feste_gruppen>');
+    $buckets = [];
+    $add = [];
+    $groups = [];
+    foreach ($terms as $t) {
+        if ($hasFixed && mb_stripos($t['text'], 'fest') !== false) { $add[] = $t['n']; continue; }
+        if (mb_strtolower($t['text']) === 'fahrad') { $groups[] = ['label' => 'Fahrrad', 'members' => [$t['n']]]; continue; }
+        $buckets[mb_substr(mb_strtolower($t['text']), 0, 4)][] = $t;
+    }
+    foreach ($buckets as $b) {
+        if (count($b) < 2) continue;
+        usort($b, fn($x, $y) => $y['c'] <=> $x['c']);
+        $groups[] = ['label' => $b[0]['text'], 'members' => array_column($b, 'n')];
+    }
+    if ($groups) $groups[0]['members'] = array_merge($groups[0]['members'], [9999, $groups[0]['members'][0]]);
+    return ['data' => ['groups' => $groups, 'add_to_fixed' => $add ? [['group' => 1, 'members' => $add]] : []], 'input_tokens' => 50 + 5 * count($terms), 'output_tokens' => 20 + 4 * count($terms), 'model' => 'fake-1'];
 }

@@ -7,6 +7,7 @@ admin_check_csrf();
 
 $isNew = isset($_GET['new']);
 $act = $isNew ? null : activity_by_key((string)($_GET['key'] ?? ''), true);
+if ($act && $act['type'] === 'wordcloud') { header('Location: ' . wb_admin_url() . 'wordcloud.php?key=' . $act['akey']); exit; }
 if (!$isNew && !$act) {
     http_response_code(404);
     admin_header('Nicht gefunden');

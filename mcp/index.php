@@ -80,7 +80,7 @@ function mcp_handle(array $msg): ?array {
                     'protocolVersion' => in_array($requested, $known, true) ? $requested : '2025-06-18',
                     'capabilities' => ['tools' => ['listChanged' => false]],
                     'serverInfo' => ['name' => wb_app_name(), 'version' => WB_VERSION],
-                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Bündelungen, Zuordnungen, Löschungen und Leeren werden protokolliert; der Besitzer kann sie auf der Board-Seite im Verlauf rückgängig machen, du brauchst dafür kein Werkzeug. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude. Feedbackzielscheibe: Für Feedback oder Selbsteinschätzung zu mehreren Aspekten (zum Beispiel nach einer Projektwoche oder vor einer Prüfung) legst du mit create_target eine Zielscheibe an; das ist eine eigene Aktivität neben den Boards, kein Board. Jeder Aspekt wird ein Sektor, jede Person setzt pro Sektor einen Punkt, je näher an der Mitte, desto besser. Die Punkte bleiben verborgen, bis der Besitzer sie auf der Scheibe mit «Anzeigen» zeigt (oder du mit update_target revealed=true). Kurze Aspekte (ein bis drei Wörter, 2 bis 12 Stück) lesen sich am besten. Auch hier immer Notiz und Tags setzen. Zielscheiben teilen sich die Kurzwörter mit den Boards; get_board_qr liefert auch ihren QR-Code. read_target liefert die Auswertung (Wertung 0 bis 10 pro Aspekt, 10 = Mitte); reset_target beginnt eine neue Runde (frühere Runden bleiben lesbar, gut für Vorher-nachher).",
+                    'instructions' => wb_app_name() . " ist der private Padlet-Ersatz des Besitzers (Lehrperson) unter " . wb_base_url() . ". Arbeitsweise: Wenn bei der Unterrichtsvorbereitung ein Board gebraucht wird (Sammlung, Brainstorming, Pro/Contra, KWL-Tabelle, Feedback), lege es mit create_board selbst an, statt den Besitzer darauf zu verweisen. Wähle type=columns, wenn die Beiträge in vorgegebene Kategorien gehören, sonst wall. Setze immer eine Notiz (Klasse, Fach, Thema, Datum, Lektionsbezug) und Tags (Fach, Klasse, Thema), damit die Bibliothek später durchsuchbar bleibt. Der Link für die Klasse ist der Kurzlink aus url (z. B. " . wb_base_url() . "/tamok); er ist diktierbar und gehört in Folien, Arbeitsblätter und Materialien zusammen mit dem QR-Code aus get_board_qr (PNG, oder die Adresse qr_png?px=20 zum Einbetten). Vor dem Anlegen mit list_boards prüfen, ob ein passendes Board schon existiert; bestehende Boards für dieselbe Klasse eher leeren (clear_board, nur nach Rückfrage) oder duplizieren als neu anlegen. Nach der Lektion liest read_board die Schülerbeiträge zum Auswerten. Bündelungen, Zuordnungen, Löschungen und Leeren werden protokolliert; der Besitzer kann sie auf der Board-Seite im Verlauf rückgängig machen, du brauchst dafür kein Werkzeug. Geschlossen (status=closed) heisst lesbar, aber nicht mehr beschreibbar; archiviert heisst für die Klasse unsichtbar und Kurzwort wieder frei. delete_board nur nach ausdrücklicher Bestätigung des Besitzers. Bündeln: Ein Board hat drei Ebenen, Bündel enthalten Beiträge, Beiträge enthalten Kommentare. Auf Wunsch («bündle», «fasse zusammen», «ordne») liest du das Board mit read_board (die Beitragsnummern stehen als #id), bildest thematische Gruppen und schreibst sie mit organize_board in einem Zug zurück (Titel, kurze Zusammenfassung, Spalte und post_ids pro Bündel); neu dazugekommene lose Beiträge sortierst du später mit assign_posts nach. Die Klasse sieht danach nur die Bündel mit Titel, Zusammenfassung und Anzahl und klappt sie bei Bedarf auf. Du kannst als didaktisches Mittel auch selbst Beiträge (create_post, z. B. Aufgabenstellung, Leitfragen, Fazit) und Kommentare (create_comment, z. B. Rückmeldungen) verfassen; der Autorname ist frei wählbar, Standard ist Claude. Feedbackzielscheibe: Für Feedback oder Selbsteinschätzung zu mehreren Aspekten (zum Beispiel nach einer Projektwoche oder vor einer Prüfung) legst du mit create_target eine Zielscheibe an; das ist eine eigene Aktivität neben den Boards, kein Board. Jeder Aspekt wird ein Sektor, jede Person setzt pro Sektor einen Punkt, je näher an der Mitte, desto besser. Die Punkte bleiben verborgen, bis der Besitzer sie auf der Scheibe mit «Anzeigen» zeigt (oder du mit update_target revealed=true). Kurze Aspekte (ein bis drei Wörter, 2 bis 12 Stück) lesen sich am besten. Auch hier immer Notiz und Tags setzen. Zielscheiben teilen sich die Kurzwörter mit den Boards; get_board_qr liefert auch ihren QR-Code. read_target liefert die Auswertung (Wertung 0 bis 10 pro Aspekt, 10 = Mitte); reset_target beginnt eine neue Runde (frühere Runden bleiben lesbar, gut für Vorher-nachher). Wortwolke: Für Brainstorming, Einstiege und Assoziationen («Was fällt dir zu … ein?») legst du mit create_wordcloud eine Wortwolke an (name = Frage, max_terms = Begriffe pro Person, Standard 3; live = true lässt sie sichtbar wachsen). Auch hier immer Notiz und Tags setzen. Zusammenlegen: Der Besitzer kann auf der Wolke «✨ Zusammenlegen» drücken (KI des Servers); wenn er dich darum bittet, liest du die Begriffe mit read_wordcloud und schreibst mit merge_wordcloud Gruppen zurück: Synonyme, Mehrzahl, gebeugte Formen, Tippfehler und Schreibvarianten unter einem richtig geschriebenen Anzeigebegriff, der zur ganzen Wolke passt (einheitlich Einzahl oder Mehrzahl, meist die häufigste Form), verschiedene Gedanken nicht zusammenlegen. Von Hand korrigierte Begriffe bleiben unverändert. Gezählt werden Personen pro Begriff.",
             ]];
             case 'notifications/initialized':
             case 'notifications/cancelled':
@@ -171,6 +171,18 @@ function mcp_tools(): array {
         'note' => ['type' => 'string', 'description' => 'Notiz: Klasse, Fach, Thema, Datum, Lektionsbezug. Immer setzen.'],
         'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Schlagwörter, zum Beispiel ["feedback", "3b", "projektwoche"]. Immer setzen.'],
         'slug' => ['type' => 'string', 'description' => 'Eigenes Kurzwort (geteilt mit den Boards); leer für ein automatisches Wort.'],
+    ];
+    $cloudParam = ['type' => 'string', 'description' => 'Kurzwort (slug) oder Schlüssel der Wortwolke.'];
+    $cloudFields = [
+        'name' => ['type' => 'string', 'description' => 'Frage oder Impuls, erscheint gross über der Wolke (z. B. «Was fällt dir zu Energie ein?»).'],
+        'max_terms' => ['type' => 'integer', 'minimum' => 1, 'maximum' => WORDCLOUD_MAX_TERMS, 'description' => 'Begriffe pro Person (1 bis ' . WORDCLOUD_MAX_TERMS . ', Standard 3).'],
+        'live' => ['type' => 'boolean', 'description' => 'true (Standard) = die Wolke wächst bei allen sichtbar mit; false = verborgen, bis der Besitzer sie anzeigt (revealed).'],
+        'ai' => ['type' => 'boolean', 'description' => 'KI-Zusammenlegen auf der Seite erlaubt (Standard true); false für heikle Inhalte.'],
+        'background' => $targetFields['background'],
+        'lang' => $targetFields['lang'],
+        'note' => $targetFields['note'],
+        'tags' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Schlagwörter, zum Beispiel ["einstieg", "3b", "energie"]. Immer setzen.'],
+        'slug' => $targetFields['slug'],
     ];
     return [
         [
@@ -310,8 +322,8 @@ function mcp_tools(): array {
         ],
         [
             'name' => 'get_board_qr',
-            'description' => 'Liefert den QR-Code eines Boards oder einer Zielscheibe als PNG-Bild (für Folien und Arbeitsblätter) sowie die Bildadressen zum Einbetten.',
-            'inputSchema' => ['type' => 'object', 'properties' => ['board' => ['type' => 'string', 'description' => 'Kurzwort oder Schlüssel des Boards oder der Zielscheibe.']], 'required' => ['board']],
+            'description' => 'Liefert den QR-Code eines Boards, einer Zielscheibe oder einer Wortwolke als PNG-Bild (für Folien und Arbeitsblätter) sowie die Bildadressen zum Einbetten.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['board' => ['type' => 'string', 'description' => 'Kurzwort oder Schlüssel des Boards, der Zielscheibe oder der Wortwolke.']], 'required' => ['board']],
         ],
         [
             'name' => 'list_targets',
@@ -350,6 +362,51 @@ function mcp_tools(): array {
             'name' => 'delete_target',
             'description' => 'Legt eine Zielscheibe in den Papierkorb (dreissig Tage wiederherstellbar). Nur mit confirm=true nach ausdrücklicher Bestätigung des Besitzers; sonst archivieren (update_target mit status=archived).',
             'inputSchema' => ['type' => 'object', 'properties' => ['target' => $targetParam, 'confirm' => ['type' => 'boolean']], 'required' => ['target', 'confirm']],
+        ],
+        [
+            'name' => 'list_wordclouds',
+            'description' => 'Listet Wortwolken mit Kurzwort, Link, Frage, Anzahl Personen, Status, Notiz und Tags.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'query' => ['type' => 'string', 'description' => 'Suchtext für Frage, Notiz und Tags.'],
+                'status' => ['type' => 'string', 'enum' => ['active', 'open', 'closed', 'archived', 'all'], 'description' => 'Standard active.'],
+                'tag' => ['type' => 'string'],
+            ]],
+        ],
+        [
+            'name' => 'create_wordcloud',
+            'description' => 'Legt eine Wortwolke an (wie Menti): Jede Person gibt einzeln bis zu max_terms Begriffe ein, häufige Begriffe erscheinen grösser. Liefert Kurzlink und QR-Adressen. Notiz und Tags immer mitgeben.',
+            'inputSchema' => ['type' => 'object', 'properties' => $cloudFields, 'required' => ['name', 'note', 'tags']],
+        ],
+        [
+            'name' => 'update_wordcloud',
+            'description' => 'Ändert eine Wortwolke: Frage, Begriffe pro Person, live, KI erlaubt, Hintergrund, Sprache, Notiz, Tags, Kurzwort, Status, revealed (true = anzeigen, false = verbergen; nur wirksam bei live=false) oder new_round=true (leere Wolke, frühere Runden bleiben lesbar). Nur angegebene Felder werden geändert.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['wordcloud' => $cloudParam] + $cloudFields + [
+                'status' => ['type' => 'string', 'enum' => ['open', 'closed', 'archived']],
+                'revealed' => ['type' => 'boolean'],
+                'new_round' => ['type' => 'boolean'],
+            ], 'required' => ['wordcloud']],
+        ],
+        [
+            'name' => 'read_wordcloud',
+            'description' => 'Liest die Begriffe einer Wortwolke: pro Begriff Anzeigebegriff, Anzahl Personen, die zusammengelegten Eingaben (Text und Grundform), ausgeblendet und «von Hand» (von der Lehrperson korrigiert). Auch frühere Runden.',
+            'inputSchema' => ['type' => 'object', 'properties' => ['wordcloud' => $cloudParam, 'round' => ['type' => 'integer', 'description' => 'Frühere Runde.'], 'format' => ['type' => 'string', 'enum' => ['markdown', 'json'], 'description' => 'Standard markdown.']], 'required' => ['wordcloud']],
+        ],
+        [
+            'name' => 'merge_wordcloud',
+            'description' => 'Legt Begriffe der laufenden Runde zusammen: Synonyme, Mehrzahl, gebeugte Formen, Tippfehler und Schreibvarianten unter einem Anzeigebegriff, der zur ganzen Wolke passt. Ersetzt alle bisherigen Zusammenlegungen ausser den von Hand korrigierten (die bleiben unverändert); gleiche Anzeigebegriffe werden automatisch vereint. Nicht genannte Begriffe bleiben einzeln. Der Besitzer kann es auf der Wolke rückgängig machen.',
+            'inputSchema' => ['type' => 'object', 'properties' => [
+                'wordcloud' => $cloudParam,
+                'groups' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                    'label' => ['type' => 'string', 'description' => 'Anzeigebegriff, richtig geschrieben, höchstens 40 Zeichen.'],
+                    'members' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Eingaben oder Grundformen aus read_wordcloud.'],
+                    'hidden' => ['type' => 'boolean', 'description' => 'Begriff ausblenden (z. B. unpassend).'],
+                ], 'required' => ['label', 'members']]],
+            ], 'required' => ['wordcloud', 'groups']],
+        ],
+        [
+            'name' => 'delete_wordcloud',
+            'description' => 'Legt eine Wortwolke in den Papierkorb (dreissig Tage wiederherstellbar). Nur mit confirm=true nach ausdrücklicher Bestätigung des Besitzers; sonst archivieren (update_wordcloud mit status=archived).',
+            'inputSchema' => ['type' => 'object', 'properties' => ['wordcloud' => $cloudParam, 'confirm' => ['type' => 'boolean']], 'required' => ['wordcloud', 'confirm']],
         ],
     ];
 }
@@ -486,15 +543,68 @@ function mcp_call(string $name, array $a): array {
             $t = mcp_target_ref($a);
             activity_trash($t);
             return mcp_text('Zielscheibe «' . $t['name'] . '» in den Papierkorb gelegt; der Besitzer kann sie in der Bibliothek dreissig Tage lang wiederherstellen.');
+
+        case 'list_wordclouds':
+            $list = activities_list(['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'wordcloud']);
+            if (!$list) return mcp_text('Keine Wortwolken gefunden.');
+            return mcp_json(['count' => count($list), 'wordclouds' => array_map('mcp_wordcloud_summary', $list)]);
+
+        case 'create_wordcloud':
+            unset($a['wordcloud']);
+            return mcp_json(['created' => true] + mcp_wordcloud_summary(activity_owner_view(activity_create(['type' => 'wordcloud'] + $a))));
+
+        case 'update_wordcloud':
+            $w = mcp_wordcloud_ref($a);
+            $newRound = !empty($a['new_round']);
+            unset($a['wordcloud'], $a['type'], $a['new_round']);
+            if ($a) $w = activity_update($w, $a);
+            if ($newRound) $w = activity_new_round($w);
+            return mcp_json(['updated' => true] + mcp_wordcloud_summary(activity_owner_view($w)));
+
+        case 'read_wordcloud':
+            $w = mcp_wordcloud_ref($a);
+            $round = !empty($a['round']) ? (int)$a['round'] : null;
+            if (($a['format'] ?? 'markdown') === 'json') return mcp_json(wordcloud_results($w, $round));
+            return mcp_text(wordcloud_results_markdown($w, $round));
+
+        case 'merge_wordcloud':
+            $w = mcp_wordcloud_ref($a);
+            $r = wordcloud_merge_from_input($w, ['groups' => $a['groups'] ?? null]);
+            return mcp_text($r['label'] . ' (' . $r['groups'] . ' Gruppen geschrieben' . ($r['unknown'] ? '; unbekannt und übergangen: ' . implode(', ', array_slice($r['unknown'], 0, 20)) : '') . '). Der Besitzer kann es auf der Wolke mit «Rückgängig» zurücknehmen. Aktueller Stand mit read_wordcloud.');
+
+        case 'delete_wordcloud':
+            if (empty($a['confirm'])) throw new InvalidArgumentException('Löschen braucht confirm=true nach Bestätigung durch den Besitzer.');
+            $w = mcp_wordcloud_ref($a);
+            activity_trash($w);
+            return mcp_text('Wortwolke «' . $w['name'] . '» in den Papierkorb gelegt; der Besitzer kann sie in der Bibliothek dreissig Tage lang wiederherstellen.');
     }
     throw new InvalidArgumentException('Unbekanntes Werkzeug: ' . $name);
+}
+
+function mcp_wordcloud_ref(array $args): array {
+    $ref = trim((string)($args['wordcloud'] ?? $args['target'] ?? $args['board'] ?? ''));
+    if ($ref === '') throw new InvalidArgumentException('Parameter «wordcloud» (Kurzwort oder Schlüssel) fehlt.');
+    $w = activity_find($ref);
+    if (!$w || $w['type'] !== 'wordcloud') throw new InvalidArgumentException('Keine aktive Wortwolke mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_wordclouds und status=archived über ihren Schlüssel.');
+    return $w;
+}
+
+function mcp_wordcloud_summary(array $v): array {
+    return [
+        'type' => 'wordcloud', 'name' => $v['name'], 'slug' => $v['slug'], 'url' => $v['url'], 'key' => $v['key'],
+        'max_terms' => $v['max_terms'], 'live' => $v['live'], 'ai' => $v['ai'],
+        'status' => $v['status'], 'revealed' => $v['revealed'], 'round' => $v['round'], 'responses' => $v['response_count'],
+        'background' => $v['background'], 'lang' => $v['lang'], 'note' => $v['note'], 'tags' => $v['tags'],
+        'qr_png' => $v['qr_png'], 'qr_svg' => $v['qr_svg'],
+        'created_at' => wb_local_time($v['created_at']), 'last_activity_at' => wb_local_time($v['last_activity_at']),
+    ];
 }
 
 function mcp_target_ref(array $args): array {
     $ref = trim((string)($args['target'] ?? $args['board'] ?? ''));
     if ($ref === '') throw new InvalidArgumentException('Parameter «target» (Kurzwort oder Schlüssel) fehlt.');
     $t = activity_find($ref);
-    if (!$t) throw new InvalidArgumentException('Keine aktive Zielscheibe mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_targets und status=archived über ihren Schlüssel.');
+    if (!$t || $t['type'] !== 'target') throw new InvalidArgumentException('Keine aktive Zielscheibe mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_targets und status=archived über ihren Schlüssel.' . ($t ? ' «' . $ref . '» ist eine Wortwolke; dafür gibt es die Werkzeuge *_wordcloud.' : ''));
     return $t;
 }
 

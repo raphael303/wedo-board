@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// Seite einer Aktivität (heute die Feedbackzielscheibe). Aufruf über /a/<schlüssel> oder über das Kurzwort
+// Seite einer Aktivität (Feedbackzielscheibe oder Wortwolke). Aufruf über /a/<schlüssel> oder über das Kurzwort
 // (board.php reicht ein Kurzwort hierher weiter, wenn es zu keiner Board, aber zu einer Aktivität gehört).
 if (!defined('WB_ROOT')) require __DIR__ . '/lib/bootstrap.php';
 require_once WB_ROOT . '/lib/qr.php';
@@ -11,11 +11,12 @@ if (!isset($activity)) {
 $lang = wb_resolve_lang($activity['lang'] ?? (string)wb_config('default_lang', 'de'));
 $uid = wb_client_uid();
 $owner = $activity ? wb_can('board.manage') : false;
+$isCloud = ($activity['type'] ?? '') === 'wordcloud';
 
 if (!$activity || $activity['status'] === 'archived') {
     http_response_code(404);
     ?><!doctype html><html lang="<?= e($lang) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><?= e(wb_app_name()) ?></title><link rel="stylesheet" href="/assets/board.css?v=<?= WB_VERSION ?>"></head>
-    <body class="bg-graphit"><main class="notfound"><h1><?= e(t('target_not_found', $lang)) ?></h1></main></body></html><?php
+    <body class="bg-graphit"><main class="notfound"><h1><?= e(t($isCloud ? 'wc_not_found' : 'target_not_found', $lang)) ?></h1></main></body></html><?php
     exit;
 }
 
@@ -29,6 +30,7 @@ $boot = [
     'csrf' => $owner ? wb_csrf_token() : null,
     'view_round' => $round,
 ];
+if ($isCloud && $owner) $boot['ai'] = ai_wordcloud_status($activity) + ['settings_url' => wb_admin_url() . 'settings.php#ki', 'edit_url' => wb_admin_url() . 'wordcloud.php?key=' . $activity['akey']];
 $accessUrl = (string)$activity['url'];
 $accessLabel = preg_replace('~^https?://(www\.)?~i', '', $accessUrl);
 $accessQr = wb_qr_svg($accessUrl);
@@ -42,9 +44,14 @@ $accessQr = wb_qr_svg($accessUrl);
 <title><?= e($activity['name']) ?> – <?= e(wb_app_name()) ?></title>
 <link rel="stylesheet" href="/assets/board.css?v=<?= WB_VERSION ?>">
 <link rel="stylesheet" href="/assets/target.css?v=<?= WB_VERSION ?>">
+<?php if ($isCloud): ?>
+<link rel="stylesheet" href="/assets/wordcloud.css?v=<?= WB_VERSION ?>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231b1f24'/><text x='16' y='15' font-family='sans-serif' font-size='11' font-weight='700' fill='%23fff' text-anchor='middle'>Aa</text><text x='16' y='25' font-family='sans-serif' font-size='7' fill='%23fff' text-anchor='middle'>abc</text></svg>">
+<?php else: ?>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231b1f24'/><circle cx='16' cy='16' r='10' fill='none' stroke='%23fff' stroke-width='2'/><circle cx='16' cy='16' r='5' fill='none' stroke='%23fff' stroke-width='2'/><circle cx='16' cy='16' r='1.6' fill='%23fff'/></svg>">
+<?php endif; ?>
 </head>
-<body class="bg-<?= e($activity['background']) ?> page-target">
+<body class="bg-<?= e($activity['background']) ?> page-target<?= $isCloud ? ' page-wordcloud' : '' ?>">
 <header class="bar">
   <h1 class="bar-title"><?= e($activity['name']) ?></h1>
   <div class="bar-tools">
@@ -56,7 +63,12 @@ $accessQr = wb_qr_svg($accessUrl);
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
     </button>
     <?php if ($owner): ?>
-    <a class="bar-btn" href="<?= e(wb_admin_url()) ?>target.php?key=<?= e($activity['akey']) ?>" title="Bibliothek" aria-label="Bibliothek"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
+    <a class="bar-btn" href="<?= e(wb_admin_url()) ?><?= $isCloud ? 'wordcloud' : 'target' ?>.php?key=<?= e($activity['akey']) ?>" title="Bibliothek" aria-label="Bibliothek"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
+    <?php if ($isCloud && $round === null): ?>
+    <button class="btn-ghost bar-ghost" id="wc-hidden" type="button" hidden></button>
+    <button class="btn-ghost bar-ghost" id="wc-undo" type="button" hidden><?= e(t('wc_undo', $lang)) ?></button>
+    <button class="btn-ghost bar-ghost wc-merge" id="wc-merge" type="button" title="<?= e(t('wc_merge_title', $lang)) ?>">✨ <?= e(t('wc_merge', $lang)) ?></button>
+    <?php endif; ?>
     <?php if ($round === null): ?><button class="btn-ghost bar-ghost" id="new-round" type="button"><?= e(t('target_new_round', $lang)) ?></button><?php endif; ?>
     <?php endif; ?>
   </div>
@@ -64,6 +76,33 @@ $accessQr = wb_qr_svg($accessUrl);
 
 <div id="notice" class="notice" hidden></div>
 
+<?php if ($isCloud): ?>
+<main class="target-stage wc-stage" id="stage">
+  <?php if ($round !== null): ?><p class="target-past"><span id="past-label"></span> <a href="?">· <?= e(t('target_back_current', $lang)) ?></a></p><?php endif; ?>
+  <h2 class="wc-question"><?= e($activity['name']) ?></h2>
+  <p class="target-hint" id="hint" hidden></p>
+  <div class="wc-panel"><div class="wc-cloud" id="cloud" role="list"></div><p class="wc-empty" id="cloud-empty" hidden></p></div>
+</main>
+
+<div class="wc-dock" id="dock" hidden>
+  <ul class="wc-mine" id="mine" aria-label="<?= e(t('wc_mine', $lang)) ?>"></ul>
+  <form class="wc-form" id="wc-form" autocomplete="off">
+    <input id="wc-input" type="text" maxlength="<?= WORDCLOUD_TERM_LENGTH ?>" enterkeyhint="send" placeholder="<?= e(t('wc_placeholder', $lang)) ?>" aria-label="<?= e(t('wc_placeholder', $lang)) ?>">
+    <span class="wc-progress" id="progress"></span>
+    <button class="btn-primary" id="wc-send" type="submit"><?= e(t('wc_send', $lang)) ?></button>
+  </form>
+</div>
+
+<div class="target-count" id="count-box">
+  <span class="target-count-n" id="count" aria-live="polite"></span>
+  <?php if ($owner && $round === null && !$activity['config']['live']): ?><button class="btn-primary target-reveal" id="reveal" type="button"><?= e(t('target_reveal', $lang)) ?></button><?php endif; ?>
+</div>
+
+<dialog id="wc-term" class="wc-dialog">
+  <form method="dialog" class="wc-dialog-inner" id="wc-term-body"></form>
+</dialog>
+
+<?php else: ?>
 <main class="target-stage" id="stage">
   <?php if ($round !== null): ?><p class="target-past"><span id="past-label"></span> <a href="?">· <?= e(t('target_back_current', $lang)) ?></a></p><?php endif; ?>
   <p class="target-hint" id="hint"></p>
@@ -83,6 +122,7 @@ $accessQr = wb_qr_svg($accessUrl);
   <?php if ($owner && $round === null): ?><button class="btn-primary target-reveal" id="reveal" type="button"><?= e(t('target_reveal', $lang)) ?></button><?php endif; ?>
 </div>
 
+<?php endif; ?>
 <aside id="access" class="access" hidden aria-label="<?= e(t('access_join', $lang)) ?>">
   <div class="access-head">
     <span class="access-title"><?= e(t('access_join', $lang)) ?></span>
@@ -103,6 +143,6 @@ $accessQr = wb_qr_svg($accessUrl);
 </dialog>
 
 <script>window.WT = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP) ?>;</script>
-<script src="/assets/target.js?v=<?= WB_VERSION ?>"></script>
+<script src="/assets/<?= $isCloud ? 'wordcloud' : 'target' ?>.js?v=<?= WB_VERSION ?>"></script>
 </body>
 </html>

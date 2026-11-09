@@ -123,6 +123,11 @@ $host = (string)parse_url(wb_base_url(), PHP_URL_HOST);
           <p>Alle setzen pro Aspekt einen Punkt, je näher an der Mitte, desto besser. Die Punkte bleiben verborgen, bis die Lehrperson sie gemeinsam aufdeckt; spätere Runden zeigen die Entwicklung.</p>
         </article>
         <article class="card">
+          <div class="icon b"><svg viewBox="0 0 24 24"><path d="M4 10h7M6 14h12M9 18h6M13 10h7M8 6h8"/></svg></div>
+          <h3>Wortwolke</h3>
+          <p>Alle geben ein paar Begriffe ein, häufige erscheinen grösser. Auf Knopfdruck legt die KI Synonyme, Mehrzahl und Tippfehler zusammen, sodass «Auto», «Autos» und «Fahrzeuge» als ein Begriff zählen.</p>
+        </article>
+        <article class="card">
           <div class="icon b"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z"/></svg></div>
           <h3>Bündeln mit KI</h3>
           <p>Aus vierzig losen Beiträgen werden auf Knopfdruck thematische Gruppen. Jeder Schritt lässt sich rückgängig machen, und die Lehrperson entscheidet, was bleibt.</p>
@@ -141,14 +146,15 @@ $host = (string)parse_url(wb_base_url(), PHP_URL_HOST);
       <div>
         <p class="eyebrow">Was es vielleicht einmal wird</p>
         <h2>Ein kleiner Werkzeugkasten für lebendigen Unterricht.</h2>
-        <p>Die Zielscheibe ist die erste von mehreren «Aktivitäten», die neben den Pinnwänden entstehen sollen. Denkbar sind Live-Umfragen, Wortwolken und kurze Abstimmungen, wie man sie von Präsentationswerkzeugen kennt, aber auf demselben schlanken Fundament und mit derselben Bibliothek, in der alle Materialien nach Klasse, Fach und Thema auffindbar bleiben.</p>
+        <p>Zielscheibe und Wortwolke sind die ersten «Aktivitäten», die neben den Pinnwänden entstehen. Denkbar sind weitere wie Live-Umfragen und kurze Abstimmungen, wie man sie von Präsentationswerkzeugen kennt, aber auf demselben schlanken Fundament und mit derselben Bibliothek, in der alle Materialien nach Klasse, Fach und Thema auffindbar bleiben.</p>
         <p>Ob <?= e($app) ?> später auch anderen Lehrpersonen offensteht, ist offen. Das Fundament dafür, mit eigenen Benutzerkonten und getrennten Bibliotheken, ist bereits angelegt.</p>
       </div>
       <ol class="road">
         <li class="done"><b>Pinnwände</b><span>Beiträge, Kommentare, Reaktionen, Spalten, Bilder</span></li>
         <li class="done"><b>Bündeln, Rückgängig, PDF-Export</b><span>mit optionaler KI-Unterstützung</span></li>
         <li class="done"><b>Feedbackzielscheibe</b><span>die erste Aktivität</span></li>
-        <li><b>Umfragen und Wortwolken</b><span>angedacht</span></li>
+        <li class="done"><b>Wortwolke</b><span>mit KI-Zusammenlegen</span></li>
+        <li><b>Umfragen und Abstimmungen</b><span>angedacht</span></li>
         <li><b>Weitere Lehrpersonen</b><span>vielleicht</span></li>
       </ol>
     </div>

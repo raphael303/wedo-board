@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 /*
- * Aktivitäten: interaktive Formate neben den Boards (heute die Feedbackzielscheibe, Typ «target»;
- * vorgesehen sind später Menti-artige Typen wie Umfrage oder Wortwolke). Eine Aktivität teilt mit den
+ * Aktivitäten: interaktive Formate neben den Boards (die Feedbackzielscheibe, Typ «target», und die Wortwolke,
+ * Typ «wordcloud», siehe lib/wordcloud.php; vorgesehen sind weitere Menti-artige Typen wie Umfrage). Eine Aktivität teilt mit den
  * Boards den Namensraum der Kurzwörter, Notiz, Tags, Status und Papierkorb, hat aber eigene Tabellen,
  * eine eigene Seite (activity.php), eigene Routen (/api/a/…, /api/activities/…) und eigene Connector-Werkzeuge.
  *
@@ -15,7 +15,7 @@ declare(strict_types=1);
  * bleiben für den Besitzer lesbar (zum Beispiel für einen Vorher-nachher-Vergleich).
  */
 
-const ACTIVITY_TYPES = ['target'];
+const ACTIVITY_TYPES = ['target', 'wordcloud'];
 const TARGET_MIN_ASPECTS = 2;
 const TARGET_MAX_ASPECTS = 12;
 const TARGET_COLOR_MODES = ['sector', 'scale'];
@@ -88,14 +88,22 @@ function target_default_config(): array {
     return ['aspects' => [], 'color_mode' => 'sector', 'require_all' => true];
 }
 
+function activity_default_config(string $type): array {
+    return $type === 'wordcloud' ? wordcloud_default_config() : target_default_config();
+}
+
 function activity_normalize(array $a): array {
     $a['id'] = (int)$a['id'];
     $a['owner_user_id'] = (int)($a['owner_user_id'] ?? 1);
     $a['round'] = (int)($a['round'] ?? 1);
     $a['revealed'] = (bool)(int)($a['revealed'] ?? 0);
     $a['deleted_at'] = $a['deleted_at'] ?? null;
-    $a['config'] = array_merge(target_default_config(), json_decode($a['config_json'] ?? '{}', true) ?: []);
-    $a['config']['require_all'] = (bool)$a['config']['require_all'];
+    $a['config'] = array_merge(activity_default_config((string)$a['type']), json_decode($a['config_json'] ?? '{}', true) ?: []);
+    if ($a['type'] === 'wordcloud') {
+        $a['config'] = wordcloud_cast_config($a['config']);
+    } else {
+        $a['config']['require_all'] = (bool)$a['config']['require_all'];
+    }
     $a['tags'] = wb_parse_tags($a['tags'] ?? '');
     unset($a['config_json']);
     $a['slug'] = $a['slug'] ?? null;
@@ -105,14 +113,20 @@ function activity_normalize(array $a): array {
 }
 
 /** Was die Seite der Klasse über die Aktivität wissen muss (ohne Notiz und Tags). */
+/** Die Felder der Konfiguration, die Seite, Schnittstelle und Connector zeigen (je nach Typ). */
+function activity_config_view(array $a): array {
+    if ($a['type'] === 'wordcloud') {
+        return ['max_terms' => $a['config']['max_terms'], 'live' => $a['config']['live'], 'ai' => $a['config']['ai']];
+    }
+    return ['aspects' => $a['config']['aspects'], 'color_mode' => $a['config']['color_mode'], 'require_all' => $a['config']['require_all']];
+}
+
 function activity_public(array $a, string $lang): array {
     return [
         'key' => $a['akey'],
         'type' => $a['type'],
         'name' => $a['name'],
-        'aspects' => $a['config']['aspects'],
-        'color_mode' => $a['config']['color_mode'],
-        'require_all' => $a['config']['require_all'],
+    ] + activity_config_view($a) + [
         'background' => $a['background'],
         'lang' => $lang,
         'status' => $a['status'],
@@ -146,9 +160,7 @@ function activity_owner_view(array $a): array {
         'slug' => $a['slug'],
         'type' => $a['type'],
         'name' => $a['name'],
-        'aspects' => $a['config']['aspects'],
-        'color_mode' => $a['config']['color_mode'],
-        'require_all' => $a['config']['require_all'],
+    ] + activity_config_view($a) + [
         'background' => $a['background'],
         'lang' => $a['lang'],
         'status' => $a['status'],
@@ -231,7 +243,9 @@ function activity_create(array $in): array {
     if (!in_array($type, ACTIVITY_TYPES, true)) throw new InvalidArgumentException('Unbekannter Typ. Erlaubt: ' . implode(', ', ACTIVITY_TYPES) . '.');
     $name = wb_clean_text($in['name'] ?? '', 200);
     if ($name === '') throw new InvalidArgumentException('Name fehlt.');
-    $config = target_normalize_config($in + ['aspects' => []], target_default_config());
+    $config = $type === 'wordcloud'
+        ? wordcloud_normalize_config($in, wordcloud_default_config())
+        : target_normalize_config($in + ['aspects' => []], target_default_config());
     $bg = in_array($in['background'] ?? '', wb_backgrounds(), true) ? $in['background'] : 'meer';
     $lang = in_array($in['lang'] ?? '', wb_langs(), true) ? $in['lang'] : (string)wb_config('default_lang', 'de');
     $slug = null;
@@ -263,8 +277,10 @@ function activity_update(array $a, array $in): array {
         if ($name === '') throw new InvalidArgumentException('Name fehlt.');
         $fields[] = 'name = ?'; $params[] = $name;
     }
-    if (array_key_exists('aspects', $in) || array_key_exists('color_mode', $in) || array_key_exists('require_all', $in)) {
-        $fields[] = 'config_json = ?'; $params[] = json_encode(target_normalize_config($in, $a['config']), JSON_UNESCAPED_UNICODE);
+    $configKeys = $a['type'] === 'wordcloud' ? WORDCLOUD_CONFIG_KEYS : ['aspects', 'color_mode', 'require_all'];
+    if (array_intersect($configKeys, array_keys($in))) {
+        $config = $a['type'] === 'wordcloud' ? wordcloud_normalize_config($in, $a['config']) : target_normalize_config($in, $a['config']);
+        $fields[] = 'config_json = ?'; $params[] = json_encode($config, JSON_UNESCAPED_UNICODE);
     }
     if (array_key_exists('background', $in) && in_array($in['background'], wb_backgrounds(), true)) { $fields[] = 'background = ?'; $params[] = $in['background']; }
     if (array_key_exists('lang', $in) && in_array($in['lang'], wb_langs(), true)) { $fields[] = 'lang = ?'; $params[] = $in['lang']; }
@@ -327,17 +343,21 @@ function activity_restore(array $a): array {
 
 function activity_delete_forever(array $a): void {
     db_exec('DELETE FROM activity_responses WHERE activity_id = ?', [$a['id']]);
+    db_exec('DELETE FROM activity_groupings WHERE activity_id = ?', [$a['id']]);
     db_exec('DELETE FROM activities WHERE id = ?', [$a['id']]);
 }
 
-/** Kopie der Struktur (Aspekte, Farben, Einstellungen, Notiz, Tags) ohne Antworten. */
+/** Kopie der Struktur (Aspekte bzw. Einstellungen der Wortwolke, Farben, Notiz, Tags) ohne Antworten. */
 function activity_duplicate(array $a, ?string $name = null): array {
-    return activity_create([
-        'type' => $a['type'],
-        'name' => $name !== null && trim($name) !== '' ? $name : $a['name'] . ' (Kopie)',
+    $config = $a['type'] === 'wordcloud' ? $a['config'] : [
         'aspects' => array_column($a['config']['aspects'], 'label'),
         'color_mode' => $a['config']['color_mode'],
         'require_all' => $a['config']['require_all'],
+    ];
+    return activity_create([
+        'type' => $a['type'],
+        'name' => $name !== null && trim($name) !== '' ? $name : $a['name'] . ' (Kopie)',
+    ] + $config + [
         'background' => $a['background'],
         'lang' => $a['lang'],
         'note' => $a['note'],
@@ -432,6 +452,7 @@ function target_response_get(array $a, string $uid): ?array {
 function activity_state(array $a, string $uid, ?string $since, bool $owner, ?int $round = null): array {
     $version = (string)$a['last_activity_at'];
     if ($round === null && $since !== null && $since === $version) return ['changed' => false, 'version' => $version];
+    if ($a['type'] === 'wordcloud') return wordcloud_state($a, $uid, $owner, $round);
     $viewRound = $owner && $round !== null && $round > 0 && $round !== $a['round'] ? $round : $a['round'];
     $past = $viewRound !== $a['round'];
     $revealed = $past || $a['revealed'];

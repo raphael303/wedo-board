@@ -33,7 +33,7 @@ if (!$board || $board['status'] === 'archived') {
     exit;
 }
 
-$name = wb_fantasy_name($uid, $board['bkey'], $board['lang']);
+$name = wb_guest_name($board, $uid);
 $blocked = !$owner && guest_block_active($uid, $board['id']) !== null;
 $boot = [
     'board' => board_public($board, $lang),

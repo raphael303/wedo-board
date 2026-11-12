@@ -295,6 +295,7 @@ function board_restore(array $b): array {
 function board_delete_forever(array $b): void {
     db_exec('DELETE FROM undo_log WHERE board_id = ?', [$b['id']]);
     try { db_exec('DELETE FROM board_summaries WHERE board_id = ?', [$b['id']]); } catch (PDOException $e) { /* Tabelle fehlt vor Migration 7 */ }
+    try { db_exec('DELETE FROM guest_names WHERE board_id = ?', [$b['id']]); } catch (PDOException $e) { /* Tabelle fehlt vor Migration 12 */ }
     db_exec('DELETE FROM reactions WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM comments WHERE board_id = ?', [$b['id']]);
     db_exec('DELETE FROM posts WHERE board_id = ?', [$b['id']]);

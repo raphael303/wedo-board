@@ -25,7 +25,7 @@ function guest_block_create(array $board, string $uid, string $displayName, bool
     if ($displayName === '') {
         $row = db_row('SELECT author_name FROM posts WHERE board_id = ? AND author_key = ? ORDER BY id DESC LIMIT 1', [$board['id'], $uid])
             ?? db_row('SELECT author_name FROM comments WHERE board_id = ? AND author_key = ? ORDER BY id DESC LIMIT 1', [$board['id'], $uid]);
-        $displayName = $row['author_name'] ?? wb_fantasy_name($uid, $board['bkey'], $board['lang']);
+        $displayName = $row['author_name'] ?? wb_guest_name($board, $uid);
     }
     // Eine bestehende gleichwertige Sperre wird nicht verdoppelt.
     $existing = db_row('SELECT * FROM guest_blocks WHERE guest_key = ? AND lifted_at IS NULL AND ' . ($allBoards ? 'board_id IS NULL' : 'board_id = ?'), $allBoards ? [$uid] : [$uid, $board['id']]);

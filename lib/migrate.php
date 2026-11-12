@@ -216,6 +216,17 @@ function db_migrations(): array {
                 KEY ix_created (created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        // Fantasienamen sind Figuren aus Büchern, Film und Fernsehen und pro Board eindeutig: Zuteilung pro Board und Browser-Schlüssel.
+        12 => [
+            "CREATE TABLE IF NOT EXISTS guest_names (
+                board_id INT UNSIGNED NOT NULL,
+                guest_key CHAR(32) NOT NULL,
+                name VARCHAR(80) NOT NULL,
+                created_at DATETIME(6) NOT NULL,
+                PRIMARY KEY (board_id, guest_key),
+                UNIQUE KEY ux_board_name (board_id, name)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        ],
     ];
 }
 

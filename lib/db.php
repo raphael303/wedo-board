@@ -276,6 +276,14 @@ function db_schema(): array {
             undone_at DATETIME(6) NULL,
             KEY ix_activity_round (activity_id, round, id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS guest_names (
+            board_id INT UNSIGNED NOT NULL,
+            guest_key CHAR(32) NOT NULL,
+            name VARCHAR(80) NOT NULL,
+            created_at DATETIME(6) NOT NULL,
+            PRIMARY KEY (board_id, guest_key),
+            UNIQUE KEY ux_board_name (board_id, name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS feedback (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             kind VARCHAR(16) NOT NULL DEFAULT 'bug',

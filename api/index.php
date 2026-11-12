@@ -115,13 +115,13 @@ function guest_api(string $method, array $p): never {
     $uid = wb_client_uid();
     $owner = wb_can('board.manage', $board);
     $lang = wb_resolve_lang($board['lang']);
-    $name = wb_fantasy_name($uid, $board['bkey'], $board['lang']);
     $blocked = !$owner && guest_block_active($uid, $board['id']) !== null;
     $sub = $p[2] ?? '';
     $id = (int)($p[3] ?? 0);
     $action = $p[4] ?? '';
 
     if ($method === 'GET' && $sub === '') {
+        $name = wb_guest_name($board, $uid);
         wb_json([
             'ok' => true,
             'board' => board_public($board, $lang),
@@ -175,7 +175,7 @@ function guest_api(string $method, array $p): never {
     $in = wb_read_json_body();
 
     if ($sub === 'posts' && $method === 'POST' && $id === 0) {
-        $post = post_create($board, $in, $uid, $name);
+        $post = post_create($board, $in, $uid, wb_guest_name($board, $uid));
         wb_json(['ok' => true, 'post' => post_public($board, $post, $uid, $owner), 'version' => board_touch($board['id'])], 201);
     }
     if ($sub === 'posts' && $id > 0) {
@@ -188,7 +188,7 @@ function guest_api(string $method, array $p): never {
             if ($body === '') wb_error('body_required', 422);
             $now = wb_now();
             $cid = db_insert('INSERT INTO comments (board_id, post_id, body, author_name, author_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [$board['id'], $id, $body, $name, $uid, $now, $now]);
+                [$board['id'], $id, $body, wb_guest_name($board, $uid), $uid, $now, $now]);
             $c = db_row('SELECT * FROM comments WHERE id = ?', [$cid]);
             wb_json(['ok' => true, 'comment' => comment_public($c, $uid, $owner), 'version' => board_touch($board['id'])], 201);
         }

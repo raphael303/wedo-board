@@ -42,8 +42,19 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$ board.php?slug=$1 [L,QSA]
 </IfModule>
 
-# Interne Dateien sperren
-<FilesMatch "^(config\.php|config\.example\.php|[^/]*\.md|\.gitignore)$">
+# Sicherheits-Kopfzeilen (seit 0.19.2). dev-router.php setzt für die lokale Entwicklung dieselben Werte;
+# tools/test.sh prüft, dass beide übereinstimmen. Die Content-Security-Policy ist vorerst nur «Report-Only»:
+# Verstösse erscheinen in der Browser-Konsole, blockiert wird nichts.
+<IfModule mod_headers.c>
+Header always set Strict-Transport-Security "max-age=31536000"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-Content-Type-Options "nosniff"
+Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+</IfModule>
+
+# Interne Dateien sperren (dev-router.php ist nur für php -S auf dem eigenen Rechner gedacht)
+<FilesMatch "^(config\.php|config\.example\.php|dev-router\.php|[^/]*\.md|\.gitignore)$">
   Require all denied
 </FilesMatch>
 RedirectMatch 404 ^/(lib|lang|vendor|tools|\.git|\.cyon)(/|$)

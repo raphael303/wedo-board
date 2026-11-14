@@ -33,6 +33,70 @@ function wb_admin_login(string $password): bool {
     return false;
 }
 
+/*
+ * Bremse gegen Passwort-Durchprobieren (seit 0.19.2). Fehlversuche zählen in rate_limits wie die Rückmeldungen,
+ * mit gehashten Schlüsseln: pro IP-Adresse (WB_LOGIN_IP_MAX in WB_LOGIN_IP_MINUTES) und für alle zusammen
+ * (WB_LOGIN_GLOBAL_MAX in 60 Minuten, gegen verteilte Angriffe). Ist eine Grenze erreicht, wird das Passwort gar
+ * nicht erst geprüft. Damit ein Angriff Raphael nicht aussperrt, gilt die globale Grenze nicht für Browser mit dem
+ * Cookie wb_known, das eine erfolgreiche Anmeldung setzt (HMAC mit dem Passwort-Hash, 180 Tage; ein neues
+ * Passwort macht alle diese Cookies ungültig).
+ */
+const WB_LOGIN_IP_MAX = 10;
+const WB_LOGIN_IP_MINUTES = 15;
+const WB_LOGIN_GLOBAL_MAX = 100;
+const WB_LOGIN_KNOWN_DAYS = 180;
+
+function wb_login_key(string $what): string {
+    // Gesalzen mit dem Passwort-Hash aus der Datenbank (geheim und in allen PHP-Prozessen gleich; app_secret aus
+    // config.php kann kurz nach dem Selbsteintrag je nach Prozess fehlen). Ein neues Passwort setzt die Zähler zurück.
+    return substr(hash('sha256', 'login|' . $what . '|' . (string)setting_get('admin_password_hash')), 0, 32);
+}
+
+function wb_login_count(string $key, int $minutes): int {
+    $minute = intdiv(time(), 60);
+    $row = db_row('SELECT COALESCE(SUM(cnt), 0) AS n FROM rate_limits WHERE author_key = ? AND minute > ?', [$key, $minute - $minutes]);
+    return (int)($row['n'] ?? 0);
+}
+
+/** null, wenn eine Anmeldung versucht werden darf, sonst 'ip' oder 'global'. */
+function wb_login_blocked(string $ip): ?string {
+    if ($ip !== '' && wb_login_count(wb_login_key('ip|' . $ip), WB_LOGIN_IP_MINUTES) >= WB_LOGIN_IP_MAX) return 'ip';
+    if (!wb_login_known_device() && wb_login_count(wb_login_key('all'), 60) >= WB_LOGIN_GLOBAL_MAX) return 'global';
+    return null;
+}
+
+function wb_login_record_failure(string $ip): void {
+    $minute = intdiv(time(), 60);
+    $keys = [wb_login_key('all')];
+    if ($ip !== '') $keys[] = wb_login_key('ip|' . $ip);
+    foreach ($keys as $k) {
+        db_exec('INSERT INTO rate_limits (author_key, minute, cnt) VALUES (?, ?, 1) ON DUPLICATE KEY UPDATE cnt = cnt + 1', [$k, $minute]);
+    }
+    if (random_int(0, 20) === 0) db_exec('DELETE FROM rate_limits WHERE minute < ?', [$minute - 61]);
+}
+
+function wb_login_known_sig(int $until): string {
+    return hash_hmac('sha256', 'known|' . $until, 'wb_known|' . (string)setting_get('admin_password_hash'));
+}
+
+function wb_login_known_device(): bool {
+    $c = (string)($_COOKIE['wb_known'] ?? '');
+    if (!preg_match('/^(\d{10})\.([0-9a-f]{64})$/', $c, $m)) return false;
+    return (int)$m[1] > time() && hash_equals(wb_login_known_sig((int)$m[1]), $m[2]);
+}
+
+function wb_login_mark_known_device(): void {
+    $until = time() + WB_LOGIN_KNOWN_DAYS * 86400;
+    $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    setcookie('wb_known', $until . '.' . wb_login_known_sig($until), [
+        'expires' => $until, 'path' => '/', 'secure' => $secure, 'httponly' => true, 'samesite' => 'Lax',
+    ]);
+}
+
+function wb_client_ip(): string {
+    return (string)($_SERVER['REMOTE_ADDR'] ?? '');
+}
+
 function wb_admin_logout(): void {
     wb_session_start();
     $_SESSION = [];

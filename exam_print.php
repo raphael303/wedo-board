@@ -103,6 +103,9 @@ $stats = $doc === 'stats' ? exam_question_stats($a) : [];
 
 $kicker = $docLabel . ($withSolutionsDoc && ($doc !== 'mine' || $studentShowsSolutions) ? ' · ' . t($showSol ? 'exam_print_with_solutions' : 'exam_print_without_solutions', $lang) : '');
 $accessLabel = preg_replace('~^https?://(www\.)?~i', '', (string)$a['url']);
+$colophonHtml = '<p class="colophon">' . e(t('exam_print_colophon', $lang, ['date' => date('j.n.Y'), 'app' => wb_app_name(), 'url' => $accessLabel])) . '</p>';
+// Bei Versuchen hängt der Schlussvermerk an der letzten Frage der letzten Person (siehe $renderAttempt, «tail»).
+$colophonDone = in_array($doc, ['attempt', 'all', 'mine'], true) && $people;
 $cssString = fn(string $s): string => '"' . str_replace(['\\', '"', "\n"], ['\\\\', '\\"', ' '], $s) . '"';
 $self = function (array $over) use ($doc): string {
     $q = array_merge(array_intersect_key($_GET, array_flip(['doc', 'attempt', 'solutions', 'no', 'lang'])), $over);
@@ -163,6 +166,9 @@ $renderAttempt = function (array $d, ?string $name, array $o) use ($lang, $typeL
     if (!$teacher && !$sol && $o['solutions_hidden']) echo '<p class="notice">' . e(t('exam_print_solutions_hidden', $lang)) . '</p>';
     echo '</div>';
     foreach ($d['answers'] as $i => $x) {
+        $isLast = $i === array_key_last($d['answers']);
+        // Schlussvermerk mit der letzten Frage zusammenhalten, damit er nie allein auf einer Seite steht.
+        if ($isLast && $o['tail'] !== '') echo '<div class="keep-end">';
         echo '<div class="q' . ($x['struck'] ? ' is-struck' : '') . '">';
         echo '<div class="q-head"><span class="q-num">' . e(t('exam_print_q', $lang, ['n' => $i + 1])) . '</span><span class="pill">' . e($typeLabel($x['type'])) . '</span><span class="pill">' . e($pts($x['points'])) . '</span>';
         if ($x['own']) echo '<span class="pill">' . e(t($x['excluded'] ? 'exam_print_own_excluded' : 'exam_print_own', $lang)) . '</span>';
@@ -204,7 +210,9 @@ $renderAttempt = function (array $d, ?string $name, array $o) use ($lang, $typeL
             }
         }
         echo '</div>';
+        if ($isLast && $o['tail'] !== '') echo $o['tail'] . '</div>';
     }
+    if (!$d['answers'] && $o['tail'] !== '') echo $o['tail'];
     echo '</section>';
 };
 ?>
@@ -315,16 +323,17 @@ $renderAttempt = function (array $d, ?string $name, array $o) use ($lang, $typeL
   </div>
   <?php if (!$people): ?><p class="empty"><?= e(t('exam_print_no_attempts', $lang)) ?></p><?php endif; ?>
   <?php endif; ?>
-  <?php foreach ($people as $i => $p) {
+  <?php $lastPerson = array_key_last($people); foreach ($people as $i => $p) {
       $renderAttempt($p['d'], $p['name'], [
           'teacher' => $owner, 'solutions' => $showSol, 'break' => $doc === 'all' && $i > 0,
+          'tail' => $i === $lastPerson ? $colophonHtml : '',
           'points' => $owner || $studentShowsResult,
           'solutions_hidden' => $doc === 'mine' && $cfg['student_pdf'] === 'with' && !$studentShowsSolutions,
       ]);
   } ?>
 <?php endif; ?>
 
-  <p class="colophon"><?= e(t('exam_print_colophon', $lang, ['date' => date('j.n.Y'), 'app' => wb_app_name(), 'url' => $accessLabel])) ?></p>
+  <?php if (!$colophonDone) echo $colophonHtml; ?>
 </main>
 <script>
 (function () {

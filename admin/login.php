@@ -4,16 +4,25 @@ require __DIR__ . '/_layout.php';
 
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Einfache Bremse gegen Durchprobieren
-    $_SESSION['login_tries'] = ($_SESSION['login_tries'] ?? 0) + 1;
-    if ($_SESSION['login_tries'] > 20) { sleep(2); }
-    if (wb_admin_login((string)($_POST['password'] ?? ''))) {
+    // Bremse gegen Durchprobieren: Fehlversuche pro IP-Adresse und global (lib/auth.php, rate_limits)
+    $ip = wb_client_ip();
+    $blocked = wb_login_blocked($ip);
+    if ($blocked !== null) {
+        http_response_code(429);
+        header('Retry-After: ' . ($blocked === 'ip' ? WB_LOGIN_IP_MINUTES * 60 : 3600));
+        $error = $blocked === 'ip'
+            ? 'Zu viele Fehlversuche von diesem Anschluss. Bitte in ' . WB_LOGIN_IP_MINUTES . ' Minuten wieder versuchen.'
+            : 'Zu viele Fehlversuche insgesamt. Die Anmeldung ist vorübergehend gesperrt; bitte später wieder versuchen.';
+    } elseif (wb_admin_login((string)($_POST['password'] ?? ''))) {
+        wb_login_mark_known_device();
         $next = (string)($_POST['next'] ?? wb_admin_url());
         if (!str_starts_with($next, wb_admin_url())) $next = wb_admin_url();
         header('Location: ' . $next);
         exit;
+    } else {
+        wb_login_record_failure($ip);
+        $error = 'Das Passwort stimmt nicht.';
     }
-    $error = 'Das Passwort stimmt nicht.';
 }
 admin_header('Anmelden');
 ?>

@@ -110,7 +110,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 case 'q_unstrike': exam_owner_question_update($act, $qid, ['status' => 'accepted']); admin_flash('Frage wieder aufgenommen. Alle Versuche sind neu gerechnet.'); break;
                 case 'q_check':
                     $r = exam_ai_check($act, 'all');
-                    admin_flash($r['checked'] . ' Fragen geprüft, ' . ($r['flagged'] === 1 ? 'eine mit Hinweisen' : $r['flagged'] . ' mit Hinweisen') . ' · ' . $r['model'] . '. Geändert wurde nichts.');
+                    // Hinweise getrennt zählen: eingereichte Fragen zuerst, angenommene nur als Zusatz (abgeschwächt angezeigt).
+                    $flagSub = 0; $flagAcc = 0;
+                    foreach (db_all('SELECT status, check_json FROM exam_questions WHERE activity_id = ? AND deleted_at IS NULL AND check_json IS NOT NULL', [$act['id']]) as $cr) {
+                        $cj = json_decode((string)$cr['check_json'], true);
+                        if (empty($cj['issues'])) continue;
+                        if ($cr['status'] === 'submitted') $flagSub++; else $flagAcc++;
+                    }
+                    admin_flash($r['checked'] . ' Fragen geprüft: ' . ($flagSub === 1 ? 'eine eingereichte' : $flagSub . ' eingereichte') . ' mit Hinweisen'
+                        . ($flagAcc ? ', dazu ' . ($flagAcc === 1 ? 'eine angenommene' : $flagAcc . ' angenommene') . ' (zugeklappt)' : '')
+                        . ' · ' . $r['model'] . '. Geändert wurde nichts.');
                     header('Location: ' . $back('#fragen'));
                     exit;
                 case 'ai_grade':
@@ -618,11 +627,19 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
           <?php endforeach; ?>
         </ul>
       <?php endif; ?>
-      <?php if (!empty($q['check']['issues'])): ?>
-        <ul class="exam-check">
-          <?php foreach ($q['check']['issues'] as $is): ?><li class="exam-check-<?= e($is['kind']) ?>">✨ <strong><?= e($checkKind[$is['kind']] ?? $is['kind']) ?>:</strong> <?= e($is['text']) ?><?= $is['duplicate_of'] ? ' <a href="#q' . (int)$is['duplicate_of'] . '">(siehe Frage)</a>' : '' ?></li><?php endforeach; ?>
-        </ul>
-      <?php elseif ($q['check'] !== null): ?><p class="exam-check-ok muted">✨ unauffällig (<?= e((string)$q['check']['at']) ?>)</p><?php endif; ?>
+      <?php $checkIssues = $q['check']['issues'] ?? []; $checkSoft = $q['status'] !== 'submitted';
+            $checkList = function (array $issues, string $cls) use ($checkKind): string {
+                $h = '<ul class="' . $cls . '">';
+                foreach ($issues as $is) $h .= '<li class="exam-check-' . e($is['kind']) . '">✨ <strong>' . e($checkKind[$is['kind']] ?? $is['kind']) . ':</strong> ' . e($is['text']) . ($is['duplicate_of'] ? ' <a href="#q' . (int)$is['duplicate_of'] . '">(siehe Frage)</a>' : '') . '</li>';
+                return $h . '</ul>';
+            }; ?>
+      <?php if ($checkIssues && !$checkSoft): ?>
+        <?= $checkList($checkIssues, 'exam-check') ?>
+      <?php elseif ($checkIssues): /* schon beurteilt: getrennt, zugeklappt und abgeschwächt */ ?>
+        <details class="exam-check-soft"><summary>✨ <?= count($checkIssues) === 1 ? '1 Hinweis' : count($checkIssues) . ' Hinweise' ?> aus «Fragen prüfen», Frage schon <?= $q['status'] === 'accepted' ? 'angenommen' : 'beurteilt' ?></summary>
+          <?= $checkList($checkIssues, 'exam-check') ?>
+        </details>
+      <?php elseif ($q['check'] !== null && !$checkSoft): ?><p class="exam-check-ok muted">✨ unauffällig (<?= e((string)$q['check']['at']) ?>)</p><?php endif; ?>
       <div class="action-grid">
         <?php if ($q['deleted_at']): ?>
           <?= $post('q_restore', 'Wiederherstellen', 'btn-ghost', '', '', $q['id']) ?>

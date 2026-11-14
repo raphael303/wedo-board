@@ -331,6 +331,9 @@ R=$(curl -s "${AUTH[@]}" "${JH[@]}" -X PATCH -d '{"prompt":"Wie viele Beine hat 
 [ "$(echo "$R" | jq -r '.question.check')" = null ] && ok 'inhaltliche Änderung löscht den Hinweis' || bad "check nach Änderung: $R"
 R=$(MCP '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"check_exam_questions","arguments":{"exam":"'"$Z"'"}}}')
 echo "$R" | jq -r '.result.content[0].text' | jq -e '.checked == 4' >/dev/null && ok 'Connector: check_exam_questions' || bad "check_exam_questions: $R"
+curl -s -b "$TMP/zg" -c "$TMP/zg" "$BASE/api/a/$Z" >/dev/null
+curl -s -b "$TMP/zg" -c "$TMP/zg" "${JH[@]}" -d '{"type":"open","prompt":"Kurz?","solution":"Ja."}' "$BASE/api/a/$Z/questions" >/dev/null
+curl -s "${AUTH[@]}" "${JH[@]}" -d '{}' "$ZA/questions/check" >/dev/null
 curl -s "${AUTH[@]}" "${JH[@]}" -X PATCH -d '{"ai":false}' "$ZA" >/dev/null
 [ "$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{}' "$ZA/questions/check" | jq -r '.code')" = ai_unavailable_exam_off ] && ok 'KI-Schalter der Prüfung wird beachtet' || bad 'ai off'
 curl -s -c "$TMP/admin" -b "$TMP/admin" -d "password=testpass123" "$BASE/lehrerzimmer/login.php" >/dev/null
@@ -339,6 +342,11 @@ for pg in "exam.php?key=$Y" "exam.php?key=$Y&attempt=$YAA" "exam.php?key=$Y&grad
   grep -q 'exam-admin\|Bewerten pro Frage' "$TMP/page.html" && ! grep -qE '<b>(Warning|Fatal error|Notice|Deprecated)</b>|Uncaught' "$TMP/page.html" || bad "Bibliothek $pg"
 done
 ok 'Bibliotheksseiten für KI, Versuch, Bewerten pro Frage und Fragen prüfen ohne PHP-Fehler'
+curl -s -b "$TMP/admin" "$BASE/lehrerzimmer/exam.php?key=$Z" > "$TMP/zpage.html"
+SOFT=$(grep -c 'class="exam-check-soft"' "$TMP/zpage.html" || true)
+HARD=$(grep -o '<ul class="exam-check">' "$TMP/zpage.html" | wc -l)
+[ "$SOFT" -ge 2 ] && [ "$HARD" = $((SOFT + 1)) ] && grep -q 'Frage schon angenommen' "$TMP/zpage.html" && ! grep -q 'unauffällig' "$TMP/zpage.html" \
+  && ok "Fragen prüfen: Hinweise zu angenommenen Fragen zugeklappt ($SOFT), zur eingereichten offen" || bad "Hinweise in der Bibliothek: soft=$SOFT listen=$HARD"
 
 echo '9d. Ausgaben als PDF und CSV (G4)'
 W=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"exam","name":"Ausgaben-Prüfung Äpfel","quota_max":0,"grade":{"on":true},"note":"Test G4","tags":"test"}' "$BASE/api/activities" | jq -r '.activity.key')
@@ -372,6 +380,8 @@ WAID=$(curl -s "${AUTH[@]}" "$WA/attempts" | jq -r --arg n "$WN1" '.attempts[] |
 ! grep -q GEHEIMSATZ "$TMP/p-sheet.html" && grep -q GEHEIMSATZ "$TMP/p-key.html" && ok 'Aufgabenblatt ohne, Lösungsschlüssel mit Lösungssatz' || bad 'Lösungen auf Aufgabenblatt oder Schlüssel'
 ! grep -q 'Missglückte Zusatzfrage' "$TMP/p-sheet.html" && grep -q 'gestrichen, zählt nicht' "$TMP/p-key.html" && grep -q 'gestrichen, zählt nicht' "$TMP/p-all.html" && ok 'gestrichene Frage: fehlt auf dem Blatt, sonst als gestrichen markiert' || bad 'gestrichene Frage in den Ausgaben'
 grep -qF "$WN1" "$TMP/p-all.html" && grep -qF "$WN2" "$TMP/p-all.html" && grep -qF "$WN1" "$TMP/p-overview.html" && [ "$(grep -o '<section class="person' "$TMP/p-all.html" | wc -l)" = 2 ] && ok 'Sammelausgabe und Übersicht mit beiden Fantasienamen' || bad 'Namen in Sammelausgabe/Übersicht'
+[ "$(grep -oE '<section class="person[^"]*"|<div class="keep-end">|class="colophon"|</section>' "$TMP/p-all.html" | tail -3 | tr '\n' ' ')" = '<div class="keep-end"> class="colophon" </section> ' ] \
+  && ok 'Sammelausgabe: Schlussvermerk mit der letzten Frage zusammengehalten' || bad 'Schlussvermerk der Sammelausgabe'
 grep -q '«Zürich» gewählt: 1' "$TMP/p-stats.html" && ok 'Fragenauswertung nennt den häufigsten Fehler' || bad 'häufigste Fehler'
 [ "$(code -b "$TMP/admin" "$WP?doc=gibtsnicht")" = 400 ] && [ "$(code -b "$TMP/admin" "$WP?doc=attempt&attempt=999999")" = 404 ] && ok 'unbekannte Ausgabe 400, unbekannter Versuch 404' || bad 'Fehlercodes Druckseite'
 [ "$(code -b "$TMP/w1" "$WP")" = 403 ] && ok 'student_pdf off: 403 für Lernende' || bad 'student_pdf off'
@@ -419,6 +429,32 @@ grep -q 'id="ausgaben"' "$TMP/page.html" && grep -q 'name="student_pdf"' "$TMP/p
 echo '10. Migration 13 von Schema 12'
 OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
 [ "$OUT" = "1 13 3" ] && ok 'Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
+
+echo '11. Sicherheit: Kopfzeilen, Sperren, Login-Bremse'
+curl -sI "$BASE/" > "$TMP/hdr"
+for h in Strict-Transport-Security Referrer-Policy X-Frame-Options X-Content-Type-Options Content-Security-Policy-Report-Only; do
+  grep -qi "^$h:" "$TMP/hdr" || bad "Kopfzeile $h fehlt"
+done
+HT=$(grep -oE '^Header always set [A-Za-z-]+ "[^"]*"' .htaccess | sed -E 's/^Header always set ([A-Za-z-]+) "(.*)"$/\1: \2/' | sort)
+DR=$(grep -E '^(Strict-Transport-Security|Referrer-Policy|X-Frame-Options|X-Content-Type-Options|Content-Security-Policy-Report-Only):' "$TMP/hdr" | tr -d '\r' | sort)
+[ -n "$HT" ] && [ "$HT" = "$DR" ] && ok 'Sicherheits-Kopfzeilen gesetzt, .htaccess und dev-router.php stimmen überein' || bad "Kopfzeilen weichen ab: .htaccess=[$HT] dev-router=[$DR]"
+[ "$(code "$BASE/dev-router.php")" = 404 ] && grep -q 'dev-router\\.php' .htaccess && ok 'dev-router.php gesperrt (lokal 404, Regel in .htaccess)' || bad 'dev-router.php nicht gesperrt'
+LG="$BASE/lehrerzimmer/login.php"
+php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits");'
+for i in $(seq 10); do curl -s -o /dev/null -b "$TMP/lj" -c "$TMP/lj" -d 'password=falsch' "$LG"; done
+R=$(curl -s -o "$TMP/lg.html" -w '%{http_code}' -d 'password=testpass123' "$LG")
+[ "$R" = 429 ] && grep -q 'Zu viele Fehlversuche von diesem Anschluss' "$TMP/lg.html" && ok 'nach 10 Fehlversuchen pro IP: 429, auch mit richtigem Passwort' || bad "Login-Grenze pro IP: $R"
+N=$(php -r 'require "lib/bootstrap.php"; echo (int)db_row("SELECT COUNT(*) AS n FROM rate_limits WHERE author_key REGEXP \"^[0-9a-f]{32}$\"")["n"];')
+[ "$N" -ge 2 ] && ! php -r 'require "lib/bootstrap.php"; foreach (db_all("SELECT author_key FROM rate_limits") as $r) if (str_contains($r["author_key"], "127.0.0.1")) exit(0); exit(1);' && ok 'Zähler in rate_limits mit gehashten Schlüsseln' || bad "rate_limits-Schlüssel ($N)"
+php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits"); for ($i = 0; $i < WB_LOGIN_GLOBAL_MAX; $i++) wb_login_record_failure("10.0.0." . ($i % 200));'
+R=$(curl -s -o "$TMP/lg.html" -w '%{http_code}' -d 'password=testpass123' "$LG")
+[ "$R" = 429 ] && grep -q 'Fehlversuche insgesamt' "$TMP/lg.html" && ok 'globale Grenze: 429 für unbekannte Browser' || bad "globale Login-Grenze: $R"
+grep -q wb_known "$TMP/admin" && R=$(curl -s -o /dev/null -w '%{http_code}' -b "$TMP/admin" -d 'password=testpass123' "$LG") && [ "$R" = 302 ] && ok 'globale Grenze gilt nicht für den bekannten Browser (Cookie wb_known)' || bad "bekannter Browser bei globaler Grenze: ${R:-ohne Cookie}"
+R=$(curl -s -o /dev/null -w '%{http_code}' -b 'wb_known=9999999999.0000000000000000000000000000000000000000000000000000000000000000' -d 'password=testpass123' "$LG")
+[ "$R" = 429 ] && ok 'gefälschtes wb_known wird nicht anerkannt' || bad "gefälschtes Cookie: $R"
+php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits");'
+R=$(curl -s -o /dev/null -w '%{http_code}' -c "$TMP/lj2" -d 'password=testpass123' "$LG")
+[ "$R" = 302 ] && grep -q wb_known "$TMP/lj2" && ok 'ohne Fehlversuche: Anmeldung 302 und Cookie wb_known' || bad "Anmeldung nach Zurücksetzen: $R"
 
 if grep -qiE 'fatal|parse error' "$TMP/server.log"; then bad 'PHP-Fehler im Serverprotokoll'; grep -iE 'fatal|parse error' "$TMP/server.log" | head -5; fi
 echo

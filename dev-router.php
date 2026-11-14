@@ -2,6 +2,14 @@
 // Nur für die lokale Entwicklung: php -S localhost:8080 dev-router.php
 // Bildet die Regeln aus .htaccess nach. Domains stehen nur in config.php (base_url, legacy_hosts);
 // die Weiterleitung früherer Hosts macht lib/bootstrap.php, auch hier (Test: curl -H 'Host: alt.example' …).
+// Dieselben Sicherheits-Kopfzeilen wie in .htaccess (tools/test.sh vergleicht beide).
+foreach ([
+    'Strict-Transport-Security' => 'max-age=31536000',
+    'Referrer-Policy' => 'strict-origin-when-cross-origin',
+    'X-Frame-Options' => 'SAMEORIGIN',
+    'X-Content-Type-Options' => 'nosniff',
+    'Content-Security-Policy-Report-Only' => "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'",
+] as $h => $v) header($h . ': ' . $v);
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 if (preg_match('~^/b/([a-z0-9]{16})/export/?$~', $uri, $m)) {
     $_GET['key'] = $m[1];
@@ -42,7 +50,7 @@ if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$~', $uri, $m) && !is_dir(
     require __DIR__ . '/board.php';
     return true;
 }
-if (preg_match('~^/(lib|lang|vendor|tools|\.git|\.cyon)(/|$)~', $uri) || preg_match('~^/(config.*\.php|.*\.md)$~', $uri)) {
+if (preg_match('~^/(lib|lang|vendor|tools|\.git|\.cyon)(/|$)~', $uri) || preg_match('~^/(config.*\.php|dev-router\.php|.*\.md)$~', $uri)) {
     http_response_code(404);
     return true;
 }

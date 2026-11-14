@@ -43,7 +43,7 @@ RewriteRule ^([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$ board.php?slug=$1 [L,QSA]
 <FilesMatch "^(config\.php|config\.example\.php|[^/]*\.md|\.gitignore)$">
   Require all denied
 </FilesMatch>
-RedirectMatch 404 ^/(lib|lang|vendor|\.git)(/|$)
+RedirectMatch 404 ^/(lib|lang|vendor|tools|\.git|\.cyon)(/|$)
 
 # Uploads: 10 MB
 <IfModule mod_php.c>

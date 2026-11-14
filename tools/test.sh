@@ -76,6 +76,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 [ "$(code "$BASE/admin/")" = 404 ] && ok '/admin/ 404 bei eigenem Pfad' || bad '/admin/ sollte 404 sein'
 [ "$(code "$BASE/lehrerzimmer/login.php")" = 200 ] && ok 'Bibliothek unter admin_path' || bad 'Bibliothek unter admin_path'
 [ "$(code -H 'Host: alt.example' "$BASE/abcde")" = 301 ] && ok 'frühere Domain leitet um' || bad 'Weiterleitung legacy_hosts'
+[ "$(code "$BASE/tools/test.sh")" = 404 ] && ok 'tools/ gesperrt' || bad 'tools/ sollte 404 sein'
 
 echo '5. Schnittstelle'
 curl -s "${AUTH[@]}" "$BASE/api/me" | jq -e '.owner == true' >/dev/null && ok 'GET /api/me als Besitzer' || bad '/api/me'

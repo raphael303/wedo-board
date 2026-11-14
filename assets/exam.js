@@ -1,4 +1,5 @@
-/* Gemeinschaftsprüfung (Seite einer Aktivität vom Typ exam): Fragen beisteuern (G1), Prüfung lösen, Ergebnis, Lösungen und Rangliste (G2) */
+/* Gemeinschaftsprüfung (Seite einer Aktivität vom Typ exam): Fragen beisteuern (G1), Prüfung lösen, Ergebnis, Lösungen und Rangliste (G2),
+   KI-Korrektur nach der Abgabe anstossen und gestrichene Fragen zeigen (G3) */
 (function () {
   'use strict';
   const W = window.WT;
@@ -248,6 +249,7 @@
       runKey = '';
       applyState(r.state);
       notice(auto ? t('exam_auto_submitted') : t('exam_submitted_ok'), false, 4000);
+      maybeGrade(true);
     } catch (e) {
       notice(e.message, true, 5000);
       refresh();
@@ -264,6 +266,22 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) { notice(e.message, true, 5000); }
     finally { busy = false; }
+  }
+
+  /* KI-Korrektur: Nach der Abgabe stösst die Seite die Bewertung der offenen Fragen an. Der Server bewertet alle
+     noch offenen Antworten der Prüfung auf einmal und lässt gleichzeitige Läufe nicht zu; solange der eigene
+     Versuch wartet, fragt die Seite höchstens alle 15 Sekunden erneut. */
+  let gradeInFlight = false, lastGrade = 0;
+  async function maybeGrade(now) {
+    const att = state.attempt;
+    if (me.owner || !att || att.status !== 'submitted' || !att.ai_pending || gradeInFlight) return;
+    if (!now && Date.now() - lastGrade < 15000) return;
+    gradeInFlight = true; lastGrade = Date.now();
+    try {
+      const r = await call('/attempt/grade', {});
+      if (r.state) applyState(r.state);
+    } catch (e) { /* nächster Versuch beim Polling */ }
+    finally { gradeInFlight = false; lastGrade = Date.now(); }
   }
 
   function scoreText(r) {
@@ -365,7 +383,7 @@
       });
       box.appendChild(ul);
     }
-    if (pts !== undefined) box.appendChild(el('p', 'exam-q-points', pts === null ? t('exam_points_pending') : t('exam_points_got', { s: fmtNum(pts), m: fmtNum(q.points) })));
+    if (pts !== undefined && !q.struck) box.appendChild(el('p', 'exam-q-points', pts === null ? t('exam_points_pending') : t('exam_points_got', { s: fmtNum(pts), m: fmtNum(q.points) })));
     return box;
   }
 
@@ -383,6 +401,7 @@
     } else {
       head.appendChild(el('p', 'exam-lead', t('exam_done_lead')));
       if (att.result) head.appendChild(el('p', 'exam-score', scoreText(att.result)));
+      else if (att.ai_pending) head.appendChild(el('p', 'exam-sub exam-ai-pending', t('exam_ai_pending')));
       else head.appendChild(el('p', 'exam-sub', t('exam_result_later')));
       if (!att.solutions) head.appendChild(el('p', 'exam-hint', t('exam_solutions_later')));
       if (state.can_retry) {
@@ -402,9 +421,11 @@
       h.appendChild(el('span', 'exam-pill type', t('exam_type_' + q.type)));
       h.appendChild(el('span', 'exam-pill', t('exam_points', { n: fmtNum(q.points) })));
       if (q.own) h.appendChild(el('span', 'exam-pill own', q.excluded ? t('exam_own_excluded') : t('exam_own')));
+      if (q.struck) { h.appendChild(el('span', 'exam-pill struck', t('exam_struck'))); li.classList.add('is-struck'); }
       li.appendChild(h);
       li.appendChild(el('p', 'exam-q-prompt', q.prompt));
-      li.appendChild(running ? questionInput(q) : questionReview(q, att));
+      // Gestrichene Fragen lassen sich nicht mehr beantworten; nach der Abgabe erscheinen sie wie die anderen.
+      if (!(running && q.struck)) li.appendChild(running ? questionInput(q) : questionReview(q, att));
       list.appendChild(li);
     });
     frag.appendChild(list);
@@ -414,6 +435,7 @@
       b.type = 'button';
       b.addEventListener('click', () => {
         const open = att.questions.filter((q) => {
+          if (q.struck) return false;
           const v = local[q.id];
           if (q.type === 'open') return !(typeof v === 'string' && v.trim());
           if (q.type === 'multi') return !(Array.isArray(v) && v.length);
@@ -470,7 +492,7 @@
   function renderRun() {
     if (me.owner) { runKey = ''; renderOwnerRun(); return; }
     const att = state.attempt;
-    const key = att ? [att.no, att.status, !!att.result, !!att.solutions, state.can_retry, state.phase, JSON.stringify(state.ranking || null)].join('|') : 'none|' + state.may_start + '|' + state.phase;
+    const key = att ? [att.no, att.status, !!att.result, !!att.solutions, !!att.ai_pending, att.questions.filter((q) => q.struck).map((q) => q.id).join(','), state.can_retry, state.phase, JSON.stringify(state.ranking || null)].join('|') : 'none|' + state.may_start + '|' + state.phase;
     if (att && att.status === 'in_progress') {
       setDeadline(att.seconds_left);
       if (key === runKey) return; // nichts neu zeichnen, solange jemand schreibt
@@ -481,6 +503,7 @@
     } else {
       setDeadline(null);
     }
+    maybeGrade(false);
     if (key === runKey) return;
     runKey = key;
     run.textContent = '';

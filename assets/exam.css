@@ -96,6 +96,10 @@
 .exam-att-head .exam-sub, .exam-att-head .exam-hint, .exam-att-head .exam-score { margin-top: 8px; }
 .exam-pill.practice { margin-bottom: 8px !important; background: #e3ecff; color: #234ba8; }
 .exam-pill.own { background: #efe4ff; color: #5b2aa8; }
+.exam-pill.struck { background: #e6e6ea; color: #4a4f57; }
+.exam-run-q.is-struck .exam-q-prompt { text-decoration: line-through; opacity: 0.7; }
+.exam-ai-pending::before { content: ''; display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.5em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -0.1em; animation: exam-spin 0.9s linear infinite; }
+@keyframes exam-spin { to { transform: rotate(360deg); } }
 .exam-att-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .exam-timer {
   font-variant-numeric: tabular-nums; font-weight: 700; padding: 4px 12px; border-radius: 999px;

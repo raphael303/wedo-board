@@ -168,6 +168,13 @@ h3 { font-size: 0.95rem; margin: 18px 0 6px; }
 .exam-admin-head .exam-st-submitted { background: #fff1c9; color: #7a5600; }
 .exam-admin-head .exam-st-accepted { background: #d6f5e3; color: #0f6b3e; }
 .exam-admin-head .exam-st-rejected { background: #fde2e1; color: #9b1c1c; }
+.exam-admin-head .exam-st-struck { background: #e6e6ea; color: #4a4f57; }
+.exam-admin-q.st-struck .exam-admin-prompt { text-decoration: line-through; color: #6b7178; }
+.exam-ai-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: #eef2ff; color: #2b3a7a; overflow-wrap: anywhere; }
+.exam-check { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.exam-check li { padding: 8px 12px; border-radius: 8px; background: #fff5db; color: #6b4a00; overflow-wrap: anywhere; }
+.exam-check li.exam-check-solution { background: #fde2e1; color: #8a1c1c; }
+.exam-check-ok { margin: 8px 0 0; font-size: 0.9em; }
 .exam-admin-prompt { font-weight: 600; margin: 10px 0 6px; overflow-wrap: anywhere; }
 .exam-admin-opts { list-style: none; margin: 0 0 10px; padding: 0; }
 .exam-admin-opts li { padding: 2px 0; overflow-wrap: anywhere; }

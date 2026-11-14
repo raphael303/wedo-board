@@ -307,24 +307,24 @@ function exam_question_view(array $a, array $q, bool $forOwner = true): array {
 }
 
 /**
- * Fragen einer Prüfung in Prüfungsreihenfolge: angenommene nach Position, dann eingereichte, dann abgelehnte.
- * $status: all (ohne gelöschte), submitted, accepted, rejected, trash.
+ * Fragen einer Prüfung in Prüfungsreihenfolge: angenommene und gestrichene nach Position, dann eingereichte,
+ * dann abgelehnte. $status: all (ohne gelöschte), submitted, accepted, struck, rejected, trash.
  */
 function exam_questions(array $a, string $status = 'all'): array {
     $where = ['activity_id = ?'];
     $params = [$a['id']];
     if ($status === 'trash') $where[] = 'deleted_at IS NOT NULL';
     else $where[] = 'deleted_at IS NULL';
-    if (in_array($status, ['submitted', 'accepted', 'rejected'], true)) { $where[] = 'status = ?'; $params[] = $status; }
-    $rows = db_all('SELECT * FROM exam_questions WHERE ' . implode(' AND ', $where) . " ORDER BY FIELD(status, 'accepted', 'submitted', 'rejected'), position, id", $params);
+    if (in_array($status, ['submitted', 'accepted', 'struck', 'rejected'], true)) { $where[] = 'status = ?'; $params[] = $status; }
+    $rows = db_all('SELECT * FROM exam_questions WHERE ' . implode(' AND ', $where) . " ORDER BY CASE WHEN status IN ('accepted', 'struck') THEN 0 WHEN status = 'submitted' THEN 1 ELSE 2 END, position, id", $params);
     return array_map(fn($q) => exam_question_view($a, $q), $rows);
 }
 
 function exam_counts(array $a): array {
     $rows = db_all('SELECT status, COUNT(*) AS n FROM exam_questions WHERE activity_id = ? AND deleted_at IS NULL GROUP BY status', [$a['id']]);
-    $c = ['submitted' => 0, 'accepted' => 0, 'rejected' => 0];
+    $c = ['submitted' => 0, 'accepted' => 0, 'rejected' => 0, 'struck' => 0];
     foreach ($rows as $r) $c[$r['status']] = (int)$r['n'];
-    $c['total'] = $c['submitted'] + $c['accepted'] + $c['rejected'];
+    $c['total'] = $c['submitted'] + $c['accepted'] + $c['rejected'] + $c['struck'];
     $c['contributors'] = (int)(db_row("SELECT COUNT(DISTINCT guest_key) AS n FROM exam_questions WHERE activity_id = ? AND deleted_at IS NULL AND guest_key <> ?", [$a['id'], WB_OWNER_KEY])['n'] ?? 0);
     $c['points'] = 0.0;
     foreach (exam_questions($a, 'accepted') as $q) $c['points'] += $q['points'];
@@ -423,6 +423,7 @@ function exam_owner_question_update(array $a, int $id, array $in): array {
         $changed = $q['type'] !== $row['type'] || $q['prompt'] !== $row['prompt'] || (string)$q['solution'] !== (string)$row['solution_text']
             || json_encode($q['options'], JSON_UNESCAPED_UNICODE) !== (string)$row['options_json'];
         if ($changed && $row['guest_key'] !== WB_OWNER_KEY) { $fields[] = 'edited_at = ?'; $params[] = wb_now(); }
+        if ($changed) $fields[] = 'check_json = NULL'; // Hinweise von «Fragen prüfen» gelten nicht mehr
     }
     if (array_key_exists('points', $in)) {
         if ($in['points'] === null || $in['points'] === '') { $fields[] = 'points = NULL'; }
@@ -436,11 +437,14 @@ function exam_owner_question_update(array $a, int $id, array $in): array {
         if ($in['shuffle_options'] === null || $in['shuffle_options'] === '') $fields[] = 'shuffle_options = NULL';
         else { $fields[] = 'shuffle_options = ?'; $params[] = filter_var($in['shuffle_options'], FILTER_VALIDATE_BOOLEAN) ? 1 : 0; }
     }
-    if (array_key_exists('status', $in)) {
-        if (!in_array($in['status'], ['submitted', 'accepted', 'rejected'], true)) throw new InvalidArgumentException('Status ist submitted, accepted oder rejected.');
+    if (array_key_exists('status', $in) && $in['status'] !== $row['status']) {
+        if (!in_array($in['status'], ['submitted', 'accepted', 'rejected', 'struck'], true)) throw new InvalidArgumentException('Status ist submitted, accepted, rejected oder struck.');
+        // Streichen nur bei angenommenen Fragen; eine gestrichene Frage wird nur wieder aufgenommen (accepted).
+        if ($in['status'] === 'struck' && $row['status'] !== 'accepted') throw new InvalidArgumentException('exam_err_not_accepted');
+        if ($row['status'] === 'struck' && $in['status'] !== 'accepted') throw new InvalidArgumentException('exam_err_struck');
         $fields[] = 'status = ?'; $params[] = $in['status'];
-        // Neu angenommene Fragen kommen ans Ende der Prüfung.
-        if ($in['status'] === 'accepted' && $row['status'] !== 'accepted' && !array_key_exists('position', $in)) { $fields[] = 'position = ?'; $params[] = exam_next_position($a); }
+        // Neu angenommene Fragen kommen ans Ende der Prüfung; eine wieder aufgenommene behält ihren Platz.
+        if ($in['status'] === 'accepted' && $row['status'] !== 'struck' && !array_key_exists('position', $in)) { $fields[] = 'position = ?'; $params[] = exam_next_position($a); }
     }
     if (array_key_exists('position', $in) && is_numeric($in['position'])) { $fields[] = 'position = ?'; $params[] = (int)$in['position']; }
     if (!$fields) return exam_question_view($a, $row);
@@ -552,8 +556,8 @@ function exam_markdown(array $a, bool $withSubmitted = true): string {
         . $counts['submitted'] . ' eingereicht, ' . $counts['rejected'] . ' abgelehnt, von ' . $counts['contributors'] . ' Personen. '
         . 'Höchstens ' . $c['quota_max'] . ' Fragen pro Person' . ($c['quota_min'] ? ', mindestens ' . $c['quota_min'] : '') . '. Punkte total ' . $counts['points'] . ".\n";
     if (!empty($a['note'])) $out .= "\nNotiz: " . $a['note'] . "\n";
-    foreach (['accepted' => 'Angenommen (Prüfungsreihenfolge)', 'submitted' => 'Eingereicht, noch nicht beurteilt', 'rejected' => 'Abgelehnt'] as $st => $title) {
-        if ($st !== 'accepted' && !$withSubmitted) continue;
+    foreach (['accepted' => 'Angenommen (Prüfungsreihenfolge)', 'struck' => 'Gestrichen (zählt nicht)', 'submitted' => 'Eingereicht, noch nicht beurteilt', 'rejected' => 'Abgelehnt'] as $st => $title) {
+        if (!in_array($st, ['accepted', 'struck'], true) && !$withSubmitted) continue;
         $qs = exam_questions($a, $st);
         if (!$qs) continue;
         $out .= "\n## " . $title . "\n";
@@ -564,6 +568,7 @@ function exam_markdown(array $a, bool $withSubmitted = true): string {
                 $out .= '   - [' . $mark . '] ' . $o['text'] . "\n";
             }
             if ($q['type'] === 'open') $out .= '   Lösung: ' . $q['solution'] . "\n";
+            foreach ($q['check']['issues'] ?? [] as $is) $out .= '   ✨ Hinweis (' . $is['kind'] . ($is['duplicate_of'] ? ', wie #' . $is['duplicate_of'] : '') . '): ' . $is['text'] . "\n";
         }
     }
     return $out;

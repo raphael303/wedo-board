@@ -25,6 +25,8 @@ function ai_fake_structured(array $credential, string $system, string $user, arr
     }
     if (($options['tool_name'] ?? '') === 'zusammenfassung') return ai_fake_summary($credential, $system, $user, $options);
     if (($options['tool_name'] ?? '') === 'wortwolke') return ai_fake_wordcloud($user);
+    if (($options['tool_name'] ?? '') === 'korrektur') return ai_fake_exam_grade($user);
+    if (($options['tool_name'] ?? '') === 'fragenpruefung') return ai_fake_exam_check($user);
     $posts = [];
     if (preg_match('~<beitraege>(.*?)</beitraege>~su', $user, $m)) {
         foreach (preg_split('/\n+/', trim($m[1])) as $line) {
@@ -162,4 +164,61 @@ function ai_fake_wordcloud(string $user): array {
     }
     if ($groups) $groups[0]['members'] = array_merge($groups[0]['members'], [9999, $groups[0]['members'][0]]);
     return ['data' => ['groups' => $groups, 'add_to_fixed' => $add ? [['group' => 1, 'members' => $add]] : []], 'input_tokens' => 50 + 5 * count($terms), 'output_tokens' => 20 + 4 * count($terms), 'model' => 'fake-1'];
+}
+
+/** Legt den letzten Benutzertext eines Werkzeugs ab, damit der Rauchtest prüfen kann, was an die KI ging. */
+function ai_fake_dump(string $tool, string $user): void {
+    @file_put_contents(sys_get_temp_dir() . '/tafula-fake-' . $tool . '.txt', $user);
+}
+
+/**
+ * Werkzeug «korrektur»: Stufe nach Anteil der Wörter des Lösungssatzes (ab vier Buchstaben), die in der Antwort
+ * vorkommen (ab 60 % full, ab 30 % half, sonst 0). Antworten mit «FAKE-UNGUELTIG» erhalten eine ungültige Stufe.
+ * Am Ende stehen absichtlich eine doppelte und eine unbekannte Nummer, die die Prüfung verwerfen muss.
+ */
+function ai_fake_exam_grade(string $user): array {
+    ai_fake_dump('korrektur', $user);
+    $words = function (string $s): array {
+        preg_match_all('/[\p{L}\p{N}]{4,}/u', mb_strtolower($s), $m);
+        return array_values(array_unique($m[0]));
+    };
+    $sol = preg_match('~<loesung>(.*?)</loesung>~su', $user, $m) ? $words($m[1]) : [];
+    $grades = [];
+    if (preg_match('~<antworten>(.*?)</antworten>~su', $user, $m)) {
+        foreach (preg_split('/\n+/', trim($m[1])) as $line) {
+            if (!preg_match('/^#(\d+)\s*(.*)$/u', trim($line), $lm)) continue;
+            $ans = $words($lm[2]);
+            $hit = $sol ? count(array_intersect($sol, $ans)) / count($sol) : 0;
+            $level = $hit >= 0.6 ? 'full' : ($hit >= 0.3 ? 'half' : '0');
+            if (str_contains($lm[2], 'FAKE-UNGUELTIG')) $level = 'maximal';
+            $grades[] = ['n' => (int)$lm[1], 'level' => $level, 'reason' => 'Fake: ' . round(100 * $hit) . ' % der Schlüsselwörter.'];
+        }
+    }
+    $grades[] = ['n' => 1, 'level' => 'full', 'reason' => 'Doppelt, muss verworfen werden.'];
+    $grades[] = ['n' => 999, 'level' => 'full', 'reason' => 'Unbekannt, muss verworfen werden.'];
+    return ['data' => ['grades' => $grades], 'input_tokens' => (int)(mb_strlen($user) / 4), 'output_tokens' => count($grades) * 20, 'model' => 'fake-1'];
+}
+
+/**
+ * Werkzeug «fragenpruefung»: duplicate bei gleichem Fragetext wie eine frühere Frage, unclear bei Fragen unter
+ * 20 Zeichen, solution bei «FAKE-LOESUNG» in der Frage; dazu eine unbekannte Nummer und eine unbekannte Art.
+ */
+function ai_fake_exam_check(string $user): array {
+    ai_fake_dump('fragenpruefung', $user);
+    $issues = [];
+    $seen = [];
+    if (preg_match('~<fragen>(.*?)</fragen>~su', $user, $m)) {
+        foreach (preg_split('/\n+/', $m[1]) as $line) {
+            if (!preg_match('/^#(\d+)\s*\[[^\]]*\]\s*(.*)$/u', trim($line), $lm)) continue;
+            $n = (int)$lm[1];
+            $norm = mb_strtolower(trim($lm[2]));
+            if (isset($seen[$norm])) $issues[] = ['n' => $n, 'kind' => 'duplicate', 'text' => 'Gleich wie eine frühere Frage.', 'duplicate_of' => $seen[$norm]];
+            else $seen[$norm] = $n;
+            if (mb_strlen($norm) < 20) $issues[] = ['n' => $n, 'kind' => 'unclear', 'text' => 'Sehr kurz, vielleicht unklar.'];
+            if (str_contains($lm[2], 'FAKE-LOESUNG')) $issues[] = ['n' => $n, 'kind' => 'solution', 'text' => 'Die Lösung scheint falsch.'];
+        }
+    }
+    $issues[] = ['n' => 999, 'kind' => 'unclear', 'text' => 'Unbekannte Nummer.'];
+    $issues[] = ['n' => 1, 'kind' => 'boese', 'text' => 'Unbekannte Art.'];
+    return ['data' => ['issues' => $issues], 'input_tokens' => (int)(mb_strlen($user) / 4), 'output_tokens' => 50, 'model' => 'fake-1'];
 }

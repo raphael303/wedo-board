@@ -12,7 +12,13 @@
   });
   document.addEventListener('submit', (ev) => {
     const f = ev.target.closest('form[data-confirm]');
-    if (f && !confirm(f.dataset.confirm)) ev.preventDefault();
+    if (f && !confirm(f.dataset.confirm)) { ev.preventDefault(); return; }
+    // Längere Serveraufrufe (KI): Knopf sperren und Hinweis zeigen, damit niemand doppelt klickt.
+    const b = ev.target.closest('form[data-busy]');
+    if (b) {
+      const btn = b.querySelector('button[type=submit]');
+      if (btn) { btn.disabled = true; btn.textContent = b.dataset.busy; }
+    }
   });
   const modelSel = document.querySelector('select[data-other]');
   if (modelSel) {

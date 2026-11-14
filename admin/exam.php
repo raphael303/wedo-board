@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
-// Eine Gemeinschaftsprüfung anlegen, einstellen, Fragen sichten (G1), durchführen und auswerten (G2).
+// Eine Gemeinschaftsprüfung anlegen, einstellen, Fragen sichten (G1), durchführen und auswerten (G2),
+// mit KI korrigieren, Fragen streichen und prüfen (G3).
 require __DIR__ . '/_layout.php';
 admin_require_login();
 admin_check_csrf();
@@ -50,12 +51,17 @@ function admin_exam_rules_text(array $c): string {
     if ($c['ranking']) $parts[] = 'mit Rangliste';
     if ($c['allow_retry']) $parts[] = 'weitere Versuche nach den Ergebnissen erlaubt';
     $txt = implode(' · ', $parts) . '.';
-    $txt .= ' Lernende sehen ihre Punkte nur, wenn ihr Versuch vollständig automatisch bewertet ist; sonst erst nach «Korrektur abschliessen»' . ($c['review_done'] ? ' (abgeschlossen)' : '') . '. Offene Fragen bewertest du in den Antworten der einzelnen Versuche.';
+    $txt .= ' Lernende sehen ihre Punkte nur, wenn ihr Versuch vollständig automatisch bewertet ist; sonst erst nach «Korrektur abschliessen»' . ($c['review_done'] ? ' (abgeschlossen)' : '') . '.';
+    $txt .= match ($c['grading']) {
+        'manual' => ' Offene Fragen bewertest du selbst, pro Versuch oder pro Frage über alle Versuche.',
+        'review' => ' Offene Fragen bewertet die KI nach jeder Abgabe als Vorschlag' . ($c['ai'] ? '' : ' (für diese Prüfung ausgeschaltet)') . '; alle Punkte kannst du überschreiben.',
+        default => ' Offene Fragen bewertet die KI nach jeder Abgabe' . ($c['ai'] ? '' : ' (für diese Prüfung ausgeschaltet)') . '; ihre Punkte gelten sofort, deine Punkte gehen vor.',
+    };
     return $txt;
 }
 
 $error = null;
-$tab = in_array($_GET['tab'] ?? '', ['submitted', 'accepted', 'rejected', 'trash'], true) ? $_GET['tab'] : 'all';
+$tab = in_array($_GET['tab'] ?? '', ['submitted', 'accepted', 'struck', 'rejected', 'trash'], true) ? $_GET['tab'] : 'all';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? 'save');
     $qid = (int)($_POST['qid'] ?? 0);
@@ -99,6 +105,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 case 'q_reopen': exam_owner_question_update($act, $qid, ['status' => 'submitted']); admin_flash('Frage wieder offen.'); break;
                 case 'q_delete': exam_owner_question_delete($act, $qid); admin_flash('Frage gelöscht. Sie liegt im Papierkorb der Prüfung.'); break;
                 case 'q_restore': exam_owner_question_restore($act, $qid); admin_flash('Frage wiederhergestellt.'); break;
+                case 'q_strike': exam_owner_question_update($act, $qid, ['status' => 'struck']); admin_flash('Frage gestrichen. Sie zählt in keinem Versuch mehr; alle Versuche sind neu gerechnet.'); break;
+                case 'q_unstrike': exam_owner_question_update($act, $qid, ['status' => 'accepted']); admin_flash('Frage wieder aufgenommen. Alle Versuche sind neu gerechnet.'); break;
+                case 'q_check':
+                    $r = exam_ai_check($act, 'all');
+                    admin_flash($r['checked'] . ' Fragen geprüft, ' . ($r['flagged'] === 1 ? 'eine mit Hinweisen' : $r['flagged'] . ' mit Hinweisen') . ' · ' . $r['model'] . '. Geändert wurde nichts.');
+                    header('Location: ' . $back('#fragen'));
+                    exit;
+                case 'ai_grade':
+                    $opt = ['redo' => !empty($_POST['redo'])];
+                    if (!empty($_POST['attempt'])) $opt['attempt_id'] = (int)$_POST['attempt'];
+                    if (!empty($_POST['question'])) $opt['question_id'] = (int)$_POST['question'];
+                    $r = exam_ai_grade($act, $opt, true);
+                    if ($r['state'] === 'busy') admin_flash('Die KI bewertet gerade schon. Lade die Seite in einem Moment neu.');
+                    elseif ($r['state'] === 'none') admin_flash('Keine offenen Antworten ohne Bewertung.');
+                    else admin_flash($r['graded'] . ' Antworten bewertet' . ($r['failed'] ? ', ' . $r['failed'] . ' ohne Ergebnis' : '') . ($r['skipped'] ? ', ' . $r['skipped'] . ' für den nächsten Lauf' : '') . ($r['model'] ? ' · ' . $r['model'] : '') . '.' . (!empty($r['error']) ? ' ' . $r['error'] : ''));
+                    $to = !empty($_POST['attempt']) ? '&attempt=' . (int)$_POST['attempt'] : (!empty($_POST['question']) ? '&grade_q=' . (int)$_POST['question'] : '#ergebnisse');
+                    header('Location: ' . wb_admin_url() . 'exam.php?key=' . $act['akey'] . $to);
+                    exit;
+                case 'grade_question':
+                    // Eine Frage über alle Versuche: zuerst alles prüfen, dann speichern.
+                    $gq = (int)($_POST['question'] ?? 0);
+                    $mq = exam_question_map($act)[$gq] ?? null;
+                    if (!$mq) throw new InvalidArgumentException('exam_err_not_found');
+                    $vals = [];
+                    foreach ((array)($_POST['ga'] ?? []) as $aid => $gp) {
+                        $gp = trim(str_replace(',', '.', (string)$gp));
+                        if ($gp !== '') {
+                            $v = exam_points_value($gp);
+                            if ($v === null || $v > exam_q_points($act, $mq)) throw new InvalidArgumentException('exam_err_grade_points');
+                        }
+                        $vals[(int)$aid] = $gp === '' ? null : $gp;
+                    }
+                    foreach ($vals as $aid => $gp) exam_attempt_grade($act, $aid, $gq, $gp);
+                    admin_flash('Bewertung gespeichert.');
+                    header('Location: ' . wb_admin_url() . 'exam.php?key=' . $act['akey'] . '&grade_q=' . $gq);
+                    exit;
                 case 'q_up': exam_owner_move($act, $qid, -1); break;
                 case 'q_down': exam_owner_move($act, $qid, 1); break;
                 case 'q_save':
@@ -187,7 +229,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } catch (InvalidArgumentException $ex) {
         $msg = $ex->getMessage();
-        $error = str_starts_with($msg, 'exam_') ? t($msg, 'de', ['n' => $act['config']['quota_max'] ?? 0]) : $msg;
+        $error = preg_match('/^(exam|ai)_[a-z_]+$/', $msg) ? t($msg, 'de', ['n' => $act['config']['quota_max'] ?? 0]) : $msg;
+    } catch (AiException $ex) {
+        $error = ai_error_message($ex, 'de');
     }
 }
 
@@ -205,7 +249,15 @@ $post = fn(string $action, string $label, string $class = 'btn-ghost', string $c
     '<form method="post"' . ($confirm !== '' ? ' data-confirm="' . e($confirm) . '"' : '') . '><input type="hidden" name="csrf" value="' . e($csrf) . '"><input type="hidden" name="action" value="' . e($action) . '">'
     . ($qid ? '<input type="hidden" name="qid" value="' . $qid . '">' : '') . '<button class="' . e($class) . '" type="submit"' . ($title !== '' ? ' title="' . e($title) . '"' : '') . '>' . e($label) . '</button></form>';
 $typeLabel = fn(string $tp) => t('exam_type_' . $tp, 'de');
-$statusLabel = ['submitted' => 'eingereicht', 'accepted' => 'angenommen', 'rejected' => 'abgelehnt'];
+$statusLabel = ['submitted' => 'eingereicht', 'accepted' => 'angenommen', 'rejected' => 'abgelehnt', 'struck' => 'gestrichen'];
+$aiStatus = $act ? ai_exam_status($act) : ['available' => false, 'reason' => null];
+$aiReasonText = fn() => $aiStatus['reason'] ? t('ai_unavailable_' . $aiStatus['reason'], 'de') : '';
+$checkKind = ['solution' => 'Lösung fraglich', 'duplicate' => 'doppelt', 'unclear' => 'unklar'];
+$aiForm = function (string $label, array $hidden = [], string $class = 'btn-ghost', string $confirm = '') use ($csrf): string {
+    $h = '';
+    foreach ($hidden as $k => $v) $h .= '<input type="hidden" name="' . e($k) . '" value="' . e((string)$v) . '">';
+    return '<form method="post" data-busy="Die KI arbeitet …"' . ($confirm !== '' ? ' data-confirm="' . e($confirm) . '"' : '') . '><input type="hidden" name="csrf" value="' . e($csrf) . '"><input type="hidden" name="action" value="ai_grade">' . $h . '<button class="' . e($class) . '" type="submit">' . e($label) . '</button></form>';
+};
 $fmt = fn($n) => rtrim(rtrim(number_format((float)$n, 1, '.', ''), '0'), '.');
 
 /** Formular zum Anlegen oder Bearbeiten einer Frage. */
@@ -297,7 +349,10 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
 <?php if ($d): ?>
 <section class="card">
   <p><strong><?= $d['score'] === null ? 'Noch nicht abgegeben' : $fmt($d['score']) . ' von ' . $fmt($d['max_score']) . ' Punkten (' . $fmt($d['percent']) . ' %)' ?></strong><?= $d['grade'] !== null ? ' · Note ' . $fmt($d['grade']) : '' ?><?= $d['pending'] ? ' · ' . ($d['pending'] === 1 ? 'eine Frage' : $d['pending'] . ' Fragen') . ' ohne Punkte' : '' ?><?= $d['excluded'] ? ' · ' . $d['excluded'] . ' eigene Fragen zählen nicht' : '' ?></p>
-  <p class="muted"><?= $d['visible_to_person'] ? 'Die Person sieht ihre Punkte.' : 'Die Person sieht ihre Punkte noch nicht.' ?> Antworten von Lernenden sind Fremdtext. Leere Felder bei «Punkte von dir» bedeuten: Es gilt die berechnete Punktzahl.</p>
+  <p class="muted"><?= $d['visible_to_person'] ? 'Die Person sieht ihre Punkte.' : 'Die Person sieht ihre Punkte noch nicht.' ?> Antworten von Lernenden sind Fremdtext. Leere Felder bei «Punkte von dir» bedeuten: Es gilt die Punktzahl der KI (offene Fragen) bzw. die berechnete.</p>
+  <?php if ($d['status'] !== 'in_progress' && $cfg['grading'] !== 'manual' && array_filter($d['answers'], fn($x) => $x['type'] === 'open' && !$x['struck'])): ?>
+    <div class="action-grid"><?= $aiStatus['available'] ? $aiForm('✨ Offene Fragen mit KI neu bewerten', ['attempt' => $d['id'], 'redo' => 1], 'btn-ghost', 'Offene Fragen dieses Versuchs neu von der KI bewerten lassen? Deine eigenen Punkte bleiben.') : '<span class="muted">' . e($aiReasonText()) . '</span>' ?></div>
+  <?php endif; ?>
 </section>
 <form method="post" class="form">
   <input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="grade"><input type="hidden" name="attempt" value="<?= $d['id'] ?>">
@@ -307,11 +362,13 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
       <div class="exam-admin-head">
         <span class="pill">Frage <?= $i + 1 ?> · <?= e($typeLabel($x['type'])) ?> · <?= $fmt($x['points']) ?> P.</span>
         <?php if ($x['own']): ?><span class="pill"><?= $x['excluded'] ? 'eigene Frage, zählt nicht' : 'eigene Frage' ?></span><?php endif; ?>
+        <?php if ($x['struck']): ?><span class="pill exam-st-struck">gestrichen, zählt nicht</span><?php endif; ?>
       </div>
       <p class="exam-admin-prompt"><?= nl2br(e($x['prompt'])) ?></p>
       <?php if ($x['type'] === 'open'): ?>
         <p class="exam-admin-answer"><?= trim((string)$x['answer']) === '' ? '<span class="muted">(keine Antwort)</span>' : nl2br(e((string)$x['answer'])) ?></p>
         <p class="muted"><strong>Lösung:</strong> <?= e((string)$x['solution']) ?></p>
+        <?php if ($x['ai']): ?><p class="exam-ai-note">✨ KI<?= $cfg['grading'] === 'manual' ? ' (zählt bei Korrektur von Hand nicht)' : '' ?>: <?= $x['ai']['failed'] ? 'keine gültige Bewertung erhalten – bitte selbst bewerten oder neu bewerten lassen' : '<strong>' . $fmt($x['ai']['points']) . ' P.</strong> – ' . e((string)$x['ai']['reason']) ?><?= $x['ai']['model'] ? ' <span class="muted">(' . e((string)$x['ai']['model']) . ')</span>' : '' ?></p><?php endif; ?>
       <?php else: ?>
         <ul class="exam-admin-opts">
           <?php foreach ($x['options'] as $o):
@@ -322,9 +379,9 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
         </ul>
       <?php endif; ?>
       <p class="exam-grade-row">
-        <span>Berechnet: <strong><?= $x['auto'] === null ? '–' : $fmt($x['auto']) ?></strong></span>
-        <label>Punkte von dir <input name="g[<?= $x['question_id'] ?>]" inputmode="decimal" size="4" value="<?= $x['teacher'] === null ? '' : e($fmt($x['teacher'])) ?>" placeholder="<?= $x['type'] === 'open' ? '0 bis ' . $fmt($x['points']) : '' ?>" <?= $d['status'] === 'in_progress' ? 'disabled' : '' ?>></label>
-        <span>Gilt: <strong><?= $x['final'] === null ? 'offen' : $fmt($x['final']) ?></strong></span>
+        <span><?= $x['type'] === 'open' ? 'KI' : 'Berechnet' ?>: <strong><?= $x['type'] === 'open' ? ($x['ai'] && !$x['ai']['failed'] ? $fmt($x['ai']['points']) : '–') : ($x['auto'] === null ? '–' : $fmt($x['auto'])) ?></strong></span>
+        <label>Punkte von dir <input name="g[<?= $x['question_id'] ?>]" inputmode="decimal" size="4" value="<?= $x['teacher'] === null ? '' : e($fmt($x['teacher'])) ?>" placeholder="<?= $x['type'] === 'open' ? '0 bis ' . $fmt($x['points']) : '' ?>" <?= $d['status'] === 'in_progress' || $x['struck'] ? 'disabled' : '' ?>></label>
+        <span>Gilt: <strong><?= $x['struck'] ? 'gestrichen' : ($x['final'] === null ? 'offen' : $fmt($x['final'])) ?></strong></span>
       </p>
     </li>
   <?php endforeach; ?>
@@ -332,6 +389,56 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
   <?php if ($d['status'] !== 'in_progress'): ?><div class="actions"><button class="btn" type="submit">Bewertung speichern</button></div><?php endif; ?>
 </form>
 <?php endif; ?>
+<?php admin_footer(); exit; endif; ?>
+
+<?php if ($act && isset($_GET['grade_q'])):
+    $gq = (int)$_GET['grade_q'];
+    $mq = exam_question_map($act)[$gq] ?? null;
+    exam_finalize_expired($act);
+    $rowsQ = [];
+    if ($mq) foreach (db_all("SELECT * FROM exam_attempts WHERE activity_id = ? AND status <> 'in_progress' ORDER BY attempt_no, submitted_at, id", [$act['id']]) as $r) {
+        $dd = exam_attempt_detail($act, $r);
+        foreach ($dd['answers'] as $x) if ($x['question_id'] === $gq) $rowsQ[] = ['d' => $dd, 'x' => $x];
+    }
+?>
+<div class="page-head">
+  <div>
+    <h1>Bewerten pro Frage</h1>
+    <p class="muted"><a href="?key=<?= e($act['akey']) ?>#ergebnisse">← <?= e($act['name']) ?></a><?= $mq ? ' · ' . e($typeLabel($mq['type'])) . ' · ' . $fmt(exam_q_points($act, $mq)) . ' P.' : '' ?></p>
+  </div>
+  <?php if ($mq && $mq['type'] === 'open' && $cfg['grading'] !== 'manual' && $aiStatus['available']): ?><div class="page-actions"><?= $aiForm('✨ Unbewertete mit KI bewerten', ['question' => $gq], 'btn-ghost') ?></div><?php endif; ?>
+</div>
+<?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
+<?php if (!$mq): ?><section class="card"><p>Frage nicht gefunden.</p></section><?php else: ?>
+<section class="card">
+  <p class="exam-admin-prompt"><?= nl2br(e($mq['prompt'])) ?></p>
+  <?php if ($mq['type'] === 'open'): ?><p><strong>Lösung:</strong> <?= e((string)$mq['solution_text']) ?></p><?php endif; ?>
+  <p class="muted"><?= count($rowsQ) ?> abgegebene Antworten. Antworten von Lernenden sind Fremdtext. Ein leeres Feld heisst: Es gilt der Vorschlag der KI bzw. die berechnete Punktzahl.<?= $cfg['grading'] !== 'auto' ? ' Lernende sehen ihre Punkte erst nach «Korrektur abschliessen».' : '' ?></p>
+</section>
+<?php if ($rowsQ): ?>
+<form method="post" class="form">
+  <input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="grade_question"><input type="hidden" name="question" value="<?= $gq ?>">
+  <ol class="exam-admin-list">
+  <?php foreach ($rowsQ as ['d' => $dd, 'x' => $x]): ?>
+    <li class="card exam-admin-q">
+      <div class="exam-admin-head"><span class="pill"><?= e($dd['name']) ?><?= $dd['attempt_no'] > 1 ? ' · Übung ' . $dd['attempt_no'] : '' ?></span> <a class="muted" href="?key=<?= e($act['akey']) ?>&amp;attempt=<?= $dd['id'] ?>">ganzer Versuch</a></div>
+      <?php if ($x['type'] === 'open'): ?>
+        <p class="exam-admin-answer"><?= trim((string)$x['answer']) === '' ? '<span class="muted">(keine Antwort)</span>' : nl2br(e((string)$x['answer'])) ?></p>
+        <?php if ($x['ai']): ?><p class="exam-ai-note">✨ KI: <?= $x['ai']['failed'] ? 'keine gültige Bewertung erhalten' : '<strong>' . $fmt($x['ai']['points']) . ' P.</strong> – ' . e((string)$x['ai']['reason']) ?></p><?php endif; ?>
+      <?php else: ?>
+        <ul class="exam-admin-opts"><?php foreach ($x['options'] as $o): $mark = $x['type'] === 'truefalse' ? ($o['chosen'] === null ? '–' : ($o['chosen'] ? 'richtig' : 'falsch')) : ($o['chosen'] ? '☑' : '☐'); ?><li><span class="exam-admin-mark"><?= e($mark) ?></span> <?= e($o['text']) ?> <span class="muted">(<?= $o['correct'] ? 'richtig' : 'falsch' ?>)</span></li><?php endforeach; ?></ul>
+      <?php endif; ?>
+      <p class="exam-grade-row">
+        <span><?= $x['type'] === 'open' ? 'KI' : 'Berechnet' ?>: <strong><?= $x['type'] === 'open' ? ($x['ai'] && !$x['ai']['failed'] ? $fmt($x['ai']['points']) : '–') : ($x['auto'] === null ? '–' : $fmt($x['auto'])) ?></strong></span>
+        <label>Punkte von dir <input name="ga[<?= $dd['id'] ?>]" inputmode="decimal" size="4" value="<?= $x['teacher'] === null ? '' : e($fmt($x['teacher'])) ?>" placeholder="0 bis <?= $fmt($x['points']) ?>" <?= $x['struck'] ? 'disabled' : '' ?>></label>
+        <span>Gilt: <strong><?= $x['struck'] ? 'gestrichen' : ($x['final'] === null ? 'offen' : $fmt($x['final'])) ?></strong></span>
+      </p>
+    </li>
+  <?php endforeach; ?>
+  </ol>
+  <div class="actions"><button class="btn" type="submit">Bewertung speichern</button></div>
+</form>
+<?php endif; endif; ?>
 <?php admin_footer(); exit; endif; ?>
 
 <?php if ($act):
@@ -407,6 +514,14 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
 <section class="card" id="ergebnisse">
   <h2>Ergebnisse</h2>
   <p class="muted"><?= $attemptCounts['started'] ?> begonnen, <?= $attemptCounts['submitted'] ?> abgegeben<?= $attemptCounts['pending'] ? ', davon ' . $attemptCounts['pending'] . ' mit offenen Fragen ohne Punkte' : '' ?><?= $retries ? ' · ' . $retries . ' Übungsversuche' : '' ?>. Es zählt der erste Versuch.</p>
+  <?php $aiPendingN = $cfg['grading'] !== 'manual' ? exam_ai_pending_count($act) : 0; if ($aiPendingN || ($cfg['grading'] !== 'manual' && array_filter($stats, fn($s) => $s['type'] === 'open'))): ?>
+  <div class="action-grid">
+    <?php if ($aiStatus['available']): ?>
+      <?= $aiPendingN ? $aiForm('✨ Offene Fragen bewerten (' . $aiPendingN . ')', [], 'btn') : '' ?>
+      <?= $aiForm('✨ Alle offenen Fragen neu bewerten', ['redo' => 1], 'btn-ghost', 'Alle offenen Antworten neu von der KI bewerten lassen? Deine eigenen Punkte bleiben.') ?>
+    <?php else: ?><span class="muted">KI-Korrektur nicht verfügbar: <?= e($aiReasonText()) ?></span><?php endif; ?>
+  </div>
+  <?php endif; ?>
   <?php if (!$firsts): ?>
     <p class="muted">Noch keine Versuche.</p>
   <?php else: ?>
@@ -437,7 +552,7 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
   <h3 class="exam-admin-h3">Lösungsquote pro Frage</h3>
   <ol class="exam-stats">
     <?php foreach ($stats as $s): ?>
-    <li><span class="exam-stats-prompt"><?= e(mb_strimwidth($s['prompt'], 0, 90, '…')) ?></span>
+    <li><span class="exam-stats-prompt"><a href="?key=<?= e($act['akey']) ?>&amp;grade_q=<?= $s['question_id'] ?>" title="Diese Frage über alle Versuche bewerten"><?= e(mb_strimwidth($s['prompt'], 0, 90, '…')) ?></a></span>
       <span class="exam-stats-bar" title="Anteil voller Punktzahl"><span style="width: <?= $s['n'] ? round(100 * $s['solved_rate']) : 0 ?>%"></span></span>
       <span class="muted"><?= $s['n'] ? round(100 * $s['solved_rate']) . ' % voll · Mittel ' . $fmt($s['mean_points']) . '/' . $fmt($s['points']) . ' P. · ' . $s['n'] . ' bewertet' : 'noch keine Bewertung' ?></span></li>
     <?php endforeach; ?>
@@ -453,10 +568,15 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
 <section class="card" id="fragen">
   <h2>Fragen</h2>
   <p class="tags">
-    <?php foreach (['all' => 'Alle (' . $counts['total'] . ')', 'submitted' => 'Eingereicht (' . $counts['submitted'] . ')', 'accepted' => 'Angenommen (' . $counts['accepted'] . ')', 'rejected' => 'Abgelehnt (' . $counts['rejected'] . ')', 'trash' => 'Papierkorb'] as $k => $label): ?>
+    <?php foreach (['all' => 'Alle (' . $counts['total'] . ')', 'submitted' => 'Eingereicht (' . $counts['submitted'] . ')', 'accepted' => 'Angenommen (' . $counts['accepted'] . ')', 'struck' => 'Gestrichen (' . $counts['struck'] . ')', 'rejected' => 'Abgelehnt (' . $counts['rejected'] . ')', 'trash' => 'Papierkorb'] as $k => $label): if ($k === 'struck' && !$counts['struck']) continue; ?>
       <a class="tag <?= $tab === $k ? 'active' : '' ?>" href="?key=<?= e($act['akey']) ?><?= $k !== 'all' ? '&amp;tab=' . $k : '' ?>#fragen"><?= e($label) ?></a>
     <?php endforeach; ?>
   </p>
+  <div class="action-grid">
+    <?php if ($aiStatus['available'] && ($counts['submitted'] + $counts['accepted']) > 0): ?>
+      <form method="post" data-busy="Die KI prüft die Fragen …"><input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="q_check"><button class="btn-ghost" type="submit" title="Markiert verdächtige Lösungen, Doppelte und unklare Formulierungen; ändert nichts">✨ Fragen prüfen</button></form>
+    <?php elseif (!$aiStatus['available']): ?><span class="muted">✨ Fragen prüfen: <?= e($aiReasonText()) ?></span><?php endif; ?>
+  </div>
   <?php if (!$questions): ?>
     <p class="muted"><?= $tab === 'all' ? 'Noch keine Fragen. Teile den Link mit der Klasse oder füge unten selbst Fragen hinzu.' : 'Keine Fragen in dieser Ansicht.' ?></p>
   <?php else: ?>
@@ -478,13 +598,23 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
           <?php endforeach; ?>
         </ul>
       <?php endif; ?>
+      <?php if (!empty($q['check']['issues'])): ?>
+        <ul class="exam-check">
+          <?php foreach ($q['check']['issues'] as $is): ?><li class="exam-check-<?= e($is['kind']) ?>">✨ <strong><?= e($checkKind[$is['kind']] ?? $is['kind']) ?>:</strong> <?= e($is['text']) ?><?= $is['duplicate_of'] ? ' <a href="#q' . (int)$is['duplicate_of'] . '">(siehe Frage)</a>' : '' ?></li><?php endforeach; ?>
+        </ul>
+      <?php elseif ($q['check'] !== null): ?><p class="exam-check-ok muted">✨ unauffällig (<?= e((string)$q['check']['at']) ?>)</p><?php endif; ?>
       <div class="action-grid">
         <?php if ($q['deleted_at']): ?>
           <?= $post('q_restore', 'Wiederherstellen', 'btn-ghost', '', '', $q['id']) ?>
         <?php else: ?>
+          <?php if ($q['status'] === 'struck'): ?>
+            <?= $post('q_unstrike', 'Wieder aufnehmen', 'btn', '', 'Die Frage zählt wieder in allen Versuchen', $q['id']) ?>
+          <?php else: ?>
           <?php if ($q['status'] !== 'accepted'): ?><?= $post('q_accept', 'Annehmen', 'btn', '', '', $q['id']) ?><?php endif; ?>
+          <?php if ($q['status'] === 'accepted' && $cfg['phase'] !== 'collect'): ?><?= $post('q_strike', 'Streichen', 'btn-ghost', 'Frage streichen? Sie fällt in allen Versuchen aus Punkten und Maximum; die Lernenden sehen sie als gestrichen. Rückgängig mit «Wieder aufnehmen».', 'Missratene Frage aus der Bewertung nehmen', $q['id']) ?><?php endif; ?>
           <?php if ($q['status'] !== 'rejected'): ?><?= $post('q_reject', 'Ablehnen', 'btn-ghost', '', '', $q['id']) ?><?php endif; ?>
-          <?php if ($q['status'] !== 'submitted' && !$q['by_owner']): ?><?= $post('q_reopen', 'Wieder offen', 'btn-ghost', '', 'Die Verfasserin kann die Frage dann wieder bearbeiten', $q['id']) ?><?php endif; ?>
+          <?php endif; ?>
+          <?php if (!in_array($q['status'], ['submitted', 'struck'], true) && !$q['by_owner']): ?><?= $post('q_reopen', 'Wieder offen', 'btn-ghost', '', 'Die Verfasserin kann die Frage dann wieder bearbeiten', $q['id']) ?><?php endif; ?>
           <?php if ($q['status'] === 'accepted'): ?><?= $post('q_up', '↑', 'btn-ghost', '', 'Nach oben', $q['id']) ?><?= $post('q_down', '↓', 'btn-ghost', '', 'Nach unten', $q['id']) ?><?php endif; ?>
           <?= $post('q_delete', 'Löschen', 'btn-ghost danger', 'Frage löschen?', '', $q['id']) ?>
         <?php endif; ?>
@@ -546,7 +676,7 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
           <option value="review" <?= $cfg['grading'] === 'review' ? 'selected' : '' ?>>mit Durchsicht (Punkte nach «Korrektur abschliessen»)</option>
           <option value="manual" <?= $cfg['grading'] === 'manual' ? 'selected' : '' ?>>von Hand (offene Fragen bewertest du)</option>
         </select>
-        <p class="hint">Offene Fragen bewertest du bis zur KI-Korrektur in jedem Fall selbst; wer offene Fragen hat, sieht Punkte erst nach «Korrektur abschliessen».</p>
+        <p class="hint">Automatisch: Die KI bewertet offene Fragen nach jeder Abgabe, die Punkte gelten sofort. Mit Durchsicht: Alle Punkte sind Vorschläge, die du überschreiben kannst. Von Hand: keine KI, offene Fragen bewertest du selbst. Deine Punkte gehen immer vor.</p>
       </div>
       <div>
         <label for="mc_rule">Mehrfachauswahl und Richtig/Falsch</label>

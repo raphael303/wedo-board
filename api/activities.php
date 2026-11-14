@@ -90,6 +90,13 @@ function activity_guest_api(string $method, array $p): never {
                     case 'answer': $extra = exam_attempt_save_answers($a, $uid, $in['answers'] ?? null); break;
                     case 'submit': exam_attempt_submit($a, $uid); break;
                     case 'retry': exam_attempt_retry($a, $uid); break;
+                    case 'grade':
+                        // Nach der Abgabe: KI-Korrektur der Prüfung anstossen (nur mit eigenem abgegebenem Versuch,
+                        // nur bei auto und review; ohne unbewertete Antworten ruft der Server keine KI auf).
+                        $mine = exam_attempt_latest($a, $uid);
+                        if (!$mine || $mine['status'] !== 'submitted') { $extra = ['grading' => 'none']; break; }
+                        $extra = ['grading' => exam_ai_grade($a, [], false)['state']];
+                        break;
                     default: wb_error('Unbekannter Aufruf.', 404);
                 }
             } catch (InvalidArgumentException $e) {
@@ -97,7 +104,7 @@ function activity_guest_api(string $method, array $p): never {
                 wb_error(t($code, $lang), $codes[$code] ?? 422, ['code' => $code]);
             }
             if ($verb === 'answer') wb_json(['ok' => true] + $extra);
-            wb_json(['ok' => true, 'state' => activity_state(activity_by_id($a['id']), $uid, null, false)]);
+            wb_json(['ok' => true, 'state' => activity_state(activity_by_id($a['id']), $uid, null, false)] + $extra);
         }
         if ($sub === 'questions' && $method === 'POST') {
             if ($owner) wb_error(t('exam_owner_use_library', $lang), 403, ['code' => 'exam_owner_use_library']);
@@ -251,7 +258,7 @@ function activity_owner_api(string $method, array $p): never {
  * fallen an activity_owner_api zurück.
  */
 function exam_owner_api(string $method, array $a, string $action, array $p, array $in): void {
-    $fail = fn(InvalidArgumentException $e) => wb_error(str_starts_with($e->getMessage(), 'exam_') ? t($e->getMessage(), 'de') : $e->getMessage(), (str_contains($e->getMessage(), 'not_found') || $e->getMessage() === 'exam_no_attempt') ? 404 : 422, ['code' => $e->getMessage()]);
+    $fail = fn(InvalidArgumentException $e) => wb_error(preg_match('/^(exam|ai)_[a-z_]+$/', $e->getMessage()) ? t($e->getMessage(), 'de') : $e->getMessage(), (str_contains($e->getMessage(), 'not_found') || $e->getMessage() === 'exam_no_attempt') ? 404 : 422, ['code' => $e->getMessage()]);
     try {
         if ($action === 'results' && $method === 'GET') {
             $r = ['ok' => true, 'name' => $a['name'], 'phase' => $a['config']['phase'], 'counts' => exam_counts($a), 'questions' => exam_questions($a, (string)($_GET['status'] ?? 'all'))];
@@ -274,12 +281,32 @@ function exam_owner_api(string $method, array $a, string $action, array $p, arra
                 case 'hide': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_ranking_shown($a, false))]);
                 case 'solutions': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_flag($a, 'solutions_released', filter_var($in['released'] ?? true, FILTER_VALIDATE_BOOLEAN)))]);
                 case 'review': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_flag($a, 'review_done', filter_var($in['done'] ?? true, FILTER_VALIDATE_BOOLEAN)))]);
+                case 'ai-grade':
+                    $opt = ['redo' => filter_var($in['redo'] ?? false, FILTER_VALIDATE_BOOLEAN)];
+                    if (!empty($in['attempt_id'])) $opt['attempt_id'] = (int)$in['attempt_id'];
+                    if (!empty($in['question_id'])) $opt['question_id'] = (int)$in['question_id'];
+                    $r = exam_ai_grade($a, $opt, true);
+                    if ($r['state'] === 'busy') wb_error(t('exam_ai_busy', 'de'), 409, ['code' => 'exam_ai_busy']);
+                    wb_json(['ok' => true] + $r);
             }
         }
         if ($action === 'ranking' && $method === 'GET') wb_json(['ok' => true, 'shown' => (bool)$a['revealed'], 'ranking' => exam_ranking($a)]);
         if ($action === 'attempts') {
             $aid = (int)($p[3] ?? 0);
             $verb = $p[4] ?? '';
+            if (($p[3] ?? '') === 'grade' && $method === 'POST') {
+                // Mehrere Punkte der Lehrperson auf einmal: {grades: [{attempt_id, question_id, points}]}
+                $saved = 0; $errors = [];
+                foreach (is_array($in['grades'] ?? null) ? $in['grades'] : [] as $i => $g) {
+                    try {
+                        exam_attempt_grade($a, (int)($g['attempt_id'] ?? 0), (int)($g['question_id'] ?? 0), $g['points'] ?? null);
+                        $saved++;
+                    } catch (InvalidArgumentException $e) {
+                        $errors[] = ['index' => $i, 'code' => $e->getMessage(), 'error' => t($e->getMessage(), 'de')];
+                    }
+                }
+                wb_json(['ok' => true, 'saved' => $saved, 'errors' => $errors]);
+            }
             if ($aid === 0 && $method === 'GET') {
                 wb_json(['ok' => true, 'attempts' => exam_attempts($a, !empty($_GET['all'])), 'stats' => exam_question_stats($a)]);
             }
@@ -308,6 +335,9 @@ function exam_owner_api(string $method, array $a, string $action, array $p, arra
             if ($method === 'GET') wb_json(['ok' => true, 'counts' => exam_counts($a), 'questions' => exam_questions($a, (string)($_GET['status'] ?? 'all'))]);
             if ($method === 'POST') wb_json(['ok' => true, 'question' => exam_owner_question_create($a, $in)], 201);
         }
+        if ($sub === 'check' && $method === 'POST') {
+            wb_json(['ok' => true] + exam_ai_check($a, (string)($in['status'] ?? 'all')));
+        }
         if ($sub === 'order' && $method === 'POST') {
             exam_owner_reorder($a, is_array($in['ids'] ?? null) ? $in['ids'] : []);
             wb_json(['ok' => true, 'questions' => exam_questions($a, 'accepted')]);
@@ -325,6 +355,8 @@ function exam_owner_api(string $method, array $a, string $action, array $p, arra
                 switch ($verb) {
                     case 'accept': wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, ['status' => 'accepted'])]);
                     case 'reject': wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, ['status' => 'rejected'])]);
+                    case 'strike': wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, ['status' => 'struck'])]);
+                    case 'unstrike': wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, ['status' => 'accepted'])]);
                     case 'restore': wb_json(['ok' => true, 'question' => exam_owner_question_restore($a, $qid)]);
                     case 'up': exam_owner_move($a, $qid, -1); wb_json(['ok' => true, 'questions' => exam_questions($a, 'accepted')]);
                     case 'down': exam_owner_move($a, $qid, 1); wb_json(['ok' => true, 'questions' => exam_questions($a, 'accepted')]);
@@ -333,6 +365,8 @@ function exam_owner_api(string $method, array $a, string $action, array $p, arra
         }
     } catch (InvalidArgumentException $e) {
         $fail($e);
+    } catch (AiException $e) {
+        wb_error(ai_error_message($e, 'de'), 502, ['code' => 'ai_' . $e->kind]);
     }
     wb_error('Unbekannter Aufruf.', 404);
 }

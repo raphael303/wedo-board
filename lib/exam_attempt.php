@@ -118,9 +118,16 @@ function exam_q_options(array $q): array {
     return $q['type'] === 'open' ? [] : (json_decode((string)$q['options_json'], true) ?: []);
 }
 
-/** Gehört die Frage (noch) zur Prüfung? Gelöschte oder nicht mehr angenommene Fragen fallen weg. */
+/**
+ * Gehört die Frage (noch) zur Prüfung? Gelöschte oder nicht mehr angenommene Fragen fallen weg. Gestrichene
+ * Fragen (status struck, seit G3) bleiben in bestehenden Versuchen sichtbar, zählen aber nicht.
+ */
 function exam_q_active(?array $q): bool {
-    return $q !== null && $q['deleted_at'] === null && $q['status'] === 'accepted';
+    return $q !== null && $q['deleted_at'] === null && in_array($q['status'], ['accepted', 'struck'], true);
+}
+
+function exam_q_struck(array $q): bool {
+    return $q['status'] === 'struck';
 }
 
 /**
@@ -172,10 +179,23 @@ function exam_grade_attempt(array $a, array $row, ?array $qmap = null): array {
         if (!exam_q_active($q)) continue;
         $pts = exam_q_points($a, $q);
         $ex = $a['config']['own_questions'] === 'exclude' && hash_equals((string)$q['guest_key'], (string)$row['guest_key']);
+        $prev = $old[(string)$id] ?? [];
+        $teacher = isset($prev['teacher']) && $prev['teacher'] !== null ? min($pts, (float)$prev['teacher']) : null;
+        if (exam_q_struck($q)) {
+            // Gestrichen: zählt für niemanden; Punkte der Lehrperson und KI-Eintrag bleiben für ein Aufheben erhalten.
+            $grading[(string)$id] = ['auto' => null, 'teacher' => $teacher, 'final' => null, 'points' => $pts, 'excluded' => $ex, 'struck' => true] + (isset($prev['ai']) ? ['ai' => $prev['ai']] : []);
+            continue;
+        }
         $auto = exam_grade_question($a, $q, $answers[(string)$id] ?? null);
-        $teacher = isset($old[(string)$id]['teacher']) && $old[(string)$id]['teacher'] !== null ? min($pts, (float)$old[(string)$id]['teacher']) : null;
-        $final = $teacher ?? $auto;
-        $grading[(string)$id] = ['auto' => $auto, 'teacher' => $teacher, 'final' => $final, 'points' => $pts, 'excluded' => $ex];
+        // KI-Bewertung (nur offene Fragen): gilt, solange Frage, Lösungssatz und Antwort gleich sind, nie bei manual.
+        $ai = null;
+        if ($q['type'] === 'open' && isset($prev['ai']['fp']) && $prev['ai']['fp'] === exam_ai_fp($q, trim((string)($answers[(string)$id] ?? '')))) {
+            $ai = $prev['ai'];
+            $ai['points'] = $ai['level'] === null ? null : round((float)$ai['level'] * $pts, 2);
+        }
+        $aiPoints = ($ai !== null && $a['config']['grading'] !== 'manual') ? $ai['points'] : null;
+        $final = $teacher ?? $aiPoints ?? $auto;
+        $grading[(string)$id] = ['auto' => $auto, 'teacher' => $teacher, 'final' => $final, 'points' => $pts, 'excluded' => $ex] + ($ai !== null ? ['ai' => $ai] : []);
         if ($ex) { $excluded++; continue; }
         $max += $pts;
         if ($final === null) $pending++;
@@ -189,7 +209,7 @@ function exam_attempt_store_grading(array $a, array $row, ?array $qmap = null): 
     [$grading, $score, $max, $pending] = exam_grade_attempt($a, $row, $qmap);
     $status = $row['status'] === 'in_progress' ? 'in_progress' : ($pending > 0 ? 'submitted' : 'graded');
     db_exec('UPDATE exam_attempts SET grading_json = ?, score = ?, max_score = ?, status = ?, updated_at = ? WHERE id = ?',
-        [json_encode($grading), $score, $max, $status, wb_now(), $row['id']]);
+        [json_encode($grading, JSON_UNESCAPED_UNICODE), $score, $max, $status, wb_now(), $row['id']]);
     return db_row('SELECT * FROM exam_attempts WHERE id = ?', [$row['id']]);
 }
 
@@ -383,6 +403,7 @@ function exam_attempt_save_answers(array $a, string $uid, $answers): array {
     foreach ($answers as $qid => $v) {
         $qid = (int)$qid;
         if (!isset($inOrder[$qid]) || !exam_q_active($qmap[$qid] ?? null)) throw new InvalidArgumentException('exam_answer_invalid');
+        if (exam_q_struck($qmap[$qid])) continue; // gestrichen: Antwort wird nicht mehr gespeichert
         $stored[(string)$qid] = exam_clean_answer($qmap[$qid], $v);
     }
     $now = wb_now();
@@ -399,6 +420,7 @@ function exam_attempt_grade(array $a, int $attemptId, int $qid, $points): array 
     $q = $qmap[$qid] ?? null;
     $inOrder = in_array($qid, array_map(fn($i) => (int)$i['q'], json_decode((string)$row['order_json'], true) ?: []), true);
     if (!$inOrder || !exam_q_active($q)) throw new InvalidArgumentException('exam_err_not_found');
+    if (exam_q_struck($q)) throw new InvalidArgumentException('exam_err_struck');
     $grading = json_decode((string)$row['grading_json'], true) ?: [];
     if ($points === null || $points === '') {
         $value = null;
@@ -406,9 +428,9 @@ function exam_attempt_grade(array $a, int $attemptId, int $qid, $points): array 
         $value = exam_points_value(str_replace(',', '.', (string)$points));
         if ($value === null || $value > exam_q_points($a, $q)) throw new InvalidArgumentException('exam_err_grade_points');
     }
-    $grading[(string)$qid] = ($grading[(string)$qid] ?? []) + [];
+    $grading[(string)$qid] = $grading[(string)$qid] ?? [];
     $grading[(string)$qid]['teacher'] = $value;
-    $row['grading_json'] = json_encode($grading);
+    $row['grading_json'] = json_encode($grading, JSON_UNESCAPED_UNICODE);
     $row = exam_attempt_store_grading($a, $row, $qmap);
     activity_touch($a['id']);
     return $row;
@@ -476,7 +498,7 @@ function exam_attempt_guest_view(array $a, array $row): array {
         $questions[] = [
             'id' => $id, 'n' => ++$n, 'type' => $q['type'], 'prompt' => $q['prompt'], 'points' => exam_q_points($a, $q),
             'options' => $opts, 'own' => $own, 'excluded' => $own && $a['config']['own_questions'] === 'exclude',
-            'answer' => $answers[(string)$id] ?? null,
+            'struck' => exam_q_struck($q), 'answer' => $answers[(string)$id] ?? null,
         ];
         if ($showSolutions) {
             $solutions[(string)$id] = [
@@ -501,6 +523,8 @@ function exam_attempt_guest_view(array $a, array $row): array {
             'pending' => 0, 'display' => $a['config']['display'], 'per_question' => (object)$perQuestion,
         ] : null,
         'solutions' => $showSolutions ? (object)$solutions : null,
+        // Wartet der abgegebene Versuch nur noch auf die KI-Korrektur? Dann zeigt die Seite «wird bewertet».
+        'ai_pending' => exam_attempt_ai_waiting($a, $row, $qmap),
     ];
 }
 
@@ -509,6 +533,7 @@ function exam_attempt_summary(array $a, array $row): array {
     $g = json_decode((string)$row['grading_json'], true) ?: [];
     $pending = 0; $excluded = 0;
     foreach ($g as $x) {
+        if (!empty($x['struck'])) continue;
         if (!empty($x['excluded'])) { $excluded++; continue; }
         if (($x['final'] ?? null) === null) $pending++;
     }
@@ -530,6 +555,7 @@ function exam_attempt_summary(array $a, array $row): array {
         'pending' => $done ? $pending : null,
         'excluded' => $excluded,
         'visible_to_person' => exam_result_visible($a, $row),
+        'ai_pending' => $done && $pending > 0 && exam_attempt_ai_waiting($a, $row),
     ];
 }
 
@@ -565,7 +591,8 @@ function exam_attempt_detail(array $a, array $row): array {
             'options' => $opts, 'solution' => $q['type'] === 'open' ? (string)$q['solution_text'] : null,
             'answer' => $q['type'] === 'open' ? (string)($ans ?? '') : $ans,
             'auto' => $gq['auto'] ?? null, 'teacher' => $gq['teacher'] ?? null, 'final' => $gq['final'] ?? null,
-            'own' => $own, 'excluded' => $own && $a['config']['own_questions'] === 'exclude',
+            'ai' => isset($gq['ai']) ? ['points' => $gq['ai']['points'] ?? null, 'level' => $gq['ai']['level'] ?? null, 'reason' => $gq['ai']['reason'] ?? '', 'model' => $gq['ai']['model'] ?? null, 'failed' => !empty($gq['ai']['failed'])] : null,
+            'own' => $own, 'excluded' => $own && $a['config']['own_questions'] === 'exclude', 'struck' => exam_q_struck($q),
         ];
     }
     return exam_attempt_summary($a, $row) + ['answers' => $list];
@@ -580,7 +607,7 @@ function exam_attempts(array $a, bool $all = false): array {
 
 /** Zählung der ersten Versuche. */
 function exam_attempt_counts(array $a): array {
-    $c = ['started' => 0, 'submitted' => 0, 'in_progress' => 0, 'pending' => 0];
+    $c = ['started' => 0, 'submitted' => 0, 'in_progress' => 0, 'pending' => 0, 'ai_pending' => 0];
     try {
         $rows = db_all('SELECT status, COUNT(*) AS n FROM exam_attempts WHERE activity_id = ? AND attempt_no = 1 GROUP BY status', [$a['id']]);
     } catch (PDOException $e) {
@@ -592,6 +619,12 @@ function exam_attempt_counts(array $a): array {
         if ($r['status'] === 'in_progress') $c['in_progress'] += $n;
         else $c['submitted'] += $n;
         if ($r['status'] === 'submitted') $c['pending'] += $n;
+    }
+    if ($c['pending'] > 0 && exam_ai_auto($a)) {
+        $qmap = exam_question_map($a);
+        foreach (db_all("SELECT * FROM exam_attempts WHERE activity_id = ? AND attempt_no = 1 AND status = 'submitted'", [$a['id']]) as $r) {
+            if (exam_attempt_ai_waiting($a, $r, $qmap)) $c['ai_pending']++;
+        }
     }
     return $c;
 }

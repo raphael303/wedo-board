@@ -525,6 +525,10 @@ function exam_attempt_guest_view(array $a, array $row): array {
         'solutions' => $showSolutions ? (object)$solutions : null,
         // Wartet der abgegebene Versuch nur noch auf die KI-Korrektur? Dann zeigt die Seite «wird bewertet».
         'ai_pending' => exam_attempt_ai_waiting($a, $row, $qmap),
+        // Eigener Versuch als PDF (seit G4): nur nach der Abgabe und wenn die Lehrperson es erlaubt.
+        'pdf' => ($row['status'] !== 'in_progress' && $a['config']['student_pdf'] !== 'off')
+            ? ['url' => '/a/' . $a['akey'] . '/print?no=' . (int)$row['attempt_no'], 'solutions' => $a['config']['student_pdf'] === 'with' && $showSolutions]
+            : null,
     ];
 }
 
@@ -629,27 +633,88 @@ function exam_attempt_counts(array $a): array {
     return $c;
 }
 
-/** Lösungsquote pro angenommener Frage aus den ersten, abgegebenen Versuchen. */
+/**
+ * Fragenauswertung aus den ersten, abgegebenen Versuchen: Lösungsquote und Mittel (bewertete Antworten), seit G4
+ * dazu die häufigsten Fehler bei geschlossenen Fragen (errors) und die Punkteverteilung bei offenen (distribution).
+ * Angenommene und gestrichene Fragen in Prüfungsreihenfolge; gestrichene zählen nicht (n = 0).
+ */
 function exam_question_stats(array $a): array {
+    $questions = array_values(array_filter(exam_questions($a, 'all'), fn($q) => in_array($q['status'], ['accepted', 'struck'], true)));
+    $byId = array_column($questions, null, 'id');
     $sum = [];
-    foreach (db_all("SELECT grading_json FROM exam_attempts WHERE activity_id = ? AND attempt_no = 1 AND status <> 'in_progress'", [$a['id']]) as $r) {
+    foreach (db_all("SELECT answers_json, grading_json FROM exam_attempts WHERE activity_id = ? AND attempt_no = 1 AND status <> 'in_progress'", [$a['id']]) as $r) {
+        $answers = json_decode((string)$r['answers_json'], true) ?: [];
         foreach (json_decode((string)$r['grading_json'], true) ?: [] as $qid => $g) {
-            if (!empty($g['excluded']) || ($g['final'] ?? null) === null) continue;
+            $q = $byId[(int)$qid] ?? null;
+            if (!$q || !empty($g['excluded']) || !empty($g['struck'])) continue;
             $s = &$sum[$qid];
-            $s['n'] = ($s['n'] ?? 0) + 1;
-            $s['points'] = ($s['points'] ?? 0) + (float)$g['final'];
-            $s['full'] = ($s['full'] ?? 0) + ((float)$g['final'] >= (float)$g['points'] ? 1 : 0);
+            $s['answered'] = ($s['answered'] ?? 0) + 1;
+            if ($q['type'] !== 'open') {
+                foreach (exam_answer_errors($q, $answers[(string)$qid] ?? null) as $k) $s['errors'][$k] = ($s['errors'][$k] ?? 0) + 1;
+            }
+            if (($g['final'] ?? null) !== null) {
+                $f = (float)$g['final'];
+                $s['n'] = ($s['n'] ?? 0) + 1;
+                $s['points'] = ($s['points'] ?? 0) + $f;
+                $s['full'] = ($s['full'] ?? 0) + ($f >= (float)$g['points'] ? 1 : 0);
+                if ($q['type'] === 'open') { $pk = (string)$f; $s['dist'][$pk] = ($s['dist'][$pk] ?? 0) + 1; }
+            }
             unset($s);
         }
     }
     $out = [];
-    foreach (exam_questions($a, 'accepted') as $q) {
-        $s = $sum[(string)$q['id']] ?? ['n' => 0, 'points' => 0, 'full' => 0];
-        $out[] = [
-            'question_id' => $q['id'], 'prompt' => $q['prompt'], 'type' => $q['type'], 'n' => $s['n'], 'points' => $q['points'],
-            'mean_points' => $s['n'] ? round($s['points'] / $s['n'], 2) : null,
-            'solved_rate' => $s['n'] ? round($s['full'] / $s['n'], 3) : null,
+    foreach ($questions as $q) {
+        $s = $sum[(string)$q['id']] ?? [];
+        $n = (int)($s['n'] ?? 0);
+        $item = [
+            'question_id' => $q['id'], 'prompt' => $q['prompt'], 'type' => $q['type'], 'status' => $q['status'], 'n' => $n, 'points' => $q['points'],
+            'mean_points' => $n ? round($s['points'] / $n, 2) : null,
+            'solved_rate' => $n ? round($s['full'] / $n, 3) : null,
+            'n_answered' => (int)($s['answered'] ?? 0),
         ];
+        if ($q['type'] === 'open') {
+            $dist = [];
+            foreach ($s['dist'] ?? [] as $p => $c) $dist[] = ['points' => (float)$p, 'n' => $c];
+            usort($dist, fn($x, $y) => $x['points'] <=> $y['points']);
+            $item['distribution'] = $dist;
+        } else {
+            $texts = array_column($q['options'], 'text', 'id');
+            $errors = [];
+            foreach ($s['errors'] ?? [] as $k => $c) {
+                [$kind, $oid] = array_pad(explode(':', $k, 2), 2, null);
+                $errors[] = ['kind' => $kind, 'option_id' => $oid, 'text' => $oid !== null ? ($texts[$oid] ?? '?') : null, 'n' => $c];
+            }
+            usort($errors, fn($x, $y) => $y['n'] <=> $x['n']);
+            $item['errors'] = array_slice($errors, 0, 5);
+        }
+        $out[] = $item;
+    }
+    return $out;
+}
+
+/**
+ * Fehler einer Antwort auf eine geschlossene Frage als Schlüssel «art:option»: chosen_wrong (Einfachauswahl,
+ * gewählte falsche Option), missed und extra (Mehrfachauswahl), judged_wrong (Richtig/Falsch, falsch oder nicht
+ * beurteilt) und no_answer (ohne Option).
+ */
+function exam_answer_errors(array $q, $answer): array {
+    $opts = $q['options'];
+    if ($q['type'] === 'single') {
+        if (!is_string($answer) || $answer === '') return ['no_answer'];
+        foreach ($opts as $o) if ($o['id'] === $answer) return $o['correct'] ? [] : ['chosen_wrong:' . $o['id']];
+        return [];
+    }
+    if (!is_array($answer) || !$answer) return ['no_answer'];
+    $out = [];
+    foreach ($opts as $o) {
+        if ($q['type'] === 'multi') {
+            $chosen = in_array($o['id'], $answer, true);
+            if ($o['correct'] && !$chosen) $out[] = 'missed:' . $o['id'];
+            if (!$o['correct'] && $chosen) $out[] = 'extra:' . $o['id'];
+        } else {
+            $v = array_key_exists($o['id'], $answer) ? $answer[$o['id']] : null;
+            if ($v === null || (bool)$v !== (bool)$o['correct']) $out[] = 'judged_wrong:' . $o['id'];
+        }
     }
     return $out;
 }
@@ -688,7 +753,7 @@ function exam_results_markdown(array $a): string {
     }
     $out .= "\n## Lösungsquote pro Frage\n\n";
     foreach (exam_question_stats($a) as $i => $s) {
-        $out .= ($i + 1) . '. [#' . $s['question_id'] . '] ' . mb_substr($s['prompt'], 0, 80) . ': ' . ($s['n'] ? round(100 * $s['solved_rate']) . ' % voll, Mittel ' . $fmt($s['mean_points']) . ' von ' . $fmt($s['points']) . ' P. (' . $s['n'] . ' bewertet)' : 'noch keine Bewertung') . "\n";
+        $out .= ($i + 1) . '. [#' . $s['question_id'] . '] ' . mb_substr($s['prompt'], 0, 80) . ': ' . ($s['status'] === 'struck' ? 'gestrichen, zählt nicht' : ($s['n'] ? round(100 * $s['solved_rate']) . ' % voll, Mittel ' . $fmt($s['mean_points']) . ' von ' . $fmt($s['points']) . ' P. (' . $s['n'] . ' bewertet)' : 'noch keine Bewertung')) . "\n";
     }
     if ($c['ranking']) {
         $out .= "\n## Rangliste" . ($a['revealed'] ? ' (gezeigt)' : ' (nicht gezeigt)') . "\n\n";

@@ -340,6 +340,82 @@ for pg in "exam.php?key=$Y" "exam.php?key=$Y&attempt=$YAA" "exam.php?key=$Y&grad
 done
 ok 'Bibliotheksseiten für KI, Versuch, Bewerten pro Frage und Fragen prüfen ohne PHP-Fehler'
 
+echo '9d. Ausgaben als PDF und CSV (G4)'
+W=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"exam","name":"Ausgaben-Prüfung Äpfel","quota_max":0,"grade":{"on":true},"note":"Test G4","tags":"test"}' "$BASE/api/activities" | jq -r '.activity.key')
+WA="$BASE/api/activities/$W"; WP="$BASE/a/$W/print"
+WS=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"single","prompt":"Hauptstadt der Schweiz?","options":[{"text":"Bern","correct":true},{"text":"Zürich","correct":false}]}' "$WA/questions" | jq -r '.question.id')
+WT=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"truefalse","prompt":"Aussagen über Bären","options":[{"text":"Bären halten Winterruhe.","correct":true},{"text":"Bären sind Fische.","correct":false}]}' "$WA/questions" | jq -r '.question.id')
+WO=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"open","prompt":"Was ist Photosynthese?","solution":"GEHEIMSATZ Pflanzen bilden mit Licht Zucker."}' "$WA/questions" | jq -r '.question.id')
+WX=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"single","prompt":"Missglückte Zusatzfrage","options":[{"text":"ja","correct":true},{"text":"nein","correct":false}]}' "$WA/questions" | jq -r '.question.id')
+curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"single","prompt":"=SUMME(1;2) ergibt?","options":[{"text":"3","correct":true},{"text":"12","correct":false}]}' "$WA/questions" >/dev/null
+curl -s "${AUTH[@]}" "${JH[@]}" -d '{"phase":"running"}' "$WA/phase" >/dev/null
+# Löst als Gast: $1 Cookie-Datei, $2 Text der Einfachauswahl, $3 Urteil zur falschen Aussage, $4 offene Antwort; gibt den Namen aus.
+wsolve() {
+  local jar=(-b "$1" -c "$1") st os ot1 ot2
+  st=$(curl -s "${jar[@]}" "${JH[@]}" -d '{}' "$BASE/api/a/$W/attempt/start")
+  os=$(echo "$st" | jq -r --arg q "$WS" --arg t "$2" '.state.attempt.questions[] | select(.id == ($q|tonumber)) | .options[] | select(.text == $t) | .id')
+  ot1=$(echo "$st" | jq -r --arg q "$WT" '.state.attempt.questions[] | select(.id == ($q|tonumber)) | .options[] | select(.text == "Bären halten Winterruhe.") | .id')
+  ot2=$(echo "$st" | jq -r --arg q "$WT" '.state.attempt.questions[] | select(.id == ($q|tonumber)) | .options[] | select(.text == "Bären sind Fische.") | .id')
+  curl -s "${jar[@]}" "${JH[@]}" -d "$(jq -n --arg s "$WS" --arg t "$WT" --arg o "$WO" --arg os "$os" --arg a "$ot1" --arg b "$ot2" --argjson j "$3" --arg txt "$4" \
+    '{answers: {($s): $os, ($t): {($a): true, ($b): $j}, ($o): $txt}}')" "$BASE/api/a/$W/attempt/answer" >/dev/null
+  curl -s "${jar[@]}" "${JH[@]}" -d '{}' "$BASE/api/a/$W/attempt/submit" | jq -r '.state.me.name'
+}
+WN1=$(wsolve "$TMP/w1" 'Zürich' true 'Pflanzen machen Zucker.')
+WN2=$(wsolve "$TMP/w2" 'Bern' false 'Öko-Antwort: Blätter nutzen Sonnenlicht für Zucker.')
+curl -s "${AUTH[@]}" -X POST "$WA/questions/$WX/strike" >/dev/null
+for d in sheet key overview stats all; do
+  curl -s -b "$TMP/admin" -o "$TMP/p-$d.html" -w '%{http_code}' "$WP?doc=$d" > "$TMP/code"
+  [ "$(cat "$TMP/code")" = 200 ] && ! grep -qE '<b>(Warning|Fatal error|Notice|Deprecated)</b>|Uncaught' "$TMP/p-$d.html" || bad "Druckseite $d: $(cat "$TMP/code")"
+done
+WAID=$(curl -s "${AUTH[@]}" "$WA/attempts" | jq -r --arg n "$WN1" '.attempts[] | select(.name == $n) | .id')
+[ "$(code -b "$TMP/admin" "$WP?doc=attempt&attempt=$WAID")" = 200 ] && ok 'Druckseiten der Lehrperson (sechs Ausgaben) mit 200 und ohne PHP-Fehler' || bad 'Einzelversuch'
+! grep -q GEHEIMSATZ "$TMP/p-sheet.html" && grep -q GEHEIMSATZ "$TMP/p-key.html" && ok 'Aufgabenblatt ohne, Lösungsschlüssel mit Lösungssatz' || bad 'Lösungen auf Aufgabenblatt oder Schlüssel'
+! grep -q 'Missglückte Zusatzfrage' "$TMP/p-sheet.html" && grep -q 'gestrichen, zählt nicht' "$TMP/p-key.html" && grep -q 'gestrichen, zählt nicht' "$TMP/p-all.html" && ok 'gestrichene Frage: fehlt auf dem Blatt, sonst als gestrichen markiert' || bad 'gestrichene Frage in den Ausgaben'
+grep -qF "$WN1" "$TMP/p-all.html" && grep -qF "$WN2" "$TMP/p-all.html" && grep -qF "$WN1" "$TMP/p-overview.html" && [ "$(grep -o '<section class="person' "$TMP/p-all.html" | wc -l)" = 2 ] && ok 'Sammelausgabe und Übersicht mit beiden Fantasienamen' || bad 'Namen in Sammelausgabe/Übersicht'
+grep -q '«Zürich» gewählt: 1' "$TMP/p-stats.html" && ok 'Fragenauswertung nennt den häufigsten Fehler' || bad 'häufigste Fehler'
+[ "$(code -b "$TMP/admin" "$WP?doc=gibtsnicht")" = 400 ] && [ "$(code -b "$TMP/admin" "$WP?doc=attempt&attempt=999999")" = 404 ] && ok 'unbekannte Ausgabe 400, unbekannter Versuch 404' || bad 'Fehlercodes Druckseite'
+[ "$(code -b "$TMP/w1" "$WP")" = 403 ] && ok 'student_pdf off: 403 für Lernende' || bad 'student_pdf off'
+[ "$(curl -s -b "$TMP/w1" "$BASE/api/a/$W/state" | jq -r '.attempt.pdf')" = null ] && ok 'ohne Freigabe kein pdf im Zustand' || bad 'attempt.pdf bei off'
+curl -s "${AUTH[@]}" "${JH[@]}" -X PATCH -d '{"student_pdf":"with"}' "$WA" >/dev/null
+R=$(curl -s -b "$TMP/w1" "$BASE/api/a/$W/state")
+[ "$(echo "$R" | jq -r '.attempt.pdf.url')" = "/a/$W/print?no=1" ] && [ "$(echo "$R" | jq -r '.attempt.pdf.solutions')" = false ] && ok 'Zustand meldet pdf (noch ohne Lösungen)' || bad "attempt.pdf: $(echo "$R" | jq -c '.attempt.pdf')"
+curl -s -b "$TMP/w1" -o "$TMP/s1.html" "$WP?doc=key"
+[ "$(code -b "$TMP/w1" "$WP")" = 200 ] && ! grep -q GEHEIMSATZ "$TMP/s1.html" && ! grep -q 'class="tag' "$TMP/s1.html" && ! grep -qE 'von [0-9]+ Punkten' "$TMP/s1.html" && grep -q 'noch nicht freigegeben' "$TMP/s1.html" \
+  && ok 'Lernende vor der Freigabe: eigener Versuch ohne Lösungen und ohne Punkte (auch mit doc=key)' || bad 'Lernenden-PDF vor Freigabe'
+! grep -qF "$WN1" "$TMP/s1.html" && ! grep -qF "$WN2" "$TMP/s1.html" && grep -q 'Pflanzen machen Zucker.' "$TMP/s1.html" && ! grep -q 'Öko-Antwort' "$TMP/s1.html" && ok 'Lernenden-PDF: eigene Antworten, keine Fantasienamen, nichts von anderen' || bad 'Lernenden-PDF zeigt Namen oder Fremdes'
+[ "$(code -b "$TMP/w9" -c "$TMP/w9" "$WP")" = 404 ] && [ "$(code "$WP?doc=sheet")" = 404 ] && ok 'ohne eigenen Versuch 404, auch für doc=sheet ohne Anmeldung' || bad 'fremde Druckseite erreichbar'
+WA2=$(curl -s "${AUTH[@]}" "$WA/attempts" | jq -r --arg n "$WN2" '.attempts[] | select(.name == $n) | .id')
+curl -s "${AUTH[@]}" "${JH[@]}" -d '{"grades":[{"attempt_id":'"$WAID"',"question_id":'"$WO"',"points":1},{"attempt_id":'"$WA2"',"question_id":'"$WO"',"points":2}]}' "$WA/attempts/grade" >/dev/null
+curl -s "${AUTH[@]}" "${JH[@]}" -d '{"done":true}' "$WA/review" >/dev/null
+curl -s "${AUTH[@]}" "${JH[@]}" -d '{"phase":"results"}' "$WA/phase" >/dev/null
+curl -s -b "$TMP/w1" -o "$TMP/s2.html" "$WP"
+grep -q GEHEIMSATZ "$TMP/s2.html" && grep -qE 'von [0-9.]+ Punkten' "$TMP/s2.html" && grep -q 'Note' "$TMP/s2.html" && [ "$(curl -s -b "$TMP/w1" "$BASE/api/a/$W/state" | jq -r '.attempt.pdf.solutions')" = true ] \
+  && ok 'nach Freigabe: Lernenden-PDF mit Punkten, Note und Lösungen' || bad 'Lernenden-PDF nach Freigabe'
+! grep -q GEHEIMSATZ <(curl -s -b "$TMP/w1" "$WP?solutions=0") && ok 'Lernende können die Lösungen weglassen' || bad 'solutions=0 für Lernende'
+curl -s "${AUTH[@]}" "${JH[@]}" -X PATCH -d '{"student_pdf":"without"}' "$WA" >/dev/null
+curl -s -b "$TMP/w1" -o "$TMP/s3.html" "$WP"
+! grep -q GEHEIMSATZ "$TMP/s3.html" && grep -qE 'von [0-9.]+ Punkten' "$TMP/s3.html" && ok 'student_pdf without: Punkte ja, Lösungen nein' || bad 'student_pdf without'
+curl -s "${AUTH[@]}" -X POST "$WA/close" >/dev/null
+[ "$(code -b "$TMP/w1" "$WP")" = 403 ] && ok 'offline: 403 für Lernende' || bad 'offline'
+curl -s "${AUTH[@]}" -X POST "$WA/open" >/dev/null
+curl -s "${AUTH[@]}" -D "$TMP/csvh" -o "$TMP/r.csv" "$WA/results.csv"
+grep -qi 'content-type: text/csv' "$TMP/csvh" && grep -qi 'filename="ausgaben-pruefung-aepfel-ergebnisse.csv"' "$TMP/csvh" && ok 'results.csv: Typ und Dateiname' || bad "results.csv Kopf: $(cat "$TMP/csvh")"
+[ "$(head -c 3 "$TMP/r.csv" | od -An -tx1 | tr -d ' ')" = efbbbf ] && [ "$(head -1 "$TMP/r.csv" | sed 's/^\xEF\xBB\xBF//' | tr -d '\r')" = 'Fantasiename;Status;Punkte;Maximum;Prozent;Note;Abgegeben' ] \
+  && ok 'results.csv: BOM und Spalten' || bad "results.csv Spalten: $(head -1 "$TMP/r.csv")"
+grep -qF "$WN1;bewertet;" "$TMP/r.csv" && [ "$(wc -l < "$TMP/r.csv")" = 3 ] && ok 'results.csv: zwei Versuche mit Status' || bad "results.csv Zeilen: $(cat "$TMP/r.csv")"
+curl -s "${AUTH[@]}" -o "$TMP/s.csv" "$WA/stats.csv"
+[ "$(head -1 "$TMP/s.csv" | sed 's/^\xEF\xBB\xBF//' | tr -d '\r')" = 'Nr;Frage;Typ;Punkte;Status;Bewertet;Mittel;Lösungsquote;Häufigste Fehler;Punkteverteilung' ] && iconv -f UTF-8 -t UTF-8 "$TMP/s.csv" >/dev/null \
+  && grep -q 'Aussagen über Bären' "$TMP/s.csv" && grep -q '«Zürich» gewählt: 1' "$TMP/s.csv" && grep -q '1 P.: 1 · 2 P.: 1' "$TMP/s.csv" && grep -q ';gestrichen;' "$TMP/s.csv" \
+  && ok 'stats.csv: Spalten, Umlaute, Fehler, Verteilung, gestrichen' || bad "stats.csv: $(cat "$TMP/s.csv")"
+grep -qF "\"'=SUMME(1;2) ergibt?\"" "$TMP/s.csv" && ok 'CSV: Formeln in Zellen entschärft' || bad 'CSV-Injection'
+[ "$(code "$WA/results.csv")" = 401 ] || [ "$(code "$WA/results.csv")" = 403 ] && ok 'CSV nur für den Besitzer' || bad 'CSV ohne Token erreichbar'
+R=$(curl -s "${AUTH[@]}" "$WA/attempts")
+[ "$(echo "$R" | jq -r --arg q "$WS" '.stats[] | select(.question_id == ($q|tonumber)) | .errors[0].kind')" = chosen_wrong ] && [ "$(echo "$R" | jq -r --arg q "$WT" '.stats[] | select(.question_id == ($q|tonumber)) | .errors[0].kind')" = judged_wrong ] \
+  && [ "$(echo "$R" | jq -r --arg q "$WX" '.stats[] | select(.question_id == ($q|tonumber)) | .status')" = struck ] && [ "$(echo "$R" | jq -c --arg q "$WO" '.stats[] | select(.question_id == ($q|tonumber)) | .distribution')" = '[{"points":1,"n":1},{"points":2,"n":1}]' ] \
+  && ok 'stats in der Schnittstelle: errors, distribution, status' || bad "stats: $(echo "$R" | jq -c '.stats')"
+curl -s -b "$TMP/admin" "$BASE/lehrerzimmer/exam.php?key=$W" > "$TMP/page.html"
+grep -q 'id="ausgaben"' "$TMP/page.html" && grep -q 'name="student_pdf"' "$TMP/page.html" && ok 'Bibliothek: Ausgaben und Einstellung student_pdf' || bad 'Bibliothek G4'
+
 echo '10. Migration 13 von Schema 12'
 OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
 [ "$OUT" = "1 13 3" ] && ok 'Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"

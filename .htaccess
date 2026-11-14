@@ -15,6 +15,9 @@ RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 # Inhaltlicher Export: /b/<key>/export
 RewriteRule ^b/([a-z0-9]{16})/export/?$ export.php?key=$1 [L,QSA]
 
+# Gemeinschaftsprüfung: Druckseiten /a/<key>/print
+RewriteRule ^a/([a-z0-9]{16})/print/?$ exam_print.php?key=$1 [L,QSA]
+
 # Aktivitäten (Zielscheibe): /a/<key>
 RewriteRule ^a/([a-z0-9]{16})/?$ activity.php?key=$1 [L,QSA]
 

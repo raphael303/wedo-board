@@ -271,6 +271,8 @@ function exam_owner_api(string $method, array $a, string $action, array $p, arra
             echo exam_markdown($a) . ($a['config']['phase'] !== 'collect' ? exam_results_markdown($a) : '');
             exit;
         }
+        if ($action === 'results.csv' && $method === 'GET') exam_send_csv($a, 'ergebnisse', exam_results_csv($a, $a['lang']));
+        if ($action === 'stats.csv' && $method === 'GET') exam_send_csv($a, 'fragenauswertung', exam_stats_csv($a, $a['lang']));
         if ($action === 'round') wb_error('Für Prüfungen nicht verfügbar.', 404);
         if ($method === 'POST') {
             switch ($action) {

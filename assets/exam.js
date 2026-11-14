@@ -1,5 +1,5 @@
 /* Gemeinschaftsprüfung (Seite einer Aktivität vom Typ exam): Fragen beisteuern (G1), Prüfung lösen, Ergebnis, Lösungen und Rangliste (G2),
-   KI-Korrektur nach der Abgabe anstossen und gestrichene Fragen zeigen (G3) */
+   KI-Korrektur nach der Abgabe anstossen und gestrichene Fragen zeigen (G3), eigener Versuch als PDF (G4) */
 (function () {
   'use strict';
   const W = window.WT;
@@ -404,6 +404,12 @@
       else if (att.ai_pending) head.appendChild(el('p', 'exam-sub exam-ai-pending', t('exam_ai_pending')));
       else head.appendChild(el('p', 'exam-sub', t('exam_result_later')));
       if (!att.solutions) head.appendChild(el('p', 'exam-hint', t('exam_solutions_later')));
+      if (att.pdf) {
+        // Eigener Versuch als PDF (G4): Druckseite in neuem Tab, Inhalt nach den Freigaben der Lehrperson.
+        const a = el('a', 'btn-ghost', att.pdf.solutions ? t('exam_pdf_link_solutions') : t('exam_pdf_link'));
+        a.href = att.pdf.url; a.target = '_blank'; a.rel = 'noopener';
+        const p = el('p', 'exam-actions'); p.appendChild(a); head.appendChild(p);
+      }
       if (state.can_retry) {
         const b = el('button', 'btn-primary', t('exam_retry'));
         b.type = 'button';
@@ -492,7 +498,7 @@
   function renderRun() {
     if (me.owner) { runKey = ''; renderOwnerRun(); return; }
     const att = state.attempt;
-    const key = att ? [att.no, att.status, !!att.result, !!att.solutions, !!att.ai_pending, att.questions.filter((q) => q.struck).map((q) => q.id).join(','), state.can_retry, state.phase, JSON.stringify(state.ranking || null)].join('|') : 'none|' + state.may_start + '|' + state.phase;
+    const key = att ? [att.no, att.status, !!att.result, !!att.solutions, !!att.ai_pending, att.questions.filter((q) => q.struck).map((q) => q.id).join(','), state.can_retry, state.phase, JSON.stringify(state.ranking || null), JSON.stringify(att.pdf || null)].join('|') : 'none|' + state.may_start + '|' + state.phase;
     if (att && att.status === 'in_progress') {
       setDeadline(att.seconds_left);
       if (key === runKey) return; // nichts neu zeichnen, solange jemand schreibt

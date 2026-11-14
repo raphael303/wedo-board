@@ -8,6 +8,11 @@ if (preg_match('~^/b/([a-z0-9]{16})/export/?$~', $uri, $m)) {
     require __DIR__ . '/export.php';
     return true;
 }
+if (preg_match('~^/a/([a-z0-9]{16})/print/?$~', $uri, $m)) {
+    $_GET['key'] = $m[1];
+    require __DIR__ . '/exam_print.php';
+    return true;
+}
 if (preg_match('~^/a/([a-z0-9]{16})/?$~', $uri, $m)) {
     $_GET['key'] = $m[1];
     require __DIR__ . '/activity.php';

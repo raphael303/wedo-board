@@ -88,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'shuffle_options' => !empty($_POST['shuffle_options']),
                 'time_limit' => ['minutes' => (int)($_POST['tl_minutes'] ?? 0), 'per_person' => ($_POST['tl_mode'] ?? 'person') === 'person'],
                 'allow_retry' => !empty($_POST['allow_retry']),
+                'student_pdf' => (string)($_POST['student_pdf'] ?? 'off'),
                 'background' => $_POST['background'] ?? 'meer',
                 'lang' => $_POST['lang'] ?? 'de',
                 'note' => $_POST['note'] ?? '',
@@ -343,7 +344,7 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
     <h1><?= $d ? e($d['name']) . ($d['attempt_no'] > 1 ? ' · Übungsversuch ' . $d['attempt_no'] : '') : 'Versuch nicht gefunden' ?></h1>
     <p class="muted"><a href="?key=<?= e($act['akey']) ?>#ergebnisse">← <?= e($act['name']) ?></a><?php if ($d): ?> · begonnen <?= e((string)$d['started_at']) ?><?= $d['submitted_at'] ? ' · abgegeben ' . e((string)$d['submitted_at']) : ' · löst noch' ?><?php endif; ?></p>
   </div>
-  <?php if ($d): ?><div class="page-actions"><form method="post" data-confirm="Versuch löschen? Die Person kann danach neu beginnen. Antworten und Punkte sind weg."><input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="attempt_delete"><input type="hidden" name="attempt" value="<?= $d['id'] ?>"><button class="btn-danger" type="submit">Versuch löschen</button></form></div><?php endif; ?>
+  <?php if ($d): ?><div class="page-actions"><a class="btn-ghost" href="/a/<?= e($act['akey']) ?>/print?doc=attempt&amp;attempt=<?= $d['id'] ?>" target="_blank" rel="noopener">PDF mit Lösungen</a><a class="btn-ghost" href="/a/<?= e($act['akey']) ?>/print?doc=attempt&amp;attempt=<?= $d['id'] ?>&amp;solutions=0" target="_blank" rel="noopener">PDF ohne Lösungen</a><form method="post" data-confirm="Versuch löschen? Die Person kann danach neu beginnen. Antworten und Punkte sind weg."><input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="attempt_delete"><input type="hidden" name="attempt" value="<?= $d['id'] ?>"><button class="btn-danger" type="submit">Versuch löschen</button></form></div><?php endif; ?>
 </div>
 <?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
 <?php if ($d): ?>
@@ -510,6 +511,25 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
   </section>
 </div>
 
+<section class="card" id="ausgaben">
+  <h2>Ausgaben (PDF und CSV)</h2>
+  <p class="muted">Jede Ausgabe öffnet eine Druckseite in einem neuen Tab; dort machst du mit «Drucken / als PDF sichern» das PDF. Fantasienamen erscheinen nur in diesen Ausgaben für dich. Gestrichene Fragen stehen als gestrichen darin, das Aufgabenblatt lässt sie weg.</p>
+  <?php $pr = '/a/' . e($act['akey']) . '/print?doc='; ?>
+  <div class="action-grid">
+    <a class="btn-ghost" href="<?= $pr ?>sheet" target="_blank" rel="noopener">Aufgabenblatt</a>
+    <a class="btn-ghost" href="<?= $pr ?>key" target="_blank" rel="noopener">Lösungsschlüssel</a>
+    <?php if ($cfg['phase'] !== 'collect'): ?>
+    <a class="btn-ghost" href="<?= $pr ?>all" target="_blank" rel="noopener">Sammelausgabe mit Lösungen</a>
+    <a class="btn-ghost" href="<?= $pr ?>all&amp;solutions=0" target="_blank" rel="noopener">Sammelausgabe ohne Lösungen</a>
+    <a class="btn-ghost" href="<?= $pr ?>overview" target="_blank" rel="noopener">Ergebnisübersicht</a>
+    <a class="btn-ghost" href="/api/activities/<?= e($act['akey']) ?>/results.csv">Ergebnisübersicht (CSV)</a>
+    <a class="btn-ghost" href="<?= $pr ?>stats" target="_blank" rel="noopener">Fragenauswertung</a>
+    <a class="btn-ghost" href="/api/activities/<?= e($act['akey']) ?>/stats.csv">Fragenauswertung (CSV)</a>
+    <?php endif; ?>
+  </div>
+  <p class="hint">Einzelversuche druckst du über «Antworten» in den Ergebnissen. PDF für Lernende: <?= e(['off' => 'nicht erlaubt', 'without' => 'ohne Lösungen', 'with' => 'mit Lösungen, sobald sie sichtbar sind'][$cfg['student_pdf']]) ?> (Einstellungen).</p>
+</section>
+
 <?php if ($cfg['phase'] !== 'collect'): $attempts = exam_attempts($act, true); $stats = exam_question_stats($act); $firsts = array_values(array_filter($attempts, fn($t) => $t['attempt_no'] === 1)); $retries = count($attempts) - count($firsts); ?>
 <section class="card" id="ergebnisse">
   <h2>Ergebnisse</h2>
@@ -551,7 +571,7 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
   <?php endif; ?>
   <h3 class="exam-admin-h3">Lösungsquote pro Frage</h3>
   <ol class="exam-stats">
-    <?php foreach ($stats as $s): ?>
+    <?php foreach ($stats as $s): if ($s['status'] === 'struck') { echo '<li><span class="exam-stats-prompt">' . e(mb_strimwidth($s['prompt'], 0, 90, '…')) . '</span> <span class="pill exam-st-struck">gestrichen, zählt nicht</span></li>'; continue; } ?>
     <li><span class="exam-stats-prompt"><a href="?key=<?= e($act['akey']) ?>&amp;grade_q=<?= $s['question_id'] ?>" title="Diese Frage über alle Versuche bewerten"><?= e(mb_strimwidth($s['prompt'], 0, 90, '…')) ?></a></span>
       <span class="exam-stats-bar" title="Anteil voller Punktzahl"><span style="width: <?= $s['n'] ? round(100 * $s['solved_rate']) : 0 ?>%"></span></span>
       <span class="muted"><?= $s['n'] ? round(100 * $s['solved_rate']) . ' % voll · Mittel ' . $fmt($s['mean_points']) . '/' . $fmt($s['points']) . ' P. · ' . $s['n'] . ' bewertet' : 'noch keine Bewertung' ?></span></li>
@@ -739,6 +759,17 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
         <label><input type="checkbox" name="shuffle_options" <?= $cfg['shuffle_options'] ? 'checked' : '' ?>> Antworten pro Person mischen (Standard; pro Frage einstellbar)</label>
         <label><input type="checkbox" name="ranking" <?= $cfg['ranking'] ? 'checked' : '' ?>> Rangliste mit Fantasienamen (nur bei automatischer Korrektur)</label>
         <label><input type="checkbox" name="allow_retry" <?= $cfg['allow_retry'] ? 'checked' : '' ?>> Nach den Ergebnissen weitere Übungsversuche erlauben (zählen nicht)</label>
+      </div>
+    </div>
+    <div class="row two">
+      <div>
+        <label for="student_pdf">Eigener Versuch als PDF für Lernende</label>
+        <select id="student_pdf" name="student_pdf">
+          <option value="off" <?= $cfg['student_pdf'] === 'off' ? 'selected' : '' ?>>nicht erlaubt</option>
+          <option value="without" <?= $cfg['student_pdf'] === 'without' ? 'selected' : '' ?>>ohne Lösungen</option>
+          <option value="with" <?= $cfg['student_pdf'] === 'with' ? 'selected' : '' ?>>mit Lösungen, sobald sie sichtbar sind</option>
+        </select>
+        <p class="hint">Nach der Abgabe erscheint auf der Prüfungsseite «Als PDF sichern». Punkte stehen darin erst, wenn die Person sie sehen darf; Fantasienamen nie.</p>
       </div>
     </div>
     <div class="row">

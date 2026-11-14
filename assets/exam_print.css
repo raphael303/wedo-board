@@ -1,0 +1,98 @@
+/* Druckseiten der Gemeinschaftsprüfung (exam_print.php), im Stil des inhaltlichen Exports (export.php).
+   Keine CSS-Spalten: Safari bricht mehrspaltige Bereiche beim Drucken falsch um. */
+@page :first { @bottom-left { content: ""; } }
+:root {
+  --ink: #1d2128; --muted: #6b7280; --line: #e3e5e9; --soft: #f6f7f9; --ok: #2e7d5b; --no: #b3412e;
+  --sans: Inter, -apple-system, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  --serif: Charter, "Iowan Old Style", "Bitstream Charter", Caladea, Georgia, Cambria, serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #e9ebef; }
+body { margin: 0; color: var(--ink); font: 10pt/1.5 var(--serif); }
+.page { background: #fff; max-width: 210mm; margin: 16mm auto 12mm; padding: 18mm 17mm; box-shadow: 0 2px 18px rgba(0,0,0,.12); }
+h1, h2, h3 { font-family: var(--sans); }
+.band { height: 7mm; border-radius: 2mm; margin-bottom: 6mm; }
+.bg-morgen { background-image: linear-gradient(135deg, #fbe4c4 0%, #f6b39d 55%, #d8a8e6 100%); }
+.bg-meer { background-image: linear-gradient(135deg, #10395a 0%, #2f8fbd 55%, #9ad9d2 100%); }
+.bg-wald { background-image: linear-gradient(135deg, #1d4a38 0%, #5f9c74 55%, #d2e6a3 100%); }
+.bg-daemmerung { background-image: linear-gradient(135deg, #262a5c 0%, #7a4b8f 55%, #ea9470 100%); }
+.bg-graphit { background-image: linear-gradient(135deg, #1f2227 0%, #3a3f47 55%, #6a7382 100%); }
+.bg-papier { background-image: linear-gradient(135deg, #e9e3d5 0%, #cfc5ae 100%); }
+.kicker { font: 600 8pt var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 2mm; }
+h1 { font-size: 21pt; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; margin: 0 0 3mm; }
+.stats { display: flex; flex-wrap: wrap; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 3mm 0 5mm; }
+.stats div { flex: 1 1 0; min-width: 24mm; padding: 2.5mm 3mm 2.5mm 0; font: 8pt var(--sans); color: var(--muted); }
+.stats b { display: block; font: 600 13pt var(--sans); color: var(--ink); }
+.stats .fill { flex: 3 1 0; }
+.stats .fill.short { flex: 1.5 1 0; }
+.stats .fill b { border-bottom: 1px solid #9aa0a8; margin-right: 4mm; }
+.rule { font: 8.5pt/1.45 var(--sans); color: var(--muted); margin: 0 0 5mm; }
+.empty { font: 10pt var(--sans); color: var(--muted); }
+.notice { font: 9pt/1.45 var(--sans); color: #7a5a12; background: #fdf6e3; border-radius: 1.5mm; padding: 2mm 3mm; margin: 2mm 0; }
+.muted { color: var(--muted); }
+.hint { font: 8pt var(--sans); color: var(--muted); margin: 0 0 1.5mm; }
+
+/* Fragen */
+.q { break-inside: avoid; page-break-inside: avoid; border-top: 1px solid var(--line); padding: 3.5mm 0 3mm; }
+.q-head { display: flex; flex-wrap: wrap; gap: 1.5mm; align-items: baseline; margin-bottom: 1.2mm; }
+.q-num { font: 700 9.5pt var(--sans); margin-right: 1mm; }
+.pill { font: 500 7.5pt var(--sans); color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: .3mm 2mm; }
+.pill.struck { color: var(--no); border-color: #e7c3bb; }
+.q.is-struck .prompt, .q.is-struck .opts, .q.is-struck .answer, .q.is-struck .tf { opacity: .55; }
+.prompt { margin: 0 0 2mm; font-size: 10.5pt; overflow-wrap: anywhere; }
+.opts { list-style: none; margin: 0; padding: 0; }
+.opts li { display: flex; gap: 2.5mm; align-items: baseline; padding: .7mm 2mm; border-radius: 1.2mm; margin-bottom: .6mm; }
+.opts .mark { flex: none; width: 4mm; text-align: center; font: 600 10pt var(--sans); }
+.opts .txt { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.opts li.ok { background: #eaf5ef; }
+.opts li.no { background: #fbecea; }
+.tag { flex: none; font: 600 7pt var(--sans); text-transform: uppercase; letter-spacing: .04em; border-radius: 1mm; padding: .2mm 1.4mm; }
+.tag.ok { color: var(--ok); background: #d9efe3; }
+.tag.no { color: var(--no); background: #f6d9d4; }
+.tf { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.tf th { font: 600 7.5pt var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; text-align: center; width: 16mm; padding: 0 0 1mm; }
+.tf th:first-child { text-align: left; width: auto; }
+.tf td { border-top: 1px solid var(--line); padding: 1.3mm 2mm 1.3mm 0; overflow-wrap: anywhere; }
+.tf td.box { text-align: center; font: 700 10pt var(--sans); color: var(--ok); }
+.tf td.box::before { content: ""; display: inline-block; width: 3.6mm; height: 3.6mm; border: 1px solid #8a8f98; border-radius: .6mm; vertical-align: -.6mm; margin-right: -3.6mm; }
+.lines span { display: block; height: 8mm; border-bottom: 1px solid #b8bcc4; }
+.answer { background: var(--soft); border-radius: 1.5mm; padding: 2mm 3mm; overflow-wrap: anywhere; }
+.solution { margin: 2mm 0 0; padding: 1.5mm 3mm; border-left: 1mm solid var(--ok); background: #f1f8f4; overflow-wrap: anywhere; }
+.grading { font: 8.5pt var(--sans); color: #3b414b; margin: 1.8mm 0 0; }
+.reason { font: italic 9pt/1.45 var(--serif); color: #3b414b; margin: 1mm 0 0; overflow-wrap: anywhere; }
+
+/* Versuche */
+.person.break { break-before: page; page-break-before: always; }
+.person-head { margin: 2mm 0 3mm; }
+.person-head h2 { font-size: 15pt; margin: 0 0 1mm; }
+.person-head h2 small { font: 500 8.5pt var(--sans); color: var(--muted); margin-left: 2mm; }
+.person-head .meta { font: 8.5pt var(--sans); color: var(--muted); margin: 0 0 1mm; }
+.score { font: 600 12pt var(--sans); margin: 1mm 0; }
+
+/* Ergebnisübersicht und Fragenauswertung */
+.table-wrap { overflow-x: auto; }
+table.results { width: 100%; border-collapse: collapse; font: 9.5pt var(--sans); }
+table.results th { text-align: left; font: 600 7.5pt var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; border-bottom: 1.2pt solid var(--ink); padding: 1.5mm 2mm 1.5mm 0; }
+table.results td { border-bottom: 1px solid var(--line); padding: 1.6mm 2mm 1.6mm 0; }
+table.results tr { break-inside: avoid; }
+.num { text-align: right; white-space: nowrap; }
+.bar { height: 2.2mm; background: var(--soft); border-radius: 99px; overflow: hidden; margin: 1mm 0 1.2mm; max-width: 90mm; }
+.bar span { display: block; height: 100%; background: var(--ok); }
+.q .meta { font: 8.5pt var(--sans); color: var(--muted); margin: 0; }
+.q .detail { font-size: 9.5pt; margin: 1.2mm 0 0; overflow-wrap: anywhere; }
+
+.colophon { margin-top: 8mm; font: 7.5pt/1.5 var(--sans); color: var(--muted); border-top: 1px solid var(--line); padding-top: 2mm; }
+.toolbar { position: fixed; top: 0; left: 0; right: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 2mm; justify-content: center; align-items: center; padding: 2.5mm; background: rgba(255,255,255,.96); border-bottom: 1px solid var(--line); font: 10pt var(--sans); }
+.btn { font: 600 10pt var(--sans); border: 1px solid #c9cdd4; background: #fff; color: var(--ink); border-radius: 99px; padding: 1.6mm 4mm; cursor: pointer; text-decoration: none; display: inline-block; }
+select.btn { padding-right: 3mm; }
+.btn.primary { background: #1b1f24; color: #fff; border-color: #1b1f24; }
+@media screen and (max-width: 230mm) {
+  .page { margin: 24mm 0 0; padding: 8mm 5mm; box-shadow: none; }
+  .stats div { min-width: 40%; }
+}
+@media screen and (max-width: 120mm) { .page { margin-top: 34mm; } }
+@media print {
+  html { background: none; }
+  .page { margin: 0; padding: 0; max-width: none; box-shadow: none; }
+  .toolbar, .no-print { display: none !important; }
+}

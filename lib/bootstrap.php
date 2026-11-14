@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.18.0');
+define('WB_VERSION', '0.19.0');
 define('WB_SCHEMA_VERSION', 13);
 
 $configFile = WB_ROOT . '/config.php';
@@ -62,5 +62,6 @@ require WB_ROOT . '/lib/activities.php';
 require WB_ROOT . '/lib/wordcloud.php';
 require WB_ROOT . '/lib/exam.php';
 require WB_ROOT . '/lib/exam_attempt.php';
+require WB_ROOT . '/lib/exam_print.php';
 require WB_ROOT . '/lib/feedback.php';
 require WB_ROOT . '/lib/migrate.php';

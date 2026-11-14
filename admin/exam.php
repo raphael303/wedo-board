@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// Eine Gemeinschaftsprüfung anlegen, einstellen und ihre Fragen sichten (Etappe G1).
+// Eine Gemeinschaftsprüfung anlegen, einstellen, Fragen sichten (G1), durchführen und auswerten (G2).
 require __DIR__ . '/_layout.php';
 admin_require_login();
 admin_check_csrf();
@@ -35,7 +35,23 @@ function admin_exam_question_input(): array {
         $in['options'] = $opts;
     }
     $in['points'] = trim((string)($_POST['q_points'] ?? '')) === '' ? null : str_replace(',', '.', (string)$_POST['q_points']);
+    $sh = (string)($_POST['q_shuffle'] ?? '');
+    $in['shuffle_options'] = $sh === '' ? null : $sh === '1';
     return $in;
+}
+
+/** Kurze Beschreibung der geltenden Regeln für die Steuerung. */
+function admin_exam_rules_text(array $c): string {
+    $parts = [];
+    $parts[] = ['auto' => 'Korrektur automatisch', 'review' => 'Korrektur mit Durchsicht', 'manual' => 'Korrektur von Hand'][$c['grading']];
+    $parts[] = $c['mc_rule'] === 'kprim' ? 'Mehrfachauswahl und Richtig/Falsch nach Kprim' : 'Mehrfachauswahl und Richtig/Falsch anteilig';
+    $parts[] = 'Lösungen ' . ['immediate' => 'sofort nach der Abgabe', 'results' => 'mit den Ergebnissen', 'release' => 'nach eigener Freigabe' . ($c['solutions_released'] ? ' (freigegeben)' : '')][$c['solutions']];
+    $parts[] = $c['time_limit']['minutes'] > 0 ? $c['time_limit']['minutes'] . ' Minuten ' . ($c['time_limit']['per_person'] ? 'pro Person' : 'für alle gemeinsam') : 'ohne Zeitbegrenzung';
+    if ($c['ranking']) $parts[] = 'mit Rangliste';
+    if ($c['allow_retry']) $parts[] = 'weitere Versuche nach den Ergebnissen erlaubt';
+    $txt = implode(' · ', $parts) . '.';
+    $txt .= ' Lernende sehen ihre Punkte nur, wenn ihr Versuch vollständig automatisch bewertet ist; sonst erst nach «Korrektur abschliessen»' . ($c['review_done'] ? ' (abgeschlossen)' : '') . '. Offene Fragen bewertest du in den Antworten der einzelnen Versuche.';
+    return $txt;
 }
 
 $error = null;
@@ -55,6 +71,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'require_contribution' => !empty($_POST['require_contribution']),
                 'points' => array_map(fn($v) => str_replace(',', '.', (string)$v), (array)($_POST['points'] ?? [])),
                 'ai' => !empty($_POST['ai']),
+                'mc_rule' => (string)($_POST['mc_rule'] ?? 'kprim'),
+                'grading' => (string)($_POST['grading'] ?? 'auto'),
+                'own_questions' => (string)($_POST['own_questions'] ?? 'count'),
+                'display' => (string)($_POST['display'] ?? 'points'),
+                'grade' => ['on' => !empty($_POST['grade_on']), 'max' => trim(str_replace(',', '.', (string)($_POST['grade_max'] ?? ''))), 'round' => (string)($_POST['grade_round'] ?? 'half')],
+                'ranking' => !empty($_POST['ranking']),
+                'solutions' => (string)($_POST['solutions'] ?? 'results'),
+                'shuffle_questions' => !empty($_POST['shuffle_questions']),
+                'shuffle_options' => !empty($_POST['shuffle_options']),
+                'time_limit' => ['minutes' => (int)($_POST['tl_minutes'] ?? 0), 'per_person' => ($_POST['tl_mode'] ?? 'person') === 'person'],
+                'allow_retry' => !empty($_POST['allow_retry']),
                 'background' => $_POST['background'] ?? 'meer',
                 'lang' => $_POST['lang'] ?? 'de',
                 'note' => $_POST['note'] ?? '',
@@ -85,6 +112,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $q = exam_owner_question_create($act, $in);
                     admin_flash('Frage hinzugefügt und angenommen.');
                     header('Location: ' . $back('#q' . $q['id']));
+                    exit;
+                case 'phase_running':
+                case 'phase_results':
+                case 'phase_collect':
+                    [$a2, $warnings] = exam_set_phase($act, substr($action, 6));
+                    admin_flash(['phase_running' => $act['config']['phase'] === 'results' ? 'Prüfung wieder geöffnet.' : 'Prüfung gestartet. Unter dem Link lösen jetzt alle die Prüfung.',
+                        'phase_results' => $a2['revealed'] ? 'Ergebnisse freigegeben und Rangliste gezeigt.' : 'Ergebnisse freigegeben.',
+                        'phase_collect' => 'Zurück in der Sammelphase.'][$action] . ($warnings ? ' ' . implode(' ', $warnings) : ''));
+                    break;
+                case 'ranking_show': exam_set_ranking_shown($act, true); admin_flash('Rangliste für alle sichtbar.'); break;
+                case 'ranking_hide': exam_set_ranking_shown($act, false); admin_flash('Rangliste verborgen.'); break;
+                case 'solutions_release': exam_set_flag($act, 'solutions_released', true); admin_flash('Lösungen freigegeben.'); break;
+                case 'solutions_lock': exam_set_flag($act, 'solutions_released', false); admin_flash('Lösungen wieder gesperrt.'); break;
+                case 'review_done': exam_set_flag($act, 'review_done', true); admin_flash('Korrektur abgeschlossen. Die Lernenden sehen ihre Punkte.'); break;
+                case 'review_open': exam_set_flag($act, 'review_done', false); admin_flash('Korrektur wieder offen. Punkte, die eine Freigabe brauchen, sind wieder verborgen.'); break;
+                case 'shuffle_all':
+                    db_exec('UPDATE exam_questions SET shuffle_options = NULL WHERE activity_id = ?', [$act['id']]);
+                    activity_touch($act['id']);
+                    admin_flash('Alle Fragen mischen die Antworten jetzt nach der Einstellung der Prüfung.');
+                    break;
+                case 'grade':
+                    $aid = (int)($_POST['attempt'] ?? 0);
+                    // Zuerst alle Felder prüfen, damit ein ungültiger Wert nichts halb speichert.
+                    $maxPts = [];
+                    foreach (exam_question_map($act) as $mq) $maxPts[(int)$mq['id']] = exam_q_points($act, $mq);
+                    foreach ((array)($_POST['g'] ?? []) as $gq => $gp) {
+                        $gp = trim(str_replace(',', '.', (string)$gp));
+                        if ($gp === '') continue;
+                        $v = exam_points_value($gp);
+                        if ($v === null || $v > ($maxPts[(int)$gq] ?? 0)) throw new InvalidArgumentException('exam_err_grade_points');
+                    }
+                    foreach ((array)($_POST['g'] ?? []) as $gq => $gp) {
+                        $gp = trim((string)$gp);
+                        exam_attempt_grade($act, $aid, (int)$gq, $gp === '' ? null : $gp);
+                    }
+                    admin_flash('Bewertung gespeichert.');
+                    header('Location: ' . wb_admin_url() . 'exam.php?key=' . $act['akey'] . '&attempt=' . $aid);
+                    exit;
+                case 'attempt_delete':
+                    exam_attempt_delete($act, (int)($_POST['attempt'] ?? 0));
+                    admin_flash('Versuch gelöscht. Die Person kann neu beginnen.');
+                    header('Location: ' . wb_admin_url() . 'exam.php?key=' . $act['akey'] . '#ergebnisse');
                     exit;
                 case 'close': activity_update($act, ['status' => 'closed']); admin_flash('Prüfung offline geschaltet.'); break;
                 case 'open':
@@ -178,6 +247,15 @@ $questionForm = function (?array $q, string $action) use ($csrf, $typeLabel, $cf
         <?php endforeach; ?>
       </div>
       <div class="row">
+        <label>Antworten mischen (nicht für offene Fragen)</label>
+        <?php $sh = $q['shuffle_options'] ?? null; ?>
+        <select name="q_shuffle">
+          <option value="" <?= $sh === null ? 'selected' : '' ?>>wie in den Einstellungen der Prüfung (<?= $cfg['shuffle_options'] ? 'mischen' : 'nicht mischen' ?>)</option>
+          <option value="1" <?= $sh === true ? 'selected' : '' ?>>mischen</option>
+          <option value="0" <?= $sh === false ? 'selected' : '' ?>>nicht mischen (Reihenfolge bleibt)</option>
+        </select>
+      </div>
+      <div class="row">
         <label>Lösungssatz (nur offene Fragen)</label>
         <textarea name="q_solution" rows="2" maxlength="<?= EXAM_SOLUTION_LENGTH ?>"><?= e((string)($q['solution'] ?? '')) ?></textarea>
       </div>
@@ -203,8 +281,62 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
 <?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
 <?php admin_footer(); exit; endif; ?>
 
+<?php if ($act && isset($_GET['attempt'])):
+    $row = exam_attempt_by_id($act, (int)$_GET['attempt']);
+    if ($row) $row = exam_attempt_check_deadline($act, $row);
+    $d = $row ? exam_attempt_detail($act, $row) : null;
+?>
+<div class="page-head">
+  <div>
+    <h1><?= $d ? e($d['name']) . ($d['attempt_no'] > 1 ? ' · Übungsversuch ' . $d['attempt_no'] : '') : 'Versuch nicht gefunden' ?></h1>
+    <p class="muted"><a href="?key=<?= e($act['akey']) ?>#ergebnisse">← <?= e($act['name']) ?></a><?php if ($d): ?> · begonnen <?= e((string)$d['started_at']) ?><?= $d['submitted_at'] ? ' · abgegeben ' . e((string)$d['submitted_at']) : ' · löst noch' ?><?php endif; ?></p>
+  </div>
+  <?php if ($d): ?><div class="page-actions"><form method="post" data-confirm="Versuch löschen? Die Person kann danach neu beginnen. Antworten und Punkte sind weg."><input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="attempt_delete"><input type="hidden" name="attempt" value="<?= $d['id'] ?>"><button class="btn-danger" type="submit">Versuch löschen</button></form></div><?php endif; ?>
+</div>
+<?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
+<?php if ($d): ?>
+<section class="card">
+  <p><strong><?= $d['score'] === null ? 'Noch nicht abgegeben' : $fmt($d['score']) . ' von ' . $fmt($d['max_score']) . ' Punkten (' . $fmt($d['percent']) . ' %)' ?></strong><?= $d['grade'] !== null ? ' · Note ' . $fmt($d['grade']) : '' ?><?= $d['pending'] ? ' · ' . ($d['pending'] === 1 ? 'eine Frage' : $d['pending'] . ' Fragen') . ' ohne Punkte' : '' ?><?= $d['excluded'] ? ' · ' . $d['excluded'] . ' eigene Fragen zählen nicht' : '' ?></p>
+  <p class="muted"><?= $d['visible_to_person'] ? 'Die Person sieht ihre Punkte.' : 'Die Person sieht ihre Punkte noch nicht.' ?> Antworten von Lernenden sind Fremdtext. Leere Felder bei «Punkte von dir» bedeuten: Es gilt die berechnete Punktzahl.</p>
+</section>
+<form method="post" class="form">
+  <input type="hidden" name="csrf" value="<?= e($csrf) ?>"><input type="hidden" name="action" value="grade"><input type="hidden" name="attempt" value="<?= $d['id'] ?>">
+  <ol class="exam-admin-list">
+  <?php foreach ($d['answers'] as $i => $x): ?>
+    <li class="card exam-admin-q">
+      <div class="exam-admin-head">
+        <span class="pill">Frage <?= $i + 1 ?> · <?= e($typeLabel($x['type'])) ?> · <?= $fmt($x['points']) ?> P.</span>
+        <?php if ($x['own']): ?><span class="pill"><?= $x['excluded'] ? 'eigene Frage, zählt nicht' : 'eigene Frage' ?></span><?php endif; ?>
+      </div>
+      <p class="exam-admin-prompt"><?= nl2br(e($x['prompt'])) ?></p>
+      <?php if ($x['type'] === 'open'): ?>
+        <p class="exam-admin-answer"><?= trim((string)$x['answer']) === '' ? '<span class="muted">(keine Antwort)</span>' : nl2br(e((string)$x['answer'])) ?></p>
+        <p class="muted"><strong>Lösung:</strong> <?= e((string)$x['solution']) ?></p>
+      <?php else: ?>
+        <ul class="exam-admin-opts">
+          <?php foreach ($x['options'] as $o):
+            $mark = $x['type'] === 'truefalse' ? ($o['chosen'] === null ? '–' : ($o['chosen'] ? 'richtig' : 'falsch')) : ($o['chosen'] ? '☑' : '☐');
+            $ok = $x['type'] === 'truefalse' ? $o['chosen'] === $o['correct'] : ($x['type'] === 'single' ? (!$o['chosen'] || $o['correct']) : $o['chosen'] === $o['correct']); ?>
+          <li class="<?= $ok ? 'ok' : 'no' ?>"><span class="exam-admin-mark"><?= e($mark) ?></span> <?= e($o['text']) ?> <span class="muted">(<?= $x['type'] === 'truefalse' ? ($o['correct'] ? 'richtig' : 'falsch') : ($o['correct'] ? 'richtig' : 'falsch') ?>)</span></li>
+          <?php endforeach; ?>
+        </ul>
+      <?php endif; ?>
+      <p class="exam-grade-row">
+        <span>Berechnet: <strong><?= $x['auto'] === null ? '–' : $fmt($x['auto']) ?></strong></span>
+        <label>Punkte von dir <input name="g[<?= $x['question_id'] ?>]" inputmode="decimal" size="4" value="<?= $x['teacher'] === null ? '' : e($fmt($x['teacher'])) ?>" placeholder="<?= $x['type'] === 'open' ? '0 bis ' . $fmt($x['points']) : '' ?>" <?= $d['status'] === 'in_progress' ? 'disabled' : '' ?>></label>
+        <span>Gilt: <strong><?= $x['final'] === null ? 'offen' : $fmt($x['final']) ?></strong></span>
+      </p>
+    </li>
+  <?php endforeach; ?>
+  </ol>
+  <?php if ($d['status'] !== 'in_progress'): ?><div class="actions"><button class="btn" type="submit">Bewertung speichern</button></div><?php endif; ?>
+</form>
+<?php endif; ?>
+<?php admin_footer(); exit; endif; ?>
+
 <?php if ($act):
     $counts = exam_counts($act);
+    $attemptCounts = exam_attempt_counts($act);
     $questions = exam_questions($act, $tab);
     $phaseLabel = ['collect' => 'Fragen sammeln', 'running' => 'Prüfung läuft', 'results' => 'Ergebnisse freigegeben'][$cfg['phase']];
 ?>
@@ -249,9 +381,74 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
       <a class="btn-ghost" href="/api/activities/<?= e($act['akey']) ?>/results.md" target="_blank">Fragen (Markdown)</a>
       <?= $post('delete', 'Löschen', 'btn-danger', 'Prüfung in den Papierkorb legen? Sie wird nach 30 Tagen endgültig gelöscht.') ?>
     </div>
-    <p class="hint">Das Starten der Prüfung, die automatische Bewertung, Rangliste und PDFs folgen in den nächsten Etappen. Bis dahin sammelt die Prüfung Fragen.</p>
+    <h3 class="exam-admin-h3">Ablauf: <?= e($phaseLabel) ?></h3>
+    <div class="action-grid">
+      <?php if ($cfg['phase'] === 'collect'): ?>
+        <?= $post('phase_running', 'Prüfung starten', 'btn', 'Prüfung jetzt starten? Unter dem Link lösen dann alle die Prüfung; noch eingereichte Fragen kommen nicht hinein.' . ($cfg['time_limit']['minutes'] > 0 && !$cfg['time_limit']['per_person'] ? ' Das gemeinsame Ende ist in ' . $cfg['time_limit']['minutes'] . ' Minuten.' : '')) ?>
+      <?php elseif ($cfg['phase'] === 'running'): ?>
+        <?= $post('phase_results', $cfg['ranking'] ? 'Rangliste zeigen' : 'Ergebnisse freigeben', 'btn', 'Prüfung beenden und Ergebnisse freigeben? Laufende Versuche werden abgegeben.' . ($cfg['ranking'] ? ' Die Rangliste wird allen gezeigt.' : '')) ?>
+        <?php if (!$attemptCounts['started']): ?><?= $post('phase_collect', 'Zurück zum Sammeln', 'btn-ghost') ?><?php endif; ?>
+      <?php else: ?>
+        <?= $post('phase_running', 'Prüfung wieder öffnen', 'btn-ghost', 'Prüfung wieder öffnen? Wer noch nicht abgegeben hat, kann wieder lösen.') ?>
+        <?php if ($cfg['ranking']): ?><?= $act['revealed'] ? $post('ranking_hide', 'Rangliste verbergen', 'btn-ghost') : $post('ranking_show', 'Rangliste zeigen', 'btn') ?><?php endif; ?>
+      <?php endif; ?>
+      <?php if ($cfg['phase'] !== 'collect' && $cfg['solutions'] === 'release'): ?>
+        <?= $cfg['solutions_released'] ? $post('solutions_lock', 'Lösungen sperren', 'btn-ghost') : $post('solutions_release', 'Lösungen freigeben', 'btn-ghost', 'Lösungen für alle freigeben, die abgegeben haben?') ?>
+      <?php endif; ?>
+      <?php if ($cfg['phase'] !== 'collect'): ?>
+        <?= $cfg['review_done'] ? $post('review_open', 'Korrektur wieder öffnen', 'btn-ghost') : $post('review_done', 'Korrektur abschliessen', 'btn-ghost', 'Korrektur abschliessen? Die Lernenden sehen danach ihre Punkte, auch bei von Hand bewerteten Fragen.') ?>
+      <?php endif; ?>
+    </div>
+    <p class="hint"><?= e(admin_exam_rules_text($cfg)) ?></p>
   </section>
 </div>
+
+<?php if ($cfg['phase'] !== 'collect'): $attempts = exam_attempts($act, true); $stats = exam_question_stats($act); $firsts = array_values(array_filter($attempts, fn($t) => $t['attempt_no'] === 1)); $retries = count($attempts) - count($firsts); ?>
+<section class="card" id="ergebnisse">
+  <h2>Ergebnisse</h2>
+  <p class="muted"><?= $attemptCounts['started'] ?> begonnen, <?= $attemptCounts['submitted'] ?> abgegeben<?= $attemptCounts['pending'] ? ', davon ' . $attemptCounts['pending'] . ' mit offenen Fragen ohne Punkte' : '' ?><?= $retries ? ' · ' . $retries . ' Übungsversuche' : '' ?>. Es zählt der erste Versuch.</p>
+  <?php if (!$firsts): ?>
+    <p class="muted">Noch keine Versuche.</p>
+  <?php else: ?>
+  <div class="table-wrap">
+  <table class="results exam-results">
+    <thead><tr><th>Fantasiename</th><th>Status</th><th>Punkte</th><th>Prozent</th><?php if ($cfg['grade']['on']): ?><th>Note</th><?php endif; ?><th>Sieht Punkte</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($firsts as $t): ?>
+      <tr>
+        <td><?= e($t['name']) ?></td>
+        <td><?= e(['in_progress' => 'löst noch', 'submitted' => 'offene Fragen ohne Punkte (' . (int)$t['pending'] . ')', 'graded' => 'bewertet'][$t['status']]) ?></td>
+        <td><?= $t['score'] === null ? '–' : $fmt($t['score']) . ' / ' . $fmt($t['max_score']) ?></td>
+        <td><?= $t['percent'] === null ? '–' : $fmt($t['percent']) . ' %' ?></td>
+        <?php if ($cfg['grade']['on']): ?><td><?= $t['grade'] === null ? '–' : $fmt($t['grade']) ?></td><?php endif; ?>
+        <td><?= $t['visible_to_person'] ? 'ja' : 'nein' ?></td>
+        <td><a href="?key=<?= e($act['akey']) ?>&amp;attempt=<?= $t['id'] ?>">Antworten</a></td>
+      </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+  <?php if ($retries): ?>
+  <details class="exam-admin-edit"><summary>Übungsversuche (<?= $retries ?>)</summary>
+    <ul><?php foreach ($attempts as $t): if ($t['attempt_no'] === 1) continue; ?><li><?= e($t['name']) ?>, Versuch <?= $t['attempt_no'] ?>: <?= $t['score'] === null ? e($t['status']) : $fmt($t['score']) . ' / ' . $fmt($t['max_score']) ?> · <a href="?key=<?= e($act['akey']) ?>&amp;attempt=<?= $t['id'] ?>">Antworten</a></li><?php endforeach; ?></ul>
+  </details>
+  <?php endif; ?>
+  <h3 class="exam-admin-h3">Lösungsquote pro Frage</h3>
+  <ol class="exam-stats">
+    <?php foreach ($stats as $s): ?>
+    <li><span class="exam-stats-prompt"><?= e(mb_strimwidth($s['prompt'], 0, 90, '…')) ?></span>
+      <span class="exam-stats-bar" title="Anteil voller Punktzahl"><span style="width: <?= $s['n'] ? round(100 * $s['solved_rate']) : 0 ?>%"></span></span>
+      <span class="muted"><?= $s['n'] ? round(100 * $s['solved_rate']) . ' % voll · Mittel ' . $fmt($s['mean_points']) . '/' . $fmt($s['points']) . ' P. · ' . $s['n'] . ' bewertet' : 'noch keine Bewertung' ?></span></li>
+    <?php endforeach; ?>
+  </ol>
+  <?php if ($cfg['ranking']): $ranking = exam_ranking($act); ?>
+  <h3 class="exam-admin-h3">Rangliste <?= $act['revealed'] ? '(für alle sichtbar)' : '(nur für dich)' ?></h3>
+  <?php if (!$ranking): ?><p class="muted">Noch keine vollständig bewerteten Versuche.</p><?php else: ?>
+  <ol class="exam-rank"><?php foreach ($ranking as $r): ?><li><?= $r['rank'] ?>. <?= e($r['name']) ?> · <?= $fmt($r['percent']) ?> %<?= $r['grade'] !== null ? ' · Note ' . $fmt($r['grade']) : '' ?></li><?php endforeach; ?></ol>
+  <?php endif; endif; ?>
+</section>
+<?php endif; ?>
 
 <section class="card" id="fragen">
   <h2>Fragen</h2>
@@ -340,6 +537,80 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
       </div>
       <p class="hint">Für einzelne Fragen lassen sich die Punkte überschreiben. Halbe Punkte sind möglich.</p>
     </div>
+    <h3 class="exam-admin-h3">Durchführung und Bewertung</h3>
+    <div class="row two">
+      <div>
+        <label for="grading">Korrektur</label>
+        <select id="grading" name="grading">
+          <option value="auto" <?= $cfg['grading'] === 'auto' ? 'selected' : '' ?>>automatisch (Punkte sofort, Rangliste möglich)</option>
+          <option value="review" <?= $cfg['grading'] === 'review' ? 'selected' : '' ?>>mit Durchsicht (Punkte nach «Korrektur abschliessen»)</option>
+          <option value="manual" <?= $cfg['grading'] === 'manual' ? 'selected' : '' ?>>von Hand (offene Fragen bewertest du)</option>
+        </select>
+        <p class="hint">Offene Fragen bewertest du bis zur KI-Korrektur in jedem Fall selbst; wer offene Fragen hat, sieht Punkte erst nach «Korrektur abschliessen».</p>
+      </div>
+      <div>
+        <label for="mc_rule">Mehrfachauswahl und Richtig/Falsch</label>
+        <select id="mc_rule" name="mc_rule">
+          <option value="kprim" <?= $cfg['mc_rule'] === 'kprim' ? 'selected' : '' ?>>Kprim: alles richtig = voll, ein Fehler = halb</option>
+          <option value="proportional" <?= $cfg['mc_rule'] === 'proportional' ? 'selected' : '' ?>>anteilig: richtige minus falsche Entscheidungen</option>
+        </select>
+      </div>
+    </div>
+    <div class="row two">
+      <div>
+        <label for="own_questions">Eigene Fragen</label>
+        <select id="own_questions" name="own_questions">
+          <option value="count" <?= $cfg['own_questions'] === 'count' ? 'selected' : '' ?>>zählen mit</option>
+          <option value="exclude" <?= $cfg['own_questions'] === 'exclude' ? 'selected' : '' ?>>zählen für die Verfasserin nicht</option>
+        </select>
+      </div>
+      <div>
+        <label for="display">Ausgabe</label>
+        <select id="display" name="display">
+          <option value="points" <?= $cfg['display'] === 'points' ? 'selected' : '' ?>>Punkte</option>
+          <option value="percent" <?= $cfg['display'] === 'percent' ? 'selected' : '' ?>>Prozent</option>
+        </select>
+      </div>
+    </div>
+    <div class="row two">
+      <div>
+        <label><input type="checkbox" name="grade_on" <?= $cfg['grade']['on'] ? 'checked' : '' ?>> Note zeigen (1 + 5 × erreicht / Maximum)</label>
+        <label for="grade_max">Maximum für Note 6</label>
+        <input id="grade_max" name="grade_max" inputmode="decimal" value="<?= $cfg['grade']['max'] === null ? '' : e((string)$cfg['grade']['max']) ?>" placeholder="leer = volle Punkt- bzw. Prozentzahl">
+      </div>
+      <div>
+        <label for="grade_round">Rundung der Note</label>
+        <select id="grade_round" name="grade_round">
+          <?php foreach (['half' => 'auf halbe Noten', 'quarter' => 'auf Viertelnoten', 'tenth' => 'auf Zehntel'] as $k => $l): ?><option value="<?= $k ?>" <?= $cfg['grade']['round'] === $k ? 'selected' : '' ?>><?= $l ?></option><?php endforeach; ?>
+        </select>
+      </div>
+    </div>
+    <div class="row two">
+      <div>
+        <label for="solutions">Lösungen sehen die Lernenden</label>
+        <select id="solutions" name="solutions">
+          <option value="immediate" <?= $cfg['solutions'] === 'immediate' ? 'selected' : '' ?>>sofort nach der eigenen Abgabe</option>
+          <option value="results" <?= $cfg['solutions'] === 'results' ? 'selected' : '' ?>>nach dem Freigeben der Ergebnisse</option>
+          <option value="release" <?= $cfg['solutions'] === 'release' ? 'selected' : '' ?>>erst nach eigener Freigabe</option>
+        </select>
+      </div>
+      <div>
+        <label for="tl_minutes">Zeitbegrenzung in Minuten (0 = keine)</label>
+        <input id="tl_minutes" name="tl_minutes" type="number" min="0" max="600" value="<?= (int)$cfg['time_limit']['minutes'] ?>">
+        <select name="tl_mode" aria-label="Art der Zeitbegrenzung">
+          <option value="person" <?= $cfg['time_limit']['per_person'] ? 'selected' : '' ?>>pro Person ab ihrem Start</option>
+          <option value="fixed" <?= !$cfg['time_limit']['per_person'] ? 'selected' : '' ?>>gemeinsames Ende ab dem Start der Prüfung</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="checks">
+        <label><input type="checkbox" name="shuffle_questions" <?= $cfg['shuffle_questions'] ? 'checked' : '' ?>> Fragen pro Person mischen</label>
+        <label><input type="checkbox" name="shuffle_options" <?= $cfg['shuffle_options'] ? 'checked' : '' ?>> Antworten pro Person mischen (Standard; pro Frage einstellbar)</label>
+        <label><input type="checkbox" name="ranking" <?= $cfg['ranking'] ? 'checked' : '' ?>> Rangliste mit Fantasienamen (nur bei automatischer Korrektur)</label>
+        <label><input type="checkbox" name="allow_retry" <?= $cfg['allow_retry'] ? 'checked' : '' ?>> Nach den Ergebnissen weitere Übungsversuche erlauben (zählen nicht)</label>
+      </div>
+    </div>
     <div class="row">
       <div class="checks">
         <label><input type="checkbox" name="require_contribution" <?= $cfg['require_contribution'] ? 'checked' : '' ?>> Nur wer Fragen beigesteuert hat, darf die Prüfung lösen (gilt ab dem Start)</label>
@@ -379,5 +650,6 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
       <?php if (!$act): ?><a class="btn-ghost" href="<?= e(wb_admin_url()) ?>exams.php">Abbrechen</a><?php endif; ?>
     </div>
   </form>
+  <?php if ($act): ?><div class="action-grid exam-shuffle-all"><?= $post('shuffle_all', 'Antworten mischen: Einstellung der Prüfung für alle Fragen übernehmen', 'btn-ghost', 'Eigene Einstellungen einzelner Fragen zum Mischen der Antworten zurücksetzen?') ?></div><?php endif; ?>
 </section>
 <?php admin_footer();

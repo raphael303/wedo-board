@@ -171,7 +171,7 @@ function activity_owner_view(array $a): array {
         'revealed' => $a['revealed'],
         'round' => $a['round'],
         'response_count' => $a['type'] === 'exam' ? exam_counts($a)['contributors'] : activity_response_count($a),
-    ] + ($a['type'] === 'exam' ? ['questions' => exam_counts($a)] : []) + [
+    ] + ($a['type'] === 'exam' ? ['questions' => exam_counts($a), 'attempts' => exam_attempt_counts($a)] : []) + [
         'note' => (string)($a['note'] ?? ''),
         'tags' => $a['tags'],
         'url' => $a['url'],
@@ -288,7 +288,7 @@ function activity_update(array $a, array $in): array {
     if (array_intersect($configKeys, array_keys($in))) {
         $config = match ($a['type']) {
             'wordcloud' => wordcloud_normalize_config($in, $a['config']),
-            'exam' => exam_normalize_config(array_diff_key($in, ['phase' => 1]), $a['config']),
+            'exam' => exam_normalize_config(array_diff_key($in, ['phase' => 1, 'ends_at' => 1, 'review_done' => 1, 'solutions_released' => 1]), $a['config']),
             default => target_normalize_config($in, $a['config']),
         };
         $fields[] = 'config_json = ?'; $params[] = json_encode($config, JSON_UNESCAPED_UNICODE);
@@ -323,7 +323,10 @@ function activity_update(array $a, array $in): array {
     $fields[] = 'last_activity_at = ?'; $params[] = $now;
     $params[] = $a['id'];
     db_exec('UPDATE activities SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
-    return activity_by_id($a['id']);
+    $updated = activity_by_id($a['id']);
+    // Geänderte Bewertungsregeln einer laufenden Prüfung: alle Versuche neu rechnen.
+    if ($a['type'] === 'exam' && array_intersect(['points', 'mc_rule', 'own_questions'], array_keys($in))) exam_regrade_all($updated);
+    return $updated;
 }
 
 function activity_set_revealed(array $a, bool $on): array {
@@ -366,7 +369,7 @@ function activity_duplicate(array $a, ?string $name = null): array {
         $copy = activity_create([
             'type' => 'exam',
             'name' => $name !== null && trim($name) !== '' ? $name : $a['name'] . ' (Kopie)',
-        ] + array_diff_key($a['config'], ['phase' => 1, 'review_done' => 1, 'solutions_released' => 1]) + [
+        ] + array_diff_key($a['config'], ['phase' => 1, 'review_done' => 1, 'solutions_released' => 1, 'ends_at' => 1]) + [
             'background' => $a['background'], 'lang' => $a['lang'], 'note' => $a['note'], 'tags' => $a['tags'],
         ]);
         exam_copy_questions($a, $copy);

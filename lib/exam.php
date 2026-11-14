@@ -48,6 +48,7 @@ function exam_default_config(): array {
         'allow_retry' => false,
         'student_pdf' => 'off',
         'ai' => true,
+        'ends_at' => null, // gemeinsames Ende (UTC), vom Server beim Start gesetzt
     ];
 }
 
@@ -83,13 +84,13 @@ function exam_cast_config(array $c): array {
     $tl = is_array($c['time_limit'] ?? null) ? $c['time_limit'] : [];
     $c['time_limit'] = ['minutes' => max(0, min(600, (int)($tl['minutes'] ?? 0))), 'per_person' => (bool)($tl['per_person'] ?? true)];
     $c['student_pdf'] = in_array($c['student_pdf'], ['off', 'without', 'with'], true) ? $c['student_pdf'] : 'off';
+    $c['ends_at'] = is_string($c['ends_at'] ?? null) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/', $c['ends_at']) ? $c['ends_at'] : null;
     return array_intersect_key($c, $d);
 }
 
 /**
  * Übernimmt geänderte Einstellungen. Unbekannte Werte werfen einen Fehler, damit Tippfehler über die
- * Schnittstelle auffallen. Die Phase wechselt in G1 nur zwischen collect und den späteren Etappen über
- * exam_set_phase, nicht über diese Funktion.
+ * Schnittstelle auffallen. Phase und gemeinsames Ende (ends_at) ändert nur exam_set_phase.
  */
 function exam_normalize_config(array $in, array $current): array {
     $c = $current;
@@ -447,6 +448,7 @@ function exam_owner_question_update(array $a, int $id, array $in): array {
     $params[] = $id;
     db_exec('UPDATE exam_questions SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
     activity_touch($a['id']);
+    exam_regrade_all($a);
     return exam_question_view($a, exam_question_row($a, $id, true));
 }
 
@@ -454,12 +456,14 @@ function exam_owner_question_delete(array $a, int $id): void {
     if (!exam_question_row($a, $id)) throw new InvalidArgumentException('exam_err_not_found');
     db_exec('UPDATE exam_questions SET deleted_at = ?, updated_at = ? WHERE id = ?', [wb_now(), wb_now(), $id]);
     activity_touch($a['id']);
+    exam_regrade_all($a);
 }
 
 function exam_owner_question_restore(array $a, int $id): array {
     if (!exam_question_row($a, $id, true)) throw new InvalidArgumentException('exam_err_not_found');
     db_exec('UPDATE exam_questions SET deleted_at = NULL, updated_at = ? WHERE id = ?', [wb_now(), $id]);
     activity_touch($a['id']);
+    exam_regrade_all($a);
     return exam_question_view($a, exam_question_row($a, $id));
 }
 
@@ -501,11 +505,12 @@ function exam_state(array $a, string $uid, bool $owner): array {
     ];
     if ($owner) {
         $state['counts'] = $counts;
-    } else {
+    } elseif ($c['phase'] === 'collect') {
         $state['me'] = ['name' => activity_guest_name($a, $uid)];
         $state['mine'] = exam_my_questions($a, $uid);
         $state['quota_used'] = exam_quota_used($a, $uid);
     }
+    if ($c['phase'] !== 'collect') $state += exam_run_state($a, $uid, $owner);
     return $state;
 }
 

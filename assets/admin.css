@@ -185,3 +185,19 @@ h3 { font-size: 0.95rem; margin: 18px 0 6px; }
 .exam-points-row label { display: inline-flex; gap: 6px; align-items: center; font-weight: 500; margin: 0; }
 .exam-points-row input { width: 4.5em; }
 @media (max-width: 600px) { .form .row.two { grid-template-columns: 1fr; } }
+
+/* Gemeinschaftsprüfung G2: Ablauf, Ergebnisse, Bewertung */
+.exam-admin-h3 { margin: 18px 0 8px; font-size: 1rem; }
+.exam-results td, .exam-results th { white-space: nowrap; }
+.exam-stats { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; }
+.exam-stats li { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 2px 12px; align-items: center; }
+.exam-stats-prompt { overflow-wrap: anywhere; }
+.exam-stats-bar { height: 8px; border-radius: 99px; background: rgba(27, 31, 36, 0.08); overflow: hidden; }
+.exam-stats-bar span { display: block; height: 100%; background: #0f9d76; }
+.exam-stats .muted { grid-column: 1 / -1; font-size: 0.85rem; }
+.exam-rank { margin: 0; padding-left: 0; list-style: none; }
+.exam-grade-row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid rgba(27, 31, 36, 0.08); }
+.exam-grade-row input { width: 5em; display: inline-block; margin-left: 6px; }
+.exam-admin-answer { padding: 8px 12px; border-radius: 8px; background: rgba(27, 31, 36, 0.05); overflow-wrap: anywhere; }
+.exam-shuffle-all { margin-top: 12px; }
+.table-wrap { overflow-x: auto; }

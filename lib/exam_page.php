@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // Seite einer Gemeinschaftsprüfung, eingebunden von activity.php ($activity, $lang, $uid, $owner sind gesetzt).
-// Etappe G1: Fragen beisteuern in der Sammelphase. Lösen und Ergebnisse folgen in G2.
+// Sammelphase (G1): Fragen beisteuern. Phasen running und results (G2): lösen, Ergebnis, Lösungen, Rangliste.
 if (!defined('WB_ROOT')) exit;
 require_once WB_ROOT . '/lib/qr.php';
 
@@ -13,6 +13,8 @@ $boot = [
     'api' => '/api/a/' . $activity['akey'],
     'limits' => ['prompt' => EXAM_PROMPT_LENGTH, 'option' => EXAM_OPTION_LENGTH, 'solution' => EXAM_SOLUTION_LENGTH, 'min_options' => EXAM_MIN_OPTIONS, 'max_options' => EXAM_MAX_OPTIONS],
     'library_url' => $owner ? wb_admin_url() . 'exam.php?key=' . $activity['akey'] : null,
+    'csrf' => $owner ? wb_csrf_token() : null,
+    'answer_max' => EXAM_ANSWER_LENGTH,
 ];
 $accessUrl = (string)$activity['url'];
 $accessLabel = preg_replace('~^https?://(www\.)?~i', '', $accessUrl);
@@ -58,6 +60,8 @@ $accessQr = wb_qr_svg($accessUrl);
       <p class="exam-count" id="count" aria-live="polite"></p>
       <?php if ($owner): ?><p class="exam-actions"><a class="btn-primary" href="<?= e(wb_admin_url()) ?>exam.php?key=<?= e($activity['akey']) ?>"><?= e(t('exam_open_library', $lang)) ?></a></p><?php endif; ?>
     </section>
+
+    <section class="exam-run" id="run" hidden aria-live="polite"></section>
 
     <section class="exam-mine" id="mine-box" hidden>
       <h2 class="exam-h"><?= e(t('exam_my_questions', $lang)) ?> <span class="exam-progress" id="progress"></span></h2>

@@ -35,11 +35,17 @@ function activity_guest_api(string $method, array $p): never {
         if (!$owner) wb_error('Nicht berechtigt.', 403);
         wb_check_csrf_header();
         $in = wb_read_json_body();
-        $a = activity_set_revealed($a, filter_var($in['revealed'] ?? true, FILTER_VALIDATE_BOOLEAN));
+        $on = filter_var($in['revealed'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        if ($a['type'] === 'exam') {
+            try { $a = exam_set_ranking_shown($a, $on); }
+            catch (InvalidArgumentException $e) { wb_error(t($e->getMessage(), $lang), 422, ['code' => $e->getMessage()]); }
+            wb_json(['ok' => true, 'state' => activity_state($a, $uid, null, true)]);
+        }
+        $a = activity_set_revealed($a, $on);
         wb_json(['ok' => true, 'state' => activity_state($a, $uid, null, true)]);
     }
     if ($sub === 'round' && $method === 'POST') {
-        if (!$owner) wb_error('Nicht berechtigt.', 403);
+        if (!$owner || $a['type'] === 'exam') wb_error($owner ? 'Unbekannter Aufruf.' : 'Nicht berechtigt.', $owner ? 404 : 403);
         wb_check_csrf_header();
         $a = activity_new_round($a);
         wb_json(['ok' => true, 'state' => activity_state($a, $uid, null, true)]);
@@ -68,7 +74,31 @@ function activity_guest_api(string $method, array $p): never {
     }
     // Gemeinschaftsprüfung: eigene Fragen einreichen, ändern, zurückziehen (nur in der Sammelphase).
     if ($a['type'] === 'exam') {
-        if (in_array($sub, ['reveal', 'round', 'response'], true)) wb_error('Unbekannter Aufruf.', 404);
+        if ($sub === 'response') wb_error('Unbekannter Aufruf.', 404);
+        // Prüfung lösen: beginnen, Antworten zwischenspeichern, abgeben, weiterer Versuch.
+        if ($sub === 'attempt' && $method === 'POST') {
+            if ($owner) wb_error(t('exam_owner_no_attempt', $lang), 403, ['code' => 'exam_owner_no_attempt']);
+            $verb = $p[3] ?? '';
+            if ($verb !== 'answer') activity_guest_guard($a, $uid, false, $lang);
+            elseif ($a['status'] !== 'open') wb_error(t('exam_closed', $lang), 403, ['code' => 'closed']);
+            $in = wb_read_json_body();
+            $codes = ['exam_need_contribution' => 403, 'exam_not_running' => 409, 'exam_submitted' => 409, 'exam_time_up' => 409, 'exam_no_attempt' => 409, 'exam_retry_unavailable' => 409];
+            try {
+                $extra = [];
+                switch ($verb) {
+                    case 'start': exam_attempt_start($a, $uid); break;
+                    case 'answer': $extra = exam_attempt_save_answers($a, $uid, $in['answers'] ?? null); break;
+                    case 'submit': exam_attempt_submit($a, $uid); break;
+                    case 'retry': exam_attempt_retry($a, $uid); break;
+                    default: wb_error('Unbekannter Aufruf.', 404);
+                }
+            } catch (InvalidArgumentException $e) {
+                $code = $e->getMessage();
+                wb_error(t($code, $lang), $codes[$code] ?? 422, ['code' => $code]);
+            }
+            if ($verb === 'answer') wb_json(['ok' => true] + $extra);
+            wb_json(['ok' => true, 'state' => activity_state(activity_by_id($a['id']), $uid, null, false)]);
+        }
         if ($sub === 'questions' && $method === 'POST') {
             if ($owner) wb_error(t('exam_owner_use_library', $lang), 403, ['code' => 'exam_owner_use_library']);
             activity_guest_guard($a, $uid, false, $lang);
@@ -221,17 +251,56 @@ function activity_owner_api(string $method, array $p): never {
  * fallen an activity_owner_api zurück.
  */
 function exam_owner_api(string $method, array $a, string $action, array $p, array $in): void {
-    $fail = fn(InvalidArgumentException $e) => wb_error(str_starts_with($e->getMessage(), 'exam_') ? t($e->getMessage(), 'de') : $e->getMessage(), str_contains($e->getMessage(), 'not_found') ? 404 : 422, ['code' => $e->getMessage()]);
+    $fail = fn(InvalidArgumentException $e) => wb_error(str_starts_with($e->getMessage(), 'exam_') ? t($e->getMessage(), 'de') : $e->getMessage(), (str_contains($e->getMessage(), 'not_found') || $e->getMessage() === 'exam_no_attempt') ? 404 : 422, ['code' => $e->getMessage()]);
     try {
         if ($action === 'results' && $method === 'GET') {
-            wb_json(['ok' => true, 'name' => $a['name'], 'phase' => $a['config']['phase'], 'counts' => exam_counts($a), 'questions' => exam_questions($a, (string)($_GET['status'] ?? 'all'))]);
+            $r = ['ok' => true, 'name' => $a['name'], 'phase' => $a['config']['phase'], 'counts' => exam_counts($a), 'questions' => exam_questions($a, (string)($_GET['status'] ?? 'all'))];
+            $r['attempts'] = exam_attempts($a);
+            if ($a['config']['ranking']) $r['ranking'] = exam_ranking($a);
+            wb_json($r);
         }
         if ($action === 'results.md' && $method === 'GET') {
             header('Content-Type: text/markdown; charset=utf-8');
-            echo exam_markdown($a);
+            echo exam_markdown($a) . ($a['config']['phase'] !== 'collect' ? exam_results_markdown($a) : '');
             exit;
         }
-        if (in_array($action, ['reveal', 'hide', 'round'], true)) wb_error('Für Prüfungen nicht verfügbar.', 404);
+        if ($action === 'round') wb_error('Für Prüfungen nicht verfügbar.', 404);
+        if ($method === 'POST') {
+            switch ($action) {
+                case 'phase':
+                    [$x, $warnings] = exam_set_phase($a, (string)($in['phase'] ?? ''));
+                    wb_json(['ok' => true, 'activity' => activity_owner_view($x), 'warnings' => $warnings]);
+                case 'reveal': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_ranking_shown($a, true))]);
+                case 'hide': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_ranking_shown($a, false))]);
+                case 'solutions': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_flag($a, 'solutions_released', filter_var($in['released'] ?? true, FILTER_VALIDATE_BOOLEAN)))]);
+                case 'review': wb_json(['ok' => true, 'activity' => activity_owner_view(exam_set_flag($a, 'review_done', filter_var($in['done'] ?? true, FILTER_VALIDATE_BOOLEAN)))]);
+            }
+        }
+        if ($action === 'ranking' && $method === 'GET') wb_json(['ok' => true, 'shown' => (bool)$a['revealed'], 'ranking' => exam_ranking($a)]);
+        if ($action === 'attempts') {
+            $aid = (int)($p[3] ?? 0);
+            $verb = $p[4] ?? '';
+            if ($aid === 0 && $method === 'GET') {
+                wb_json(['ok' => true, 'attempts' => exam_attempts($a, !empty($_GET['all'])), 'stats' => exam_question_stats($a)]);
+            }
+            if ($aid > 0) {
+                exam_finalize_expired($a);
+                if ($verb === '' && $method === 'GET') {
+                    $row = exam_attempt_by_id($a, $aid);
+                    if (!$row) wb_error('Versuch nicht gefunden.', 404);
+                    wb_json(['ok' => true, 'attempt' => exam_attempt_detail($a, $row)]);
+                }
+                if ($verb === 'grade' && $method === 'POST') {
+                    $row = exam_attempt_grade($a, $aid, (int)($in['question_id'] ?? 0), $in['points'] ?? null);
+                    wb_json(['ok' => true, 'attempt' => exam_attempt_summary($a, $row)]);
+                }
+                if (($verb === 'delete' && $method === 'POST') || ($verb === '' && $method === 'DELETE')) {
+                    exam_attempt_delete($a, $aid);
+                    wb_json(['ok' => true, 'deleted' => $aid]);
+                }
+            }
+            wb_error('Unbekannter Aufruf.', 404);
+        }
         if ($action !== 'questions') return;
         $sub = $p[3] ?? '';
         $verb = $p[4] ?? '';

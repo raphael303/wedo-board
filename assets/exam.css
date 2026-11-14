@@ -89,6 +89,60 @@
 .exam-error { margin: 4px 0 0; padding: 8px 12px; border-radius: 9px; background: #fde2e1; color: #9b1c1c; font-size: 0.92rem; }
 .exam-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 
+/* ---------- Prüfung lösen, Ergebnis, Rangliste (G2) ---------- */
+.exam-run { display: flex; flex-direction: column; gap: 14px; }
+.exam-run[hidden] { display: none; }
+.exam-att-head p { margin: 0; }
+.exam-att-head .exam-sub, .exam-att-head .exam-hint, .exam-att-head .exam-score { margin-top: 8px; }
+.exam-pill.practice { margin-bottom: 8px !important; background: #e3ecff; color: #234ba8; }
+.exam-pill.own { background: #efe4ff; color: #5b2aa8; }
+.exam-att-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.exam-timer {
+  font-variant-numeric: tabular-nums; font-weight: 700; padding: 4px 12px; border-radius: 999px;
+  background: rgba(27, 31, 36, 0.07);
+}
+.exam-timer.low { background: #fde2e1; color: #9b1c1c; }
+.exam-save-state { font-size: 0.85rem; color: var(--muted); }
+.exam-save-state.ans_save_failed { color: var(--danger); font-weight: 600; }
+.exam-score { font-size: 1.25rem; font-weight: 750; }
+.exam-answer { display: flex; flex-direction: column; gap: 6px; }
+.exam-choice {
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid rgba(27, 31, 36, 0.14); background: #fff; cursor: pointer; overflow-wrap: anywhere;
+}
+.exam-choice input { flex: 0 0 auto; width: 20px; height: 20px; margin: 1px 0 0; accent-color: #0f9d76; }
+.exam-choice:has(input:checked) { border-color: #0f9d76; background: #ecfaf4; }
+.exam-tf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(27, 31, 36, 0.08); }
+.exam-tf-row:last-child { border-bottom: 0; }
+.exam-tf-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.exam-open {
+  width: 100%; border: 1px solid rgba(27, 31, 36, 0.2); border-radius: 10px; padding: 10px 12px; background: #fff;
+  font-size: 1rem; resize: vertical; min-height: 4.4em;
+}
+.exam-open:focus { outline: 2px solid #3b6ef5; outline-offset: 0; border-color: transparent; }
+.exam-submit { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.exam-submit .exam-hint { margin: 0; }
+.exam-submit .btn-primary { padding: 12px 28px; font-size: 1rem; }
+.exam-given { margin: 0; padding: 8px 12px; border-radius: 10px; background: rgba(27, 31, 36, 0.05); white-space: pre-wrap; overflow-wrap: anywhere; }
+.exam-review-opts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.exam-review-opts li { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; border-radius: 8px; overflow-wrap: anywhere; }
+.exam-review-opts li.is-ok { background: #ecfaf4; }
+.exam-review-opts li.is-wrong { background: #fdeeee; }
+.exam-mine-mark { flex: 0 0 auto; min-width: 3.6em; font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+.exam-opt-label { flex: 1; min-width: 0; }
+.exam-sol-mark { flex: 0 0 auto; font-size: 0.8rem; font-weight: 700; }
+.exam-sol-mark.ok { color: #0f6b3e; }
+.exam-sol-mark.no { color: #9b1c1c; }
+.exam-q-points { margin: 6px 0 0; font-size: 0.88rem; font-weight: 650; color: var(--muted); }
+.exam-h2 { margin: 0 0 10px; font-size: 1.05rem; }
+.exam-rank-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.exam-rank-table td { padding: 7px 8px; border-bottom: 1px solid rgba(27, 31, 36, 0.08); }
+.exam-rank-table td.rank { width: 3em; font-weight: 700; color: var(--muted); }
+.exam-rank-table td.name { overflow-wrap: anywhere; }
+.exam-rank-table td.val, .exam-rank-table td.grade { text-align: right; white-space: nowrap; }
+.exam-rank-table tr.me td { background: #fff4c2; font-weight: 700; }
+.exam-ranking .exam-hint { margin-top: 10px; }
+
 @media (max-width: 560px) {
   .exam-stage { padding-left: 10px; padding-right: 10px; }
   .exam-card { padding: 14px 14px; }

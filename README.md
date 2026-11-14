@@ -24,24 +24,28 @@ Für ein privates Repository braucht `git clone` auf dem Server ein Zugangstoken
 
 ## Aktualisieren
 
+Ausgerollt wird vom Raspberry Pi aus (Workspace `/srv/workspaces/wedo-board`, SSH-Alias `cyon`):
+
 ```
-cd ~/public_html/tafula.top
-git pull
+tools/cyon-deploy.sh --check   # nur lesend: Stand auf cyon und GitHub vergleichen
+tools/cyon-deploy.sh           # sichern, git pull --ff-only, Migrationen, Startseite prüfen
 ```
 
-Änderungen am Datenbankschema laufen beim nächsten Öffnen der Bibliothek oder beim nächsten Besitzer-Aufruf automatisch (`lib/migrate.php`).
+Das Skript ändert weder `config.php` noch `uploads/`. Änderungen am Datenbankschema führt es gleich aus; sonst laufen sie beim nächsten Öffnen der Bibliothek oder beim nächsten Besitzer-Aufruf automatisch (`lib/migrate.php`).
 
 ## Connector für Claude
 
 In der Bibliothek unter Einstellungen steht die Connector-Adresse `https://tafula.top/mcp/<token>`. Sie wird in den Claude-Einstellungen unter Connectoren als eigener Connector ohne Anmeldung hinzugefügt; danach kann Claude Boards anlegen, suchen, lesen, leeren, archivieren und QR-Codes liefern.
 
-## Lokale Entwicklung
+## Lokale Entwicklung und Tests
 
 ```
 php -S localhost:8080 dev-router.php
 ```
 
 `dev-router.php` bildet die Regeln aus `.htaccess` für den eingebauten PHP-Server nach. `config.php` zeigt dabei auf eine lokale Datenbank.
+
+Der Rauchtest `tools/test.sh` (auf dem Pi mit `flock /srv/workspaces/.build.lock tools/test.sh`) startet eine Wegwerf-MariaDB in Docker und den PHP-Server, installiert frisch und prüft Seiten, Schnittstelle, Gäste-Aufrufe, Connector und Migrationen. Einzelheiten stehen in `DEVELOPMENT.md`.
 
 ## Aufbau
 

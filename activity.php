@@ -12,13 +12,17 @@ $lang = wb_resolve_lang($activity['lang'] ?? (string)wb_config('default_lang', '
 $uid = wb_client_uid();
 $owner = $activity ? wb_can('board.manage') : false;
 $isCloud = ($activity['type'] ?? '') === 'wordcloud';
+$isExam = ($activity['type'] ?? '') === 'exam';
 
 if (!$activity || $activity['status'] === 'archived') {
     http_response_code(404);
     ?><!doctype html><html lang="<?= e($lang) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><?= e(wb_app_name()) ?></title><link rel="stylesheet" href="/assets/board.css?v=<?= WB_VERSION ?>"></head>
-    <body class="bg-graphit"><main class="notfound"><h1><?= e(t($isCloud ? 'wc_not_found' : 'target_not_found', $lang)) ?></h1></main></body></html><?php
+    <body class="bg-graphit"><main class="notfound"><h1><?= e(t($isExam ? 'exam_not_found' : ($isCloud ? 'wc_not_found' : 'target_not_found'), $lang)) ?></h1></main></body></html><?php
     exit;
 }
+
+// Gemeinschaftsprüfung: eigene Seite.
+if ($isExam) { require WB_ROOT . '/lib/exam_page.php'; exit; }
 
 $round = $owner && isset($_GET['round']) ? max(1, (int)$_GET['round']) : null;
 $boot = [

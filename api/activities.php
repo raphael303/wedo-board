@@ -66,6 +66,25 @@ function activity_guest_api(string $method, array $p): never {
         $r = wordcloud_owner_action($a, $sub, wb_read_json_body());
         wb_json(['ok' => true] + $r + ['state' => activity_state(activity_by_id($a['id']), $uid, null, true)]);
     }
+    // Gemeinschaftsprüfung: eigene Fragen einreichen, ändern, zurückziehen (nur in der Sammelphase).
+    if ($a['type'] === 'exam') {
+        if (in_array($sub, ['reveal', 'round', 'response'], true)) wb_error('Unbekannter Aufruf.', 404);
+        if ($sub === 'questions' && $method === 'POST') {
+            if ($owner) wb_error(t('exam_owner_use_library', $lang), 403, ['code' => 'exam_owner_use_library']);
+            activity_guest_guard($a, $uid, false, $lang);
+            $in = wb_read_json_body();
+            $qid = isset($p[3]) ? (int)$p[3] : 0;
+            try {
+                if ($qid > 0 && ($p[4] ?? '') === 'delete') { exam_guest_question_withdraw($a, $uid, $qid); $q = null; }
+                elseif ($qid > 0) $q = exam_guest_question_update($a, $uid, $qid, $in);
+                else $q = exam_guest_question_create($a, $uid, $in);
+            } catch (InvalidArgumentException $e) {
+                wb_error(t($e->getMessage(), $lang, ['n' => $a['config']['quota_max']]), 422, ['code' => $e->getMessage()]);
+            }
+            wb_json(['ok' => true, 'question' => $q, 'state' => activity_state(activity_by_id($a['id']), $uid, null, false)]);
+        }
+        wb_error('Unbekannter Aufruf.', 404);
+    }
     if ($sub === 'response' && $method === 'POST') {
         if ($isCloud) wb_error('Unbekannter Aufruf.', 404);
         if (!$owner) {
@@ -88,7 +107,7 @@ function activity_guest_api(string $method, array $p): never {
 /** Schreibrechte für Teilnehmende: offen, keine Sperre für alle Boards, Begrenzung pro Minute. */
 function activity_guest_guard(array $a, string $uid, bool $owner, string $lang): void {
     if ($owner) return;
-    $closedKey = $a['type'] === 'wordcloud' ? 'wc_closed' : 'target_closed';
+    $closedKey = ['wordcloud' => 'wc_closed', 'exam' => 'exam_closed'][$a['type']] ?? 'target_closed';
     if ($a['status'] !== 'open') wb_error(t($closedKey, $lang), 403, ['code' => 'closed']);
     if (guest_block_active($uid, 0) !== null) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
     rate_limit($uid);
@@ -162,6 +181,7 @@ function activity_owner_api(string $method, array $p): never {
         if ($method === 'PATCH' || $method === 'POST' || $method === 'PUT') wb_json(['ok' => true, 'activity' => activity_owner_view(activity_update($a, $in))]);
         if ($method === 'DELETE') { activity_trash($a); wb_json(['ok' => true, 'deleted' => $a['akey'], 'trash' => true]); }
     }
+    if ($a['type'] === 'exam') exam_owner_api($method, $a, $action, $p, $in);
     $isCloud = $a['type'] === 'wordcloud';
     if ($method === 'GET' && $action === 'results') {
         $round = isset($_GET['round']) ? max(1, (int)$_GET['round']) : null;
@@ -191,6 +211,59 @@ function activity_owner_api(string $method, array $p): never {
             case 'delete': activity_trash($a); wb_json(['ok' => true, 'deleted' => $a['akey'], 'trash' => true]);
             case 'restore': wb_json(['ok' => true, 'activity' => activity_owner_view(activity_restore($a))]);
         }
+    }
+    wb_error('Unbekannter Aufruf.', 404);
+}
+
+/**
+ * Besitzeraufrufe einer Gemeinschaftsprüfung: Fragen lesen, anlegen, ändern, annehmen, ablehnen, löschen,
+ * ordnen und die Prüfung als Markdown. Allgemeine Aufrufe (close, open, archive, duplicate, delete, restore)
+ * fallen an activity_owner_api zurück.
+ */
+function exam_owner_api(string $method, array $a, string $action, array $p, array $in): void {
+    $fail = fn(InvalidArgumentException $e) => wb_error(str_starts_with($e->getMessage(), 'exam_') ? t($e->getMessage(), 'de') : $e->getMessage(), str_contains($e->getMessage(), 'not_found') ? 404 : 422, ['code' => $e->getMessage()]);
+    try {
+        if ($action === 'results' && $method === 'GET') {
+            wb_json(['ok' => true, 'name' => $a['name'], 'phase' => $a['config']['phase'], 'counts' => exam_counts($a), 'questions' => exam_questions($a, (string)($_GET['status'] ?? 'all'))]);
+        }
+        if ($action === 'results.md' && $method === 'GET') {
+            header('Content-Type: text/markdown; charset=utf-8');
+            echo exam_markdown($a);
+            exit;
+        }
+        if (in_array($action, ['reveal', 'hide', 'round'], true)) wb_error('Für Prüfungen nicht verfügbar.', 404);
+        if ($action !== 'questions') return;
+        $sub = $p[3] ?? '';
+        $verb = $p[4] ?? '';
+        if ($sub === '') {
+            if ($method === 'GET') wb_json(['ok' => true, 'counts' => exam_counts($a), 'questions' => exam_questions($a, (string)($_GET['status'] ?? 'all'))]);
+            if ($method === 'POST') wb_json(['ok' => true, 'question' => exam_owner_question_create($a, $in)], 201);
+        }
+        if ($sub === 'order' && $method === 'POST') {
+            exam_owner_reorder($a, is_array($in['ids'] ?? null) ? $in['ids'] : []);
+            wb_json(['ok' => true, 'questions' => exam_questions($a, 'accepted')]);
+        }
+        $qid = (int)$sub;
+        if ($qid > 0) {
+            if ($verb === '' && $method === 'GET') {
+                $row = exam_question_row($a, $qid, true);
+                if (!$row) wb_error('Frage nicht gefunden.', 404);
+                wb_json(['ok' => true, 'question' => exam_question_view($a, $row)]);
+            }
+            if ($verb === '' && in_array($method, ['PATCH', 'POST', 'PUT'], true)) wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, $in)]);
+            if (($verb === '' && $method === 'DELETE') || ($verb === 'delete' && $method === 'POST')) { exam_owner_question_delete($a, $qid); wb_json(['ok' => true, 'deleted' => $qid]); }
+            if ($method === 'POST') {
+                switch ($verb) {
+                    case 'accept': wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, ['status' => 'accepted'])]);
+                    case 'reject': wb_json(['ok' => true, 'question' => exam_owner_question_update($a, $qid, ['status' => 'rejected'])]);
+                    case 'restore': wb_json(['ok' => true, 'question' => exam_owner_question_restore($a, $qid)]);
+                    case 'up': exam_owner_move($a, $qid, -1); wb_json(['ok' => true, 'questions' => exam_questions($a, 'accepted')]);
+                    case 'down': exam_owner_move($a, $qid, 1); wb_json(['ok' => true, 'questions' => exam_questions($a, 'accepted')]);
+                }
+            }
+        }
+    } catch (InvalidArgumentException $e) {
+        $fail($e);
     }
     wb_error('Unbekannter Aufruf.', 404);
 }

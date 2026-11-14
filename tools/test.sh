@@ -104,6 +104,43 @@ OUT=$(php -r 'require "lib/bootstrap.php"; echo db_migrate(), " ", setting_get("
 set -- $OUT
 [ "$1" = 0 ] && [ "$2" = "$3" ] && ok "db_migrate() ohne Arbeit, Schema $2" || bad "Migrationen: $OUT"
 
+echo '9. Gemeinschaftsprüfung'
+JH=(-H 'Content-Type: application/json')
+EX=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"exam","name":"Rauchtest-Prüfung","quota_max":2,"note":"Test","tags":"test"}' "$BASE/api/activities")
+EKEY=$(echo "$EX" | jq -r '.activity.key // empty')
+[ -n "$EKEY" ] && ok "Prüfung angelegt ($EKEY)" || bad "Prüfung anlegen: $EX"
+[ "$(code "$BASE/a/$EKEY")" = 200 ] && ok 'Prüfungsseite 200' || bad 'Prüfungsseite'
+G=(-b "$TMP/jar2" -c "$TMP/jar2")
+ENAME=$(curl -s "${G[@]}" "$BASE/api/a/$EKEY" | jq -r '.state.me.name // empty')
+[ -n "$ENAME" ] && ok "Gast erhält Fantasienamen auf der Prüfung ($ENAME)" || bad 'kein Fantasiename auf der Prüfung'
+R=$(curl -s "${G[@]}" "${JH[@]}" -d '{"type":"single","prompt":"Hauptstadt der Schweiz?","options":[{"text":"Bern","correct":true},{"text":"Zürich","correct":false}]}' "$BASE/api/a/$EKEY/questions")
+Q1=$(echo "$R" | jq -r '.question.id // empty')
+[ -n "$Q1" ] && [ "$(echo "$R" | jq -r '.state.quota_used')" = 1 ] && ok 'Gast reicht Einfachauswahl ein' || bad "Frage einreichen: $R"
+R=$(curl -s "${G[@]}" "${JH[@]}" -d '{"type":"single","prompt":"Zwei richtig?","options":[{"text":"a","correct":true},{"text":"b","correct":true}]}' "$BASE/api/a/$EKEY/questions")
+[ "$(echo "$R" | jq -r '.code')" = exam_err_single ] && ok 'Einfachauswahl mit zwei richtigen abgelehnt' || bad "Prüfung Einfachauswahl: $R"
+R=$(curl -s "${G[@]}" "${JH[@]}" -d '{"type":"open","prompt":"Warum ist der Himmel blau?","solution":"Weil kurzwelliges Licht stärker gestreut wird."}' "$BASE/api/a/$EKEY/questions")
+[ "$(echo "$R" | jq -r '.ok')" = true ] && ok 'Gast reicht offene Frage ein' || bad "offene Frage: $R"
+R=$(curl -s "${G[@]}" "${JH[@]}" -d '{"type":"truefalse","prompt":"Stimmt das?","options":[{"text":"x","correct":true},{"text":"y","correct":false}]}' "$BASE/api/a/$EKEY/questions")
+[ "$(echo "$R" | jq -r '.code')" = exam_quota ] && ok 'Kontingent greift' || bad "Kontingent: $R"
+R=$(curl -s "${AUTH[@]}" "$BASE/api/activities/$EKEY/questions")
+[ "$(echo "$R" | jq -r '.counts.submitted')" = 2 ] && ok 'Besitzer sieht zwei eingereichte Fragen' || bad "Fragen lesen: $R"
+R=$(curl -s "${AUTH[@]}" -X POST "$BASE/api/activities/$EKEY/questions/$Q1/accept")
+[ "$(echo "$R" | jq -r '.question.status')" = accepted ] && ok 'Frage angenommen' || bad "annehmen: $R"
+R=$(curl -s "${G[@]}" "${JH[@]}" -d '{"prompt":"Geändert?"}' "$BASE/api/a/$EKEY/questions/$Q1")
+[ "$(echo "$R" | jq -r '.code')" = exam_err_locked ] && ok 'angenommene Frage für Gast gesperrt' || bad "Sperre: $R"
+R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"multi","prompt":"Welche sind Primzahlen?","options":[{"text":"2","correct":true},{"text":"4","correct":false},{"text":"5","correct":true}],"points":3}' "$BASE/api/activities/$EKEY/questions")
+[ "$(echo "$R" | jq -r '.question.status')" = accepted ] && [ "$(echo "$R" | jq -r '.question.points')" = 3 ] && ok 'Besitzer legt Frage mit eigenen Punkten an' || bad "Besitzerfrage: $R"
+curl -s "${AUTH[@]}" "$BASE/api/activities/$EKEY/results.md" | grep -q 'Hauptstadt der Schweiz' && ok 'Prüfung als Markdown' || bad 'results.md'
+MCP() { curl -s "${JH[@]}" -H 'Accept: application/json, text/event-stream' -d "$1" "$BASE/mcp/$TOKEN"; }
+R=$(MCP '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_exam","arguments":{"name":"Connector-Prüfung","quota_max":0,"note":"Test","tags":["test"],"questions":[{"type":"truefalse","prompt":"Aussagen zu Wasser","options":[{"text":"Wasser kocht auf Meereshöhe bei 100 °C.","correct":true},{"text":"Eis ist schwerer als Wasser.","correct":false}]}]}}}')
+echo "$R" | jq -r '.result.content[0].text' | jq -e '.questions_added == 1' >/dev/null && ok 'Connector: create_exam mit Frage' || bad "create_exam: $R"
+R=$(MCP '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_exam","arguments":{"exam":"'"$EKEY"'"}}}')
+echo "$R" | jq -r '.result.content[0].text' | grep -q 'Welche sind Primzahlen' && ok 'Connector: read_exam' || bad "read_exam: $R"
+
+echo '10. Migration 13 von Schema 12'
+OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
+[ "$OUT" = "1 13 3" ] && ok 'Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
+
 if grep -qiE 'fatal|parse error' "$TMP/server.log"; then bad 'PHP-Fehler im Serverprotokoll'; grep -iE 'fatal|parse error' "$TMP/server.log" | head -5; fi
 echo
 [ $FAIL = 0 ] && echo 'Alle Prüfungen bestanden.' || { echo 'Es gab Fehler.'; exit 1; }

@@ -128,7 +128,7 @@ if ($id > 0) {
   <dl class="fb-ctx">
     <?php if (!empty($ctx['url'])): ?><dt>Seite</dt><dd><code><?= e($ctx['url']) ?></code></dd><?php endif; ?>
     <?php if ($fb['board_id'] !== null): ?><dt>Board</dt><dd><?php if ($fb['board_key']): ?><a href="<?= e(wb_admin_url()) ?>board.php?key=<?= e($fb['board_key']) ?>"><?= e((string)$fb['board_name']) ?></a><?php else: ?>gelöscht<?php endif; ?></dd><?php endif; ?>
-    <?php if ($fb['activity_id'] !== null): ?><dt>Aktivität</dt><dd><?php if ($fb['activity_key']): ?><a href="<?= e(wb_admin_url()) ?><?= $fb['activity_type'] === 'wordcloud' ? 'wordcloud' : 'target' ?>.php?key=<?= e($fb['activity_key']) ?>"><?= e((string)$fb['activity_name']) ?></a><?php else: ?>gelöscht<?php endif; ?></dd><?php endif; ?>
+    <?php if ($fb['activity_id'] !== null): ?><dt>Aktivität</dt><dd><?php if ($fb['activity_key']): ?><a href="<?= e(wb_admin_url()) ?><?= ['wordcloud' => 'wordcloud', 'exam' => 'exam'][$fb['activity_type']] ?? 'target' ?>.php?key=<?= e($fb['activity_key']) ?>"><?= e((string)$fb['activity_name']) ?></a><?php else: ?>gelöscht<?php endif; ?></dd><?php endif; ?>
     <?php foreach (['page' => 'Seitenart', 'version' => 'App-Version', 'user_agent' => 'Browser', 'viewport' => 'Fenster', 'screen' => 'Bildschirm', 'language' => 'Sprachen', 'page_lang' => 'Seitensprache'] as $k => $label): ?>
       <?php if (!empty($ctx[$k])): ?><dt><?= e($label) ?></dt><dd><?= e((string)$ctx[$k]) ?></dd><?php endif; ?>
     <?php endforeach; ?>
@@ -214,7 +214,7 @@ admin_header('Rückmeldungen', 'feedback');
         <span><?= e(feedback_kind_label($fb['kind'])) ?></span>
         <span><?= e(admin_time($fb['created_at'])) ?></span>
         <?php if ($fb['board_name']): ?><span>Board «<?= e($fb['board_name']) ?>»</span><?php endif; ?>
-        <?php if ($fb['activity_name']): ?><span><?= $fb['activity_type'] === 'wordcloud' ? 'Wortwolke' : 'Zielscheibe' ?> «<?= e($fb['activity_name']) ?>»</span><?php endif; ?>
+        <?php if ($fb['activity_name']): ?><span><?= ['wordcloud' => 'Wortwolke', 'exam' => 'Prüfung'][$fb['activity_type']] ?? 'Zielscheibe' ?> «<?= e($fb['activity_name']) ?>»</span><?php endif; ?>
         <?php if (!empty($fb['context']['page']) && !$fb['board_name'] && !$fb['activity_name']): ?><span><?= e(['start' => 'Startseite', 'library' => 'Bibliothek'][$fb['context']['page']] ?? $fb['context']['page']) ?></span><?php endif; ?>
         <?php if (!empty($fb['context']['errors'])): ?><span class="bad"><?= count($fb['context']['errors']) ?> JS-Fehler</span><?php endif; ?>
         <?php if ($fb['needs_consult']): ?><span>Rücksprache nötig</span><?php endif; ?>

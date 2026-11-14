@@ -74,6 +74,7 @@ function admin_header(string $title, string $active = ''): void {
   <a href="<?= e(wb_admin_url()) ?>board.php?new=1" class="<?= $active === 'new' ? 'active' : '' ?>">Neues Board</a>
   <a href="<?= e(wb_admin_url()) ?>targets.php" class="<?= $active === 'targets' ? 'active' : '' ?>">Zielscheiben</a>
   <a href="<?= e(wb_admin_url()) ?>wordclouds.php" class="<?= $active === 'wordclouds' ? 'active' : '' ?>">Wortwolken</a>
+  <a href="<?= e(wb_admin_url()) ?>exams.php" class="<?= $active === 'exams' ? 'active' : '' ?>">Prüfungen</a>
   <a href="<?= e(wb_admin_url()) ?>blocks.php" class="<?= $active === 'blocks' ? 'active' : '' ?>">Sperren</a>
   <a href="<?= e(wb_admin_url()) ?>feedback.php" class="<?= $active === 'feedback' ? 'active' : '' ?>">Rückmeldungen<?php $fbOpen = admin_feedback_new_count(); if ($fbOpen > 0): ?> <span class="badge"><?= $fbOpen ?></span><?php endif; ?></a>
   <a href="<?= e(wb_admin_url()) ?>settings.php" class="<?= $active === 'settings' ? 'active' : '' ?>">Einstellungen</a>

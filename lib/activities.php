@@ -15,7 +15,7 @@ declare(strict_types=1);
  * bleiben für den Besitzer lesbar (zum Beispiel für einen Vorher-nachher-Vergleich).
  */
 
-const ACTIVITY_TYPES = ['target', 'wordcloud'];
+const ACTIVITY_TYPES = ['target', 'wordcloud', 'exam'];
 const TARGET_MIN_ASPECTS = 2;
 const TARGET_MAX_ASPECTS = 12;
 const TARGET_COLOR_MODES = ['sector', 'scale'];
@@ -89,6 +89,7 @@ function target_default_config(): array {
 }
 
 function activity_default_config(string $type): array {
+    if ($type === 'exam') return exam_default_config();
     return $type === 'wordcloud' ? wordcloud_default_config() : target_default_config();
 }
 
@@ -101,6 +102,8 @@ function activity_normalize(array $a): array {
     $a['config'] = array_merge(activity_default_config((string)$a['type']), json_decode($a['config_json'] ?? '{}', true) ?: []);
     if ($a['type'] === 'wordcloud') {
         $a['config'] = wordcloud_cast_config($a['config']);
+    } elseif ($a['type'] === 'exam') {
+        $a['config'] = exam_cast_config($a['config']);
     } else {
         $a['config']['require_all'] = (bool)$a['config']['require_all'];
     }
@@ -114,7 +117,8 @@ function activity_normalize(array $a): array {
 
 /** Was die Seite der Klasse über die Aktivität wissen muss (ohne Notiz und Tags). */
 /** Die Felder der Konfiguration, die Seite, Schnittstelle und Connector zeigen (je nach Typ). */
-function activity_config_view(array $a): array {
+function activity_config_view(array $a, bool $owner = true): array {
+    if ($a['type'] === 'exam') return $owner ? exam_config_view($a) : exam_public_config($a);
     if ($a['type'] === 'wordcloud') {
         return ['max_terms' => $a['config']['max_terms'], 'live' => $a['config']['live'], 'ai' => $a['config']['ai']];
     }
@@ -126,7 +130,7 @@ function activity_public(array $a, string $lang): array {
         'key' => $a['akey'],
         'type' => $a['type'],
         'name' => $a['name'],
-    ] + activity_config_view($a) + [
+    ] + activity_config_view($a, false) + [
         'background' => $a['background'],
         'lang' => $lang,
         'status' => $a['status'],
@@ -166,7 +170,8 @@ function activity_owner_view(array $a): array {
         'status' => $a['status'],
         'revealed' => $a['revealed'],
         'round' => $a['round'],
-        'response_count' => activity_response_count($a),
+        'response_count' => $a['type'] === 'exam' ? exam_counts($a)['contributors'] : activity_response_count($a),
+    ] + ($a['type'] === 'exam' ? ['questions' => exam_counts($a)] : []) + [
         'note' => (string)($a['note'] ?? ''),
         'tags' => $a['tags'],
         'url' => $a['url'],
@@ -243,9 +248,11 @@ function activity_create(array $in): array {
     if (!in_array($type, ACTIVITY_TYPES, true)) throw new InvalidArgumentException('Unbekannter Typ. Erlaubt: ' . implode(', ', ACTIVITY_TYPES) . '.');
     $name = wb_clean_text($in['name'] ?? '', 200);
     if ($name === '') throw new InvalidArgumentException('Name fehlt.');
-    $config = $type === 'wordcloud'
-        ? wordcloud_normalize_config($in, wordcloud_default_config())
-        : target_normalize_config($in + ['aspects' => []], target_default_config());
+    $config = match ($type) {
+        'wordcloud' => wordcloud_normalize_config($in, wordcloud_default_config()),
+        'exam' => exam_normalize_config($in, exam_default_config()),
+        default => target_normalize_config($in + ['aspects' => []], target_default_config()),
+    };
     $bg = in_array($in['background'] ?? '', wb_backgrounds(), true) ? $in['background'] : 'meer';
     $lang = in_array($in['lang'] ?? '', wb_langs(), true) ? $in['lang'] : (string)wb_config('default_lang', 'de');
     $slug = null;
@@ -277,9 +284,13 @@ function activity_update(array $a, array $in): array {
         if ($name === '') throw new InvalidArgumentException('Name fehlt.');
         $fields[] = 'name = ?'; $params[] = $name;
     }
-    $configKeys = $a['type'] === 'wordcloud' ? WORDCLOUD_CONFIG_KEYS : ['aspects', 'color_mode', 'require_all'];
+    $configKeys = match ($a['type']) { 'wordcloud' => WORDCLOUD_CONFIG_KEYS, 'exam' => EXAM_CONFIG_KEYS, default => ['aspects', 'color_mode', 'require_all'] };
     if (array_intersect($configKeys, array_keys($in))) {
-        $config = $a['type'] === 'wordcloud' ? wordcloud_normalize_config($in, $a['config']) : target_normalize_config($in, $a['config']);
+        $config = match ($a['type']) {
+            'wordcloud' => wordcloud_normalize_config($in, $a['config']),
+            'exam' => exam_normalize_config(array_diff_key($in, ['phase' => 1]), $a['config']),
+            default => target_normalize_config($in, $a['config']),
+        };
         $fields[] = 'config_json = ?'; $params[] = json_encode($config, JSON_UNESCAPED_UNICODE);
     }
     if (array_key_exists('background', $in) && in_array($in['background'], wb_backgrounds(), true)) { $fields[] = 'background = ?'; $params[] = $in['background']; }
@@ -344,11 +355,23 @@ function activity_restore(array $a): array {
 function activity_delete_forever(array $a): void {
     db_exec('DELETE FROM activity_responses WHERE activity_id = ?', [$a['id']]);
     db_exec('DELETE FROM activity_groupings WHERE activity_id = ?', [$a['id']]);
+    exam_delete_data($a['id']);
     db_exec('DELETE FROM activities WHERE id = ?', [$a['id']]);
 }
 
 /** Kopie der Struktur (Aspekte bzw. Einstellungen der Wortwolke, Farben, Notiz, Tags) ohne Antworten. */
 function activity_duplicate(array $a, ?string $name = null): array {
+    if ($a['type'] === 'exam') {
+        // Prüfung: Einstellungen und angenommene Fragen, neu in der Sammelphase.
+        $copy = activity_create([
+            'type' => 'exam',
+            'name' => $name !== null && trim($name) !== '' ? $name : $a['name'] . ' (Kopie)',
+        ] + array_diff_key($a['config'], ['phase' => 1, 'review_done' => 1, 'solutions_released' => 1]) + [
+            'background' => $a['background'], 'lang' => $a['lang'], 'note' => $a['note'], 'tags' => $a['tags'],
+        ]);
+        exam_copy_questions($a, $copy);
+        return activity_by_id($copy['id']);
+    }
     $config = $a['type'] === 'wordcloud' ? $a['config'] : [
         'aspects' => array_column($a['config']['aspects'], 'label'),
         'color_mode' => $a['config']['color_mode'],
@@ -453,6 +476,7 @@ function activity_state(array $a, string $uid, ?string $since, bool $owner, ?int
     $version = (string)$a['last_activity_at'];
     if ($round === null && $since !== null && $since === $version) return ['changed' => false, 'version' => $version];
     if ($a['type'] === 'wordcloud') return wordcloud_state($a, $uid, $owner, $round);
+    if ($a['type'] === 'exam') return exam_state($a, $uid, $owner);
     $viewRound = $owner && $round !== null && $round > 0 && $round !== $a['round'] ? $round : $a['round'];
     $past = $viewRound !== $a['round'];
     $revealed = $past || $a['revealed'];

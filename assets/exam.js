@@ -152,7 +152,8 @@
 
   /* ---------- Prüfung lösen (Phasen running und results, Etappe G2) ---------- */
   const run = $('#run');
-  let runKey = '';            // bestimmt, ob die Fragen neu gezeichnet werden (nie während des Tippens)
+  let runKey = '';
+  let showDiscussion = false;  // Besprechung (Aufgaben mit Lösungen) auf der Seite der Lehrperson, nur lokal            // bestimmt, ob die Fragen neu gezeichnet werden (nie während des Tippens)
   let local = {};             // lokale Antworten des laufenden Versuchs
   let queue = {};             // noch nicht gespeicherte Antworten
   let saveTimer = null, saving = false, saveState = '';
@@ -403,7 +404,7 @@
       if (att.result) head.appendChild(el('p', 'exam-score', scoreText(att.result)));
       else if (att.ai_pending) head.appendChild(el('p', 'exam-sub exam-ai-pending', t('exam_ai_pending')));
       else head.appendChild(el('p', 'exam-sub', t('exam_result_later')));
-      if (!att.solutions) head.appendChild(el('p', 'exam-hint', t('exam_solutions_later')));
+      if (!att.solutions) head.appendChild(el('p', 'exam-hint', t(state.solutions_mode === 'results' && state.phase !== 'results' ? 'exam_solutions_after_end' : 'exam_solutions_later')));
       if (att.pdf) {
         // Eigener Versuch als PDF (G4): Druckseite in neuem Tab, Inhalt nach den Freigaben der Lehrperson.
         const a = el('a', 'btn-ghost', att.pdf.solutions ? t('exam_pdf_link_solutions') : t('exam_pdf_link'));
@@ -477,26 +478,80 @@
     return sec;
   }
 
+  /** Besprechung auf der (oft projizierten) Seite der Lehrperson: Aufgaben mit Lösungen und Lösungsquote. */
+  function discussionCards(list) {
+    const frag = document.createDocumentFragment();
+    const head = el('section', 'exam-card');
+    head.appendChild(el('h2', 'exam-h2', t('exam_discussion')));
+    if (!list || !list.length) head.appendChild(el('p', 'exam-sub', t('exam_discussion_empty')));
+    frag.appendChild(head);
+    if (!list || !list.length) return frag;
+    const ol = el('ol', 'exam-list exam-run-list exam-discussion');
+    list.forEach((q) => {
+      const li = el('li', 'exam-q exam-run-q');
+      const h = el('div', 'exam-q-head');
+      h.appendChild(el('span', 'exam-pill', t('exam_q_of', { n: q.n, total: list.length })));
+      h.appendChild(el('span', 'exam-pill type', t('exam_type_' + q.type)));
+      h.appendChild(el('span', 'exam-pill', t('exam_points', { n: fmtNum(q.points) })));
+      if (q.struck) { h.appendChild(el('span', 'exam-pill struck', t('exam_struck'))); li.classList.add('is-struck'); }
+      li.appendChild(h);
+      li.appendChild(el('p', 'exam-q-prompt', q.prompt));
+      const box = el('div', 'exam-answer review');
+      if (q.type === 'open') {
+        const p = el('p', 'exam-q-solution'); p.appendChild(el('strong', '', t('exam_solution') + ': ')); p.appendChild(document.createTextNode(q.solution || '')); box.appendChild(p);
+      } else {
+        const ul = el('ul', 'exam-review-opts');
+        q.options.forEach((o) => {
+          const li2 = el('li', q.type !== 'truefalse' && o.correct ? 'is-ok' : '');
+          li2.appendChild(el('span', 'exam-opt-label', o.text));
+          if (q.type === 'truefalse') li2.appendChild(el('span', 'exam-sol-mark ' + (o.correct ? 'ok' : 'no'), o.correct ? t('exam_true') : t('exam_false')));
+          else if (o.correct) li2.appendChild(el('span', 'exam-sol-mark ok', '✓ ' + t('exam_correct_mark')));
+          ul.appendChild(li2);
+        });
+        box.appendChild(ul);
+      }
+      if (!q.struck && q.answered) box.appendChild(el('p', 'exam-q-points', t('exam_discussion_rate', { p: Math.round((q.solved_rate || 0) * 100), n: q.answered })));
+      li.appendChild(box);
+      ol.appendChild(li);
+    });
+    frag.appendChild(ol);
+    return frag;
+  }
+
   function renderOwnerRun() {
     run.textContent = '';
     const c = state.attempts || { started: 0, submitted: 0, in_progress: 0 };
     const card = el('section', 'exam-card');
     card.appendChild(el('p', 'exam-lead', t('exam_owner_progress', { started: c.started, submitted: c.submitted })));
     if (state.ends_at) card.appendChild(el('p', 'exam-sub', t('exam_ends_at', { t: clock(state.ends_at) })));
-    if (state.ranking_enabled && state.phase === 'results') {
-      const b = el('button', 'btn-primary', state.ranking_shown ? t('exam_ranking_hide') : t('exam_ranking_show'));
-      b.type = 'button';
-      b.addEventListener('click', async () => {
-        try { const r = await ownerCall('/reveal', { revealed: !state.ranking_shown }); applyState(r.state); } catch (e) { notice(e.message, true, 5000); }
-      });
-      const p = el('p', 'exam-actions'); p.appendChild(b); card.appendChild(p);
+    if (state.phase === 'results') {
+      const p = el('p', 'exam-actions');
+      if (state.ranking_enabled) {
+        const b = el('button', state.ranking_shown ? 'btn-ghost' : 'btn-primary', state.ranking_shown ? t('exam_ranking_hide') : t('exam_ranking_show'));
+        b.type = 'button';
+        b.addEventListener('click', async () => {
+          try { const r = await ownerCall('/reveal', { revealed: !state.ranking_shown }); applyState(r.state); } catch (e) { notice(e.message, true, 5000); }
+        });
+        p.appendChild(b);
+      }
+      const d = el('button', 'btn-ghost', showDiscussion ? t('exam_discussion_hide') : t('exam_discussion_show'));
+      d.type = 'button';
+      d.addEventListener('click', () => { showDiscussion = !showDiscussion; renderOwnerRun(); });
+      p.appendChild(d);
+      card.appendChild(p);
     }
     run.appendChild(card);
-    if (state.ranking_enabled) run.appendChild(rankingCard(state.ranking, true));
+    if (state.ranking_shown && state.ranking) run.appendChild(rankingCard(state.ranking, true));
+    if (state.phase === 'results' && showDiscussion) run.appendChild(discussionCards(state.discussion));
   }
 
   function renderRun() {
-    if (me.owner) { runKey = ''; renderOwnerRun(); return; }
+    if (me.owner) {
+      // Nur neu zeichnen, wenn sich etwas geändert hat, damit die projizierte Seite beim Besprechen nicht springt.
+      const k = JSON.stringify([state.phase, state.attempts, state.ends_at, state.ranking_enabled, state.ranking_shown, state.ranking, state.discussion, showDiscussion]);
+      if (k === runKey) return;
+      runKey = k; renderOwnerRun(); return;
+    }
     const att = state.attempt;
     const key = att ? [att.no, att.status, !!att.result, !!att.solutions, !!att.ai_pending, att.questions.filter((q) => q.struck).map((q) => q.id).join(','), state.can_retry, state.phase, JSON.stringify(state.ranking || null), JSON.stringify(att.pdf || null)].join('|') : 'none|' + state.may_start + '|' + state.phase;
     if (att && att.status === 'in_progress') {

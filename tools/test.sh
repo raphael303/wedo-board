@@ -217,7 +217,10 @@ R=$(curl -s "${G[@]}" "$GA/state")
 R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"phase":"collect"}' "$EA/phase")
 [ "$(echo "$R" | jq -r '.code')" = exam_phase_has_attempts ] && ok 'zurück zum Sammeln mit Versuchen abgelehnt' || bad "collect: $R"
 R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"phase":"results"}' "$EA/phase")
-[ "$(echo "$R" | jq -r '.activity.revealed')" = true ] && ok 'Ergebnisse freigegeben, Rangliste gezeigt' || bad "results: $R"
+[ "$(echo "$R" | jq -r '.activity.revealed')" = false ] && ok 'Ergebnisse freigegeben, Rangliste noch verborgen' || bad "results: $R"
+[ "$(curl -s "${G[@]}" "$GA/state" | jq -r '.ranking')" = null ] && ok 'Rangliste nach dem Beenden noch verborgen' || bad 'Rangliste nach dem Beenden sichtbar'
+R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{}' "$EA/reveal")
+[ "$(echo "$R" | jq -r '.activity.revealed')" = true ] && ok 'Rangliste gezeigt' || bad "reveal: $R"
 R=$(curl -s "${G[@]}" "$GA/state")
 [ "$(echo "$R" | jq -r '.ranking[0].m')" = 1 ] && ok 'eigene Zeile der Rangliste markiert' || bad "Rangliste Gast: $(echo "$R" | jq -c '.ranking')"
 [ "$(echo "$R" | jq -r --arg q "$QS" '.attempt.solutions[$q].correct[0]')" = "$(opt 'Hauptstadt der Schweiz?' Bern)" ] && echo "$R" | grep -q GEHEIMLOESUNGSSATZ && ok 'Lösungen nach den Ergebnissen sichtbar' || bad "Lösungen: $(echo "$R" | jq -c '.attempt.solutions')"
@@ -348,6 +351,12 @@ for pg in "exam.php?key=$Y" "exam.php?key=$Y&attempt=$YAA" "exam.php?key=$Y&grad
   grep -q 'exam-admin\|Bewerten pro Frage' "$TMP/page.html" && ! grep -qE '<b>(Warning|Fatal error|Notice|Deprecated)</b>|Uncaught' "$TMP/page.html" || bad "Bibliothek $pg"
 done
 ok 'Bibliotheksseiten für KI, Versuch, Bewerten pro Frage und Fragen prüfen ohne PHP-Fehler'
+R=$(curl -s -b "$TMP/admin" "$BASE/api/a/$EKEY/state")
+[ "$(echo "$R" | jq -r '.ranking')" = null ] && [ "$(echo "$R" | jq -r '.ranking_shown')" = false ] && ok 'Seite der Lehrperson: verborgene Rangliste wird nicht mitgeschickt' || bad "Besitzer-Rangliste: $(echo "$R" | jq -c '{ranking, ranking_shown}')"
+[ "$(echo "$R" | jq '.discussion | length')" -ge 1 ] && echo "$R" | jq -e '[.discussion[].options[]?.correct] | any' >/dev/null && ! echo "$R" | jq -e '.discussion[] | has("author")' >/dev/null \
+  && ok 'Seite der Lehrperson: Aufgaben mit Lösungen zum Besprechen, ohne Verfasser' || bad "Besprechung: $(echo "$R" | jq -c '.discussion')"
+curl -s -b "$TMP/admin" "$BASE/lehrerzimmer/exam.php?key=$EKEY" > "$TMP/epage.html"
+grep -q 'Lösungen für die Lernenden:</strong> sichtbar' "$TMP/epage.html" && ok 'Bibliothek zeigt, ob die Lösungen sichtbar sind' || bad 'Lösungsstatus in der Bibliothek'
 curl -s -b "$TMP/admin" "$BASE/lehrerzimmer/exam.php?key=$Z" > "$TMP/zpage.html"
 SOFT=$(grep -c 'class="exam-check-soft"' "$TMP/zpage.html" || true)
 HARD=$(grep -o '<ul class="exam-check">' "$TMP/zpage.html" | wc -l)

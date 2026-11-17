@@ -77,7 +77,8 @@ function exam_set_phase(array $a, string $phase): array {
             exam_attempt_finish($a, $row);
         }
         $c['ends_at'] = null;
-        $revealed = $c['ranking'] ? 1 : 0;
+        // Seit 0.20.0 zeigt das Beenden die Rangliste nicht mehr automatisch (Entscheid Raphael, 2026-11-17):
+        // Die Seite der Lehrperson wird oft projiziert; die Rangliste zeigt sie mit einem eigenen Knopf.
     }
     $c['phase'] = $phase;
     db_exec('UPDATE activities SET config_json = ?, revealed = ?, last_activity_at = ? WHERE id = ?',
@@ -768,10 +769,12 @@ function exam_run_state(array $a, string $uid, bool $owner): array {
     $c = $a['config'];
     $s = ['time_limit' => $c['time_limit'], 'ends_at' => exam_iso($c['ends_at'] ?? null), 'display' => $c['display'], 'grading' => $c['grading']];
     if ($owner) {
+        // Die Seite der Lehrperson wird oft projiziert: Rangliste nur, wenn sie gezeigt wird; die Bibliothek zeigt sie immer.
         $s['attempts'] = exam_attempt_counts($a);
-        $s['ranking_enabled'] = $c['ranking'];
+        $s['ranking_enabled'] = $c['ranking'] && $c['phase'] === 'results';
         $s['ranking_shown'] = (bool)$a['revealed'];
-        $s['ranking'] = $c['ranking'] ? exam_ranking($a) : null;
+        $s['ranking'] = ($c['ranking'] && $c['phase'] === 'results' && $a['revealed']) ? exam_ranking($a) : null;
+        $s['discussion'] = $c['phase'] === 'results' ? exam_discussion($a) : null;
         return $s;
     }
     $row = exam_attempt_latest($a, $uid);
@@ -782,5 +785,28 @@ function exam_run_state(array $a, string $uid, bool $owner): array {
     $s['attempt'] = $row ? exam_attempt_guest_view($a, $row) : null;
     $s['can_retry'] = exam_can_retry($a, $row);
     $s['ranking'] = ($c['phase'] === 'results' && $c['ranking'] && $a['revealed']) ? exam_ranking($a, $uid) : null;
+    $s['solutions_mode'] = $c['solutions'];
     return $s;
+}
+
+/**
+ * Besprechung für die Seite der Lehrperson (Phase results): Fragen in Prüfungsreihenfolge mit Lösungen und
+ * Lösungsquote, ohne Verfasser und ohne Antworten einzelner Personen. Gestrichene Fragen sind markiert.
+ */
+function exam_discussion(array $a): array {
+    $stats = array_column(exam_question_stats($a), null, 'question_id');
+    $out = [];
+    $n = 0;
+    foreach (exam_questions($a, 'all') as $q) {
+        if (!in_array($q['status'], ['accepted', 'struck'], true)) continue;
+        $st = $stats[$q['id']] ?? [];
+        $out[] = [
+            'id' => $q['id'], 'n' => ++$n, 'type' => $q['type'], 'prompt' => $q['prompt'], 'points' => $q['points'],
+            'struck' => $q['status'] === 'struck',
+            'options' => array_map(fn($o) => ['id' => $o['id'], 'text' => $o['text'], 'correct' => !empty($o['correct'])], $q['options']),
+            'solution' => $q['solution'],
+            'answered' => (int)($st['n'] ?? 0), 'solved_rate' => $st['solved_rate'] ?? null, 'mean_points' => $st['mean_points'] ?? null,
+        ];
+    }
+    return $out;
 }

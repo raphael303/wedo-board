@@ -506,7 +506,7 @@ function mcp_tools(): array {
         ],
         [
             'name' => 'control_exam',
-            'description' => 'Steuert den Ablauf einer Prüfung. phase: running = Prüfung starten (verlangt mindestens eine angenommene Frage; noch eingereichte bleiben draussen) bzw. wieder öffnen, results = beenden und Ergebnisse freigeben (laufende Versuche werden abgegeben; mit Rangliste wird sie gleich gezeigt), collect = zurück zum Sammeln (nur ohne Versuche). ranking_shown zeigt oder verbirgt die Rangliste (nur in der Phase results), solutions_released gibt Lösungen frei (für solutions=release), review_done schliesst die Korrektur ab (erst dann sehen Lernende Punkte, die nicht rein automatisch entstanden sind). Nur auf Wunsch des Besitzers.',
+            'description' => 'Steuert den Ablauf einer Prüfung. phase: running = Prüfung starten (verlangt mindestens eine angenommene Frage; noch eingereichte bleiben draussen) bzw. wieder öffnen, results = beenden und Ergebnisse freigeben (laufende Versuche werden abgegeben; die Rangliste bleibt verborgen, bis ranking_shown=true sie zeigt), collect = zurück zum Sammeln (nur ohne Versuche). ranking_shown zeigt oder verbirgt die Rangliste (nur in der Phase results), solutions_released gibt Lösungen frei (für solutions=release), review_done schliesst die Korrektur ab (erst dann sehen Lernende Punkte, die nicht rein automatisch entstanden sind). Nur auf Wunsch des Besitzers.',
             'inputSchema' => ['type' => 'object', 'properties' => [
                 'exam' => $examParam,
                 'phase' => ['type' => 'string', 'enum' => EXAM_PHASES],

@@ -170,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 case 'phase_collect':
                     [$a2, $warnings] = exam_set_phase($act, substr($action, 6));
                     admin_flash(['phase_running' => $act['config']['phase'] === 'results' ? 'Prüfung wieder geöffnet.' : 'Prüfung gestartet. Unter dem Link lösen jetzt alle die Prüfung.',
-                        'phase_results' => $a2['revealed'] ? 'Ergebnisse freigegeben und Rangliste gezeigt.' : 'Ergebnisse freigegeben.',
+                        'phase_results' => 'Prüfung beendet und Ergebnisse freigegeben.' . ($a2['config']['ranking'] ? ' Die Rangliste ist noch verborgen.' : ''),
                         'phase_collect' => 'Zurück in der Sammelphase.'][$action] . ($warnings ? ' ' . implode(' ', $warnings) : ''));
                     break;
                 case 'ranking_show': exam_set_ranking_shown($act, true); admin_flash('Rangliste für alle sichtbar.'); break;
@@ -503,7 +503,7 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
       <?php if ($cfg['phase'] === 'collect'): ?>
         <?= $post('phase_running', 'Prüfung starten', 'btn', 'Prüfung jetzt starten? Unter dem Link lösen dann alle die Prüfung; noch eingereichte Fragen kommen nicht hinein.' . ($cfg['time_limit']['minutes'] > 0 && !$cfg['time_limit']['per_person'] ? ' Das gemeinsame Ende ist in ' . $cfg['time_limit']['minutes'] . ' Minuten.' : '')) ?>
       <?php elseif ($cfg['phase'] === 'running'): ?>
-        <?= $post('phase_results', $cfg['ranking'] ? 'Rangliste zeigen' : 'Ergebnisse freigeben', 'btn', 'Prüfung beenden und Ergebnisse freigeben? Laufende Versuche werden abgegeben.' . ($cfg['ranking'] ? ' Die Rangliste wird allen gezeigt.' : '')) ?>
+        <?= $post('phase_results', 'Prüfung beenden und Ergebnisse freigeben', 'btn', 'Prüfung beenden und Ergebnisse freigeben? Laufende Versuche werden abgegeben.' . ($cfg['solutions'] === 'results' ? ' Wer abgegeben hat, sieht danach die Lösungen.' : '') . ($cfg['ranking'] ? ' Die Rangliste bleibt verborgen, bis du sie zeigst.' : '')) ?>
         <?php if (!$attemptCounts['started']): ?><?= $post('phase_collect', 'Zurück zum Sammeln', 'btn-ghost') ?><?php endif; ?>
       <?php else: ?>
         <?= $post('phase_running', 'Prüfung wieder öffnen', 'btn-ghost', 'Prüfung wieder öffnen? Wer noch nicht abgegeben hat, kann wieder lösen.') ?>
@@ -516,6 +516,12 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
         <?= $cfg['review_done'] ? $post('review_open', 'Korrektur wieder öffnen', 'btn-ghost') : $post('review_done', 'Korrektur abschliessen', 'btn-ghost', 'Korrektur abschliessen? Die Lernenden sehen danach ihre Punkte, auch bei von Hand bewerteten Fragen.') ?>
       <?php endif; ?>
     </div>
+    <?php if ($cfg['phase'] !== 'collect'):
+        $solVisible = match ($cfg['solutions']) { 'immediate' => true, 'results' => $cfg['phase'] === 'results', default => $cfg['solutions_released'] };
+        $solHow = ['results' => 'mit «Prüfung beenden und Ergebnisse freigeben»', 'release' => 'mit «Lösungen freigeben»', 'immediate' => ''][$cfg['solutions']]; ?>
+      <p class="hint"><strong>Lösungen für die Lernenden:</strong> <?= $solVisible ? ($cfg['solutions'] === 'immediate' ? 'sichtbar, jeweils nach der eigenen Abgabe.' : 'sichtbar für alle, die abgegeben haben.') : 'noch nicht sichtbar; sie erscheinen ' . e($solHow) . '.' ?>
+      <?php if ($cfg['ranking']): ?> <strong>Rangliste:</strong> <?= $act['revealed'] ? 'für alle sichtbar.' : 'verborgen.' ?><?php endif; ?></p>
+    <?php endif; ?>
     <p class="hint"><?= e(admin_exam_rules_text($cfg)) ?></p>
   </section>
 </div>
@@ -757,7 +763,7 @@ admin_header($act ? $act['name'] : 'Neue Prüfung', 'exams');
         <label for="solutions">Lösungen sehen die Lernenden</label>
         <select id="solutions" name="solutions">
           <option value="immediate" <?= $cfg['solutions'] === 'immediate' ? 'selected' : '' ?>>sofort nach der eigenen Abgabe</option>
-          <option value="results" <?= $cfg['solutions'] === 'results' ? 'selected' : '' ?>>nach dem Freigeben der Ergebnisse</option>
+          <option value="results" <?= $cfg['solutions'] === 'results' ? 'selected' : '' ?>>wenn du die Prüfung beendest (Ergebnisse freigeben)</option>
           <option value="release" <?= $cfg['solutions'] === 'release' ? 'selected' : '' ?>>erst nach eigener Freigabe</option>
         </select>
       </div>

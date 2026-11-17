@@ -98,6 +98,12 @@ echo '7. Connector'
 TOOLS=$(curl -s -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$BASE/mcp/$TOKEN" | jq '.result.tools | length' 2>/dev/null || echo 0)
 [ "${TOOLS:-0}" -gt 20 ] && ok "tools/list liefert $TOOLS Werkzeuge" || bad "tools/list ($TOOLS)"
+NFB=$(curl -s -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$BASE/mcp/$TOKEN" | jq '[.result.tools[].name | select(test("feedback"))] | length' 2>/dev/null || echo x)
+[ "$NFB" = "0" ] && ok 'Connector bietet keine Rückmeldungswerkzeuge an' || bad "Rückmeldungswerkzeuge im Connector ($NFB)"
+R=$(curl -s -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"list_feedback","arguments":{}}}' "$BASE/mcp/$TOKEN")
+echo "$R" | grep -q 'Unbekanntes Werkzeug' && ok 'list_feedback über den Connector abgelehnt' || bad "list_feedback: $R"
 
 echo '8. Migrationen auf der Kommandozeile (wie beim Ausrollen)'
 OUT=$(php -r 'require "lib/bootstrap.php"; echo db_migrate(), " ", setting_get("schema_version"), " ", WB_SCHEMA_VERSION;')

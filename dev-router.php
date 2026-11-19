@@ -41,6 +41,12 @@ if (preg_match('~^/mcp/([a-f0-9]{48})/?$~', $uri, $m)) {
     require __DIR__ . '/mcp/index.php';
     return true;
 }
+if (preg_match('~^/(login|logout|signup|invite|account|manage|help|test)(?:/([a-z0-9-]+))?/?$~', $uri, $m)) {
+    $_GET['p'] = $m[1];
+    $_GET['s'] = $m[2] ?? '';
+    require __DIR__ . '/page.php';
+    return true;
+}
 if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/([a-z_]+\.php)$~', $uri, $m) && !is_dir(__DIR__ . '/' . $m[1]) && file_exists(__DIR__ . '/admin/' . $m[2])) {
     require __DIR__ . '/admin/' . $m[2];
     return true;
@@ -50,7 +56,7 @@ if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$~', $uri, $m) && !is_dir(
     require __DIR__ . '/board.php';
     return true;
 }
-if (preg_match('~^/(lib|lang|vendor|tools|docs|\.git|\.cyon)(/|$)~', $uri) || preg_match('~^/(config.*\.php|dev-router\.php|.*\.md)$~', $uri)) {
+if (preg_match('~^/(lib|lang|vendor|tools|docs|pages|\.git|\.cyon)(/|$)~', $uri) || preg_match('~^/(config.*\.php|dev-router\.php|.*\.md)$~', $uri)) {
     http_response_code(404);
     return true;
 }

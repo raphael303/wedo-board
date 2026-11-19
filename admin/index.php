@@ -7,10 +7,11 @@ $q = trim((string)($_GET['q'] ?? ''));
 $status = (string)($_GET['status'] ?? 'active');
 $sort = (string)($_GET['sort'] ?? 'activity');
 $tag = trim((string)($_GET['tag'] ?? ''));
-$boards = boards_list(['q' => $q, 'status' => $status, 'sort' => $sort, 'tag' => $tag]);
+$boards = boards_list(wb_scope() + ['q' => $q, 'status' => $status, 'sort' => $sort, 'tag' => $tag]);
 
 $allTags = [];
-foreach (db_all("SELECT tags FROM boards WHERE status <> 'archived' AND deleted_at IS NULL AND tags <> ''") as $r) {
+[$scopeSql, $scopeParams] = wb_scope_sql(wb_scope());
+foreach (db_all("SELECT tags FROM boards WHERE $scopeSql AND status <> 'archived' AND deleted_at IS NULL AND tags <> ''", $scopeParams) as $r) {
     foreach (wb_parse_tags($r['tags']) as $t) $allTags[$t] = ($allTags[$t] ?? 0) + 1;
 }
 arsort($allTags);

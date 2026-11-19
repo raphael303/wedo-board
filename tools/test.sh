@@ -21,6 +21,7 @@ bad()  { echo "  FEHLER $*"; FAIL=1; }
 
 cleanup() {
   [ -n "${SRV:-}" ] && kill "$SRV" 2>/dev/null || true
+  rm -f "$ROOT/uploads/.schema"
   docker rm -f "$DB" >/dev/null 2>&1 || true
   rm -f "$ROOT/config.php"
   [ -f "$TMP/config.php.orig" ] && mv "$TMP/config.php.orig" "$ROOT/config.php"
@@ -38,6 +39,7 @@ ok "$n PHP-Dateien geprüft"
 for s in tools/*.sh; do bash -n "$s" || bad "$s"; done
 
 echo '2. Datenbank und Server'
+rm -f uploads/.schema
 [ -f config.php ] && mv config.php "$TMP/config.php.orig"
 docker rm -f "$DB" >/dev/null 2>&1 || true
 docker run -d --rm --name "$DB" -p 127.0.0.1:3307:3306 --tmpfs /var/lib/mysql \
@@ -56,6 +58,8 @@ return [
     'legacy_hosts' => ['alt.example'],
     'admin_path' => 'lehrerzimmer',
     'ai_allow_fake' => true,
+    'app_secret' => 'dGVzdC10ZXN0LXRlc3QtdGVzdC10ZXN0LXRlc3QtMTI=',
+    'owner_email' => 'owner@tafula.test',
     'default_lang' => 'de',
     'timezone' => 'Europe/Zurich',
 ];
@@ -66,20 +70,40 @@ for i in $(seq 20); do curl -s -o /dev/null "$BASE/" && break; sleep 0.5; done
 ok 'MariaDB 11.4 und PHP-Server laufen'
 
 echo '3. Installation'
-TOKEN=$(curl -s -d 'password=testpass123&password2=testpass123' "$BASE/install.php" | grep -oE '[0-9a-f]{48}' | head -1 || true)
+OWNER=owner@tafula.test
+OWNERPW=rauchtest-passwort-1
+TOKEN=$(curl -s -d "first_name=Olga&last_name=Owner&email=$OWNER&password=$OWNERPW&password2=$OWNERPW" "$BASE/install.php" | grep -oE '[0-9a-f]{48}' | head -1 || true)
 [ -n "$TOKEN" ] && ok 'install.php liefert API-Token' || bad 'kein API-Token aus install.php'
 AUTH=(-H "Authorization: Bearer $TOKEN")
+# Hilfen für die Anmeldung (seit 0.22.0): CSRF-Feld einer Seite, letzter Mailcode, Anmeldung in zwei Stufen.
+csrf_of() { curl -s -b "$1" -c "$1" "$BASE$2" | grep -oE 'name="csrf" value="[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}'; }
+mailcode() { php -r 'require "lib/bootstrap.php"; $m = db_row("SELECT body FROM mail_queue WHERE to_addr = ? AND kind = \"login_code\" ORDER BY id DESC LIMIT 1", [$argv[1]]); preg_match("/^\s{4}(\d{6})$/m", (string)($m["body"] ?? ""), $x); echo $x[1] ?? "";' "$1"; }
+maillink() { php -r 'require "lib/bootstrap.php"; $m = db_row("SELECT body FROM mail_queue WHERE to_addr = ? AND kind = ? ORDER BY id DESC LIMIT 1", [$argv[1], $argv[2]]); preg_match("~https?://\S+\?t=(\S+)~", (string)($m["body"] ?? ""), $x); echo $x[1] ?? "";' "$1" "$2"; }
+totp_now() { php -r 'require "lib/bootstrap.php"; echo totp_code($argv[1], intdiv(time(), 30) + (int)($argv[2] ?? 0));' "$1" "${2:-0}"; }
+# login_as <cookie-datei> <adresse> <passwort> [app-geheimnis]: gibt den Statuscode der letzten Stufe aus.
+login_as() {
+  local jar=$1 cs code
+  cs=$(csrf_of "$jar" /login)
+  code=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' -b "$jar" -c "$jar" --data-urlencode "csrf=$cs" --data-urlencode "email=$2" --data-urlencode "password=$3" "$BASE/login")
+  case "$code" in *"/login/code"*) ;; *) echo "${code%% *}"; return ;; esac
+  if [ -n "${4:-}" ]; then code=$(totp_now "$4"); else code=$(mailcode "$2"); fi
+  curl -s -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" --data-urlencode "csrf=$cs" --data-urlencode "code=$code" "$BASE/login/code"
+}
 
 echo '4. Seiten'
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 [ "$(code "$BASE/")" = 200 ] && ok 'Startseite 200' || bad 'Startseite'
 [ "$(code "$BASE/admin/")" = 404 ] && ok '/admin/ 404 bei eigenem Pfad' || bad '/admin/ sollte 404 sein'
-[ "$(code "$BASE/lehrerzimmer/login.php")" = 200 ] && ok 'Bibliothek unter admin_path' || bad 'Bibliothek unter admin_path'
+[ "$(code "$BASE/login")" = 200 ] && [ "$(curl -s -o /dev/null -w '%{redirect_url}' "$BASE/lehrerzimmer/")" = "$BASE/login?next=%2Flehrerzimmer%2F" ] && [ "$(code "$BASE/library/")" = 404 ] \
+  && ok 'Anmeldung unter /login; Bibliothek unter admin_path leitet dorthin, /library/ gibt es bei «aus» nicht' || bad "Bibliothek unter admin_path: $(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$BASE/lehrerzimmer/")"
+[ "$(code "$BASE/signup")" = 404 ] && [ "$(code "$BASE/invite?t=x")" = 404 ] && [ "$(code "$BASE/test")" = 404 ] && [ "$(code "$BASE/pages/login.php")" = 404 ] && [ "$(code "$BASE/help")" = 200 ] \
+  && ok 'Registrierung aus: /signup, /invite und /test 404; pages/ gesperrt; /help 200' || bad 'Seiten der Nutzerverwaltung bei Registrierung aus'
 [ "$(code -H 'Host: alt.example' "$BASE/abcde")" = 301 ] && ok 'frühere Domain leitet um' || bad 'Weiterleitung legacy_hosts'
 [ "$(code "$BASE/tools/test.sh")" = 404 ] && ok 'tools/ gesperrt' || bad 'tools/ sollte 404 sein'
 
 echo '5. Schnittstelle'
-curl -s "${AUTH[@]}" "$BASE/api/me" | jq -e '.owner == true' >/dev/null && ok 'GET /api/me als Besitzer' || bad '/api/me'
+curl -s "${AUTH[@]}" "$BASE/api/me" | jq -e '.owner == true and .user.id == 1 and .user.email == "owner@tafula.test" and .auth == "token" and .workspace.org_id == null and .roles == ["superadmin"]' >/dev/null && ok 'GET /api/me mit Token: Benutzer 1, Arbeitsbereich Privat' || bad '/api/me'
+[ "$(code "$BASE/api/me")" = 401 ] && [ "$(code -H 'Authorization: Bearer falsch' "$BASE/api/boards")" = 401 ] && ok 'ohne oder mit falschem Token: 401' || bad '401 ohne Anmeldung'
 BOARD=$(curl -s "${AUTH[@]}" -H 'Content-Type: application/json' \
   -d '{"name":"Rauchtest","type":"columns","columns":["Pro","Contra"],"note":"Test","tags":"test"}' "$BASE/api/boards")
 KEY=$(echo "$BOARD" | jq -r '.board.key // .board.bkey // empty')
@@ -254,7 +278,7 @@ R=$(MCP '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"control
 echo "$R" | jq -r '.result.content[0].text' | jq -e '.ranking_shown == false' >/dev/null && ok 'Connector: control_exam verbirgt Rangliste' || bad "control_exam: $R"
 
 echo '9c. KI-Korrektur, Durchsicht, Streichen, Fragen prüfen (G3)'
-php -r 'require "lib/bootstrap.php"; setting_set("ai_enabled", "1"); ai_credential_save("fake", "fake-key", "fake-1", null, 1);'
+php -r 'require "lib/bootstrap.php"; user_setting_set(1, "ai_enabled", "1"); ai_credential_save("fake", "fake-key", "fake-1", null, 1);'
 rm -f /tmp/tafula-fake-korrektur.txt /tmp/tafula-fake-fragenpruefung.txt
 Y=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"exam","name":"KI-Prüfung","quota_max":0,"note":"Test","tags":"test"}' "$BASE/api/activities" | jq -r '.activity.key')
 YA="$BASE/api/activities/$Y"; YG="$BASE/api/a/$Y"
@@ -345,7 +369,8 @@ curl -s -b "$TMP/zg" -c "$TMP/zg" "${JH[@]}" -d '{"type":"open","prompt":"Kurz?"
 curl -s "${AUTH[@]}" "${JH[@]}" -d '{}' "$ZA/questions/check" >/dev/null
 curl -s "${AUTH[@]}" "${JH[@]}" -X PATCH -d '{"ai":false}' "$ZA" >/dev/null
 [ "$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{}' "$ZA/questions/check" | jq -r '.code')" = ai_unavailable_exam_off ] && ok 'KI-Schalter der Prüfung wird beachtet' || bad 'ai off'
-curl -s -c "$TMP/admin" -b "$TMP/admin" -d "password=testpass123" "$BASE/lehrerzimmer/login.php" >/dev/null
+R=$(login_as "$TMP/admin" "$OWNER" "$OWNERPW")
+[ "$R" = 302 ] && grep -q tafula_s "$TMP/admin" && ok 'Anmeldung mit Adresse, Passwort und Mailcode (unbekanntes Gerät)' || bad "Anmeldung der Besitzerin: $R"
 for pg in "exam.php?key=$Y" "exam.php?key=$Y&attempt=$YAA" "exam.php?key=$Y&grade_q=$YO" "exam.php?key=$Z"; do
   curl -s -b "$TMP/admin" "$BASE/lehrerzimmer/$pg" > "$TMP/page.html"
   grep -q 'exam-admin\|Bewerten pro Frage' "$TMP/page.html" && ! grep -qE '<b>(Warning|Fatal error|Notice|Deprecated)</b>|Uncaught' "$TMP/page.html" || bad "Bibliothek $pg"
@@ -443,7 +468,7 @@ grep -q 'id="ausgaben"' "$TMP/page.html" && grep -q 'name="student_pdf"' "$TMP/p
 
 echo '10. Migration 13 von Schema 12'
 OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
-[ "$OUT" = "2 14 3" ] && ok 'Migrationen 13 und 14 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
+[ "$OUT" = "3 15 3" ] && ok 'Migrationen 13 bis 15 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
 
 echo '11. Sicherheit: Kopfzeilen, Sperren, Login-Bremse'
 curl -sI "$BASE/" > "$TMP/hdr"
@@ -454,28 +479,13 @@ HT=$(grep -oE '^Header always set [A-Za-z-]+ "[^"]*"' .htaccess | sed -E 's/^Hea
 DR=$(grep -E '^(Strict-Transport-Security|Referrer-Policy|X-Frame-Options|X-Content-Type-Options|Content-Security-Policy-Report-Only):' "$TMP/hdr" | tr -d '\r' | sort)
 [ -n "$HT" ] && [ "$HT" = "$DR" ] && ok 'Sicherheits-Kopfzeilen gesetzt, .htaccess und dev-router.php stimmen überein' || bad "Kopfzeilen weichen ab: .htaccess=[$HT] dev-router=[$DR]"
 [ "$(code "$BASE/dev-router.php")" = 404 ] && grep -q 'dev-router\\.php' .htaccess && ok 'dev-router.php gesperrt (lokal 404, Regel in .htaccess)' || bad 'dev-router.php nicht gesperrt'
-LG="$BASE/lehrerzimmer/login.php"
-php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits");'
-for i in $(seq 10); do curl -s -o /dev/null -b "$TMP/lj" -c "$TMP/lj" -d 'password=falsch' "$LG"; done
-R=$(curl -s -o "$TMP/lg.html" -w '%{http_code}' -d 'password=testpass123' "$LG")
-[ "$R" = 429 ] && grep -q 'Zu viele Fehlversuche von diesem Anschluss' "$TMP/lg.html" && ok 'nach 10 Fehlversuchen pro IP: 429, auch mit richtigem Passwort' || bad "Login-Grenze pro IP: $R"
-N=$(php -r 'require "lib/bootstrap.php"; echo (int)db_row("SELECT COUNT(*) AS n FROM rate_limits WHERE author_key REGEXP \"^[0-9a-f]{32}$\"")["n"];')
-[ "$N" -ge 2 ] && ! php -r 'require "lib/bootstrap.php"; foreach (db_all("SELECT author_key FROM rate_limits") as $r) if (str_contains($r["author_key"], "127.0.0.1")) exit(0); exit(1);' && ok 'Zähler in rate_limits mit gehashten Schlüsseln' || bad "rate_limits-Schlüssel ($N)"
-php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits"); for ($i = 0; $i < WB_LOGIN_GLOBAL_MAX; $i++) wb_login_record_failure("10.0.0." . ($i % 200));'
-R=$(curl -s -o "$TMP/lg.html" -w '%{http_code}' -d 'password=testpass123' "$LG")
-[ "$R" = 429 ] && grep -q 'Fehlversuche insgesamt' "$TMP/lg.html" && ok 'globale Grenze: 429 für unbekannte Browser' || bad "globale Login-Grenze: $R"
-grep -q wb_known "$TMP/admin" && R=$(curl -s -o /dev/null -w '%{http_code}' -b "$TMP/admin" -d 'password=testpass123' "$LG") && [ "$R" = 302 ] && ok 'globale Grenze gilt nicht für den bekannten Browser (Cookie wb_known)' || bad "bekannter Browser bei globaler Grenze: ${R:-ohne Cookie}"
-R=$(curl -s -o /dev/null -w '%{http_code}' -b 'wb_known=9999999999.0000000000000000000000000000000000000000000000000000000000000000' -d 'password=testpass123' "$LG")
-[ "$R" = 429 ] && ok 'gefälschtes wb_known wird nicht anerkannt' || bad "gefälschtes Cookie: $R"
-php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits");'
-R=$(curl -s -o /dev/null -w '%{http_code}' -c "$TMP/lj2" -d 'password=testpass123' "$LG")
-[ "$R" = 302 ] && grep -q wb_known "$TMP/lj2" && ok 'ohne Fehlversuche: Anmeldung 302 und Cookie wb_known' || bad "Anmeldung nach Zurücksetzen: $R"
+. tools/test_u1a.sh
 
 echo '12. Nutzerverwaltung U0: Schalter, reservierte Wörter, Instanz, Testbestand'
 php -r 'require "lib/bootstrap.php"; echo wb_registration_mode(), " ", wb_orgs_enabled() ? 1 : 0, " ", wb_instance(), " ", wb_test_helpers_enabled() ? 1 : 0;' > "$TMP/u0" 2>&1
 [ "$(cat "$TMP/u0")" = 'off 0 production 0' ] && ok 'Vorgaben: Registrierung aus, Organisationen aus, Produktion, keine Testhilfen' || bad "Vorgaben: $(cat "$TMP/u0")"
-OUT=$(php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM settings WHERE k IN (\"registration_mode\",\"orgs_enabled\")"); $b = board_create(["name" => "Altes Konto-Board"]); db_exec("UPDATE boards SET slug = \"konto\" WHERE id = ?", [$b["id"]]); setting_set("schema_version", "13"); echo db_migrate(), " ", setting_get("schema_version"), " ", setting_get("registration_mode"), " ", setting_get("orgs_enabled"), " ", board_by_id($b["id"])["slug"] === "konto" ? "alt" : "neu", " ", setting_get("reserved_renamed") ? "vermerkt" : "-";' 2>/dev/null)
-[ "$OUT" = '1 14 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
+OUT=$(php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM settings WHERE k IN (\"registration_mode\",\"orgs_enabled\")"); wb_auth_cli(1); $b = board_create(["name" => "Altes Konto-Board"]); db_exec("UPDATE boards SET slug = \"konto\" WHERE id = ?", [$b["id"]]); setting_set("schema_version", "13"); echo db_migrate(), " ", setting_get("schema_version"), " ", setting_get("registration_mode"), " ", setting_get("orgs_enabled"), " ", board_by_id($b["id"])["slug"] === "konto" ? "alt" : "neu", " ", setting_get("reserved_renamed") ? "vermerkt" : "-";' 2>/dev/null)
+[ "$OUT" = '2 15 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
 for w in konto login oauth test datenschutz k; do
   R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"name":"Reserviert","slug":"'"$w"'","note":"Test","tags":"test"}' "$BASE/api/boards")
   echo "$R" | jq -e '.board' >/dev/null && bad "reserviertes Wort $w angenommen"
@@ -489,8 +499,8 @@ sed -i "s/'timezone' => 'Europe\/Zurich',/'timezone' => 'Europe\/Zurich', 'insta
 grep -q "'instance' => 'test'" config.php || bad 'config.php nicht umgestellt'
 # Der PHP-Server sieht die geänderte config.php nicht immer sofort; kurz warten, bis sie wirkt.
 for i in $(seq 20); do curl -s "$BASE/" | grep -q wb-instance-band && break; sleep 0.5; done
-for u in "/" "/b/$KEY" "/a/$EKEY" "/lehrerzimmer/login.php"; do
-  curl -s "$BASE$u" > "$TMP/band.html"
+for u in "/" "/b/$KEY" "/a/$EKEY" "/login" "/help"; do
+  curl -sL "$BASE$u" > "$TMP/band.html"
   grep -q 'class="wb-instance-band" data-instance="test"' "$TMP/band.html" || bad "Band fehlt auf $u: $(head -c 200 "$TMP/band.html" | tr '\n' ' ')"
 done
 curl -sI "$BASE/" | grep -qi '^x-robots-tag: noindex' && ok 'Testinstanz: Band auf Start, Board, Aktivität, Bibliothek; noindex gesetzt' || bad 'noindex fehlt'
@@ -499,7 +509,7 @@ php -r '$i = imagecreatetruecolor(4, 4); imagepng($i, "'"$TMP"'/p.png");'
 IMGB=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"name":"Bildtest","type":"wall","settings":{"images":true},"note":"Test","tags":"test"}' "$BASE/api/boards" | jq -r '.board.key')
 R=$(curl -s -b "$TMP/imgj" -c "$TMP/imgj" -H 'X-Tafula: 1' -F 'body=Bild' -F "image=@$TMP/p.png" "$BASE/api/b/$IMGB/posts")
 echo "$R" | grep -q 'Testumgebung laden Gäste keine Bilder' && ok 'Testinstanz: Gäste laden keine Bilder hoch' || bad "Gästebild auf Testinstanz: $R"
-OUT=$(php -r 'require "lib/bootstrap.php"; try { ai_credential_save("anthropic", "sk-test", "m"); echo "angenommen"; } catch (Throwable $e) { echo "abgelehnt"; } echo " "; try { ai_structured(["provider" => "anthropic", "api_key" => "x", "model" => "m"], "s", "u", ["type" => "object"]); echo "lief"; } catch (AiException $e) { echo $e->kind; }' 2>/dev/null)
+OUT=$(php -r 'require "lib/bootstrap.php"; try { ai_credential_save("anthropic", "sk-test", "m", null, 1); echo "angenommen"; } catch (Throwable $e) { echo "abgelehnt"; } echo " "; try { ai_structured(["provider" => "anthropic", "api_key" => "x", "model" => "m"], "s", "u", ["type" => "object"]); echo "lief"; } catch (AiException $e) { echo $e->kind; }' 2>/dev/null)
 [ "$OUT" = 'abgelehnt invalid_key' ] && ok 'Testinstanz: nur der Fake-Anbieter (Speichern und Aufruf)' || bad "KI auf Testinstanz: $OUT"
 R=0; php tools/seed.php test >/dev/null 2>"$TMP/seed.err" || R=$?
 [ $R = 2 ] && grep -q 'keinen Marker' "$TMP/seed.err" && ok 'seed verweigert Datenbank mit Inhalten ohne Marker' || bad "seed ohne Marker: $R $(cat "$TMP/seed.err")"
@@ -513,6 +523,7 @@ grep -qiE 'warning|notice|deprecated' "$TMP/seed.out" && bad "seed meldet Warnun
 php -r 'require "lib/bootstrap.php"; echo wb_test_helpers_enabled() ? 1 : 0, wb_registration_mode(), wb_orgs_enabled() ? 1 : 0;' | grep -q '^1open1$' && ok 'mit Marker: Testhilfen an, Registrierung offen, Organisationen an' || bad 'Marker/Schalter nach seed'
 for s in test-spalten test-wand test-ziel test-wolke test-sammeln test-laeuft test-ergebnis; do [ "$(code -L "$BASE/$s")" = 200 ] || bad "Seite $s"; done
 ok 'Seiten des Testbestands antworten mit 200'
+. tools/test_u1a_seed.sh
 R=0; php tools/seed.php test >/dev/null 2>&1 || R=$?; [ $R = 3 ] && ok 'zweiter Lauf ohne --reset verweigert' || bad 'zweiter Lauf ohne --reset'
 php tools/seed.php demo --reset > "$TMP/seed.out" 2>&1 && grep -q "Satz 'demo' geladen" "$TMP/seed.out" && [ "$(php -r 'require "lib/bootstrap.php"; echo db_row("SELECT COUNT(*) AS n FROM boards WHERE name LIKE \"Test:%\"")["n"];')" = 0 ] && ok 'demo --reset ersetzt den Testbestand' || bad "demo --reset: $(cat "$TMP/seed.out")"
 sed -i "s/'instance' => 'test'/'instance' => 'sandbox'/" config.php

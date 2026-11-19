@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'lift'
     exit;
 }
 $showAll = isset($_GET['all']);
-$blocks = guest_blocks_list(!$showAll);
+$blocks = guest_blocks_list(wb_user_id(), !$showAll);
 $csrf = wb_csrf_token();
 admin_header('Sperren', 'blocks');
 ?>

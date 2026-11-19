@@ -28,8 +28,8 @@ const WB_UNDO_DAYS = 30;
 /** Urheber als Code: teacher (Admin-Sitzung), claude (Token: Schnittstelle oder Connector), ai:<Modell>. */
 function undo_actor(): string {
     if (!empty($GLOBALS['wb_actor'])) return (string)$GLOBALS['wb_actor'];
-    if (wb_is_admin_session()) return 'teacher';
-    return 'claude';
+    // Sitzung der Bibliothek: die Person selbst; Token (Schnittstelle, Connector): Claude oder ein Skript.
+    return wb_auth_kind() === 'token' ? 'claude' : 'teacher';
 }
 
 function undo_set_actor(?string $actor): void {
@@ -56,7 +56,8 @@ function undo_suspended(): bool {
 function undo_log(array $board, string $action, string $label, array $payload): int {
     if (undo_suspended()) return 0;
     $payload['actor'] = $payload['actor'] ?? undo_actor();
-    $userId = (int)(wb_current_user()['id'] ?? 1);
+    // Ohne Anmeldung (eine KI-Aktion, die ein Gast auslöst) gehört der Eintrag der Besitzerin des Boards.
+    $userId = (int)(wb_current_user()['id'] ?? $board['owner_user_id']);
     return db_insert('INSERT INTO undo_log (user_id, board_id, action, label, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         [$userId, $board['id'], $action, mb_substr($label, 0, 200), json_encode($payload, JSON_UNESCAPED_UNICODE), wb_now()]);
 }
@@ -173,7 +174,7 @@ function undo_apply(array $board, int $id): array {
             default:
                 throw new RuntimeException(t('undo_unknown', $lang));
         }
-        db_exec('UPDATE undo_log SET undone_at = ?, undone_by = ? WHERE id = ?', [$now, (int)(wb_current_user()['id'] ?? 1), $id]);
+        db_exec('UPDATE undo_log SET undone_at = ?, undone_by = ? WHERE id = ?', [$now, wb_user_id(), $id]);
         board_touch($board['id']);
         $pdo->commit();
     } catch (Throwable $ex) {

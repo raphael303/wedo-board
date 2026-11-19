@@ -24,7 +24,7 @@ function ai_organize_status(array $board): array {
     $cred = $reason === null ? ai_credential_default((int)$board['owner_user_id']) : null;
     $counts = db_row('SELECT COUNT(*) AS n, SUM(bundle_id IS NULL) AS loose FROM posts WHERE board_id = ? AND deleted_at IS NULL', [$board['id']]);
     $bundles = db_row('SELECT COUNT(*) AS n FROM bundles WHERE board_id = ? AND deleted_at IS NULL', [$board['id']]);
-    $prefs = ai_organize_prefs();
+    $prefs = ai_organize_prefs((int)$board['owner_user_id']);
     return [
         'available' => $reason === null,
         'reason' => $reason,
@@ -40,21 +40,19 @@ function ai_organize_status(array $board): array {
     ];
 }
 
-function ai_organize_prefs(): array {
-    $uid = (int)(wb_current_user()['id'] ?? 1);
-    $raw = setting_get('ai_organize_prefs_u' . $uid);
+function ai_organize_prefs(int $uid): array {
+    $raw = user_setting_get($uid, 'ai_organize_prefs');
     $d = $raw ? json_decode($raw, true) : null;
     return ['recent' => array_values(array_filter((array)($d['recent'] ?? []), 'is_string')), 'collect_rest' => (bool)($d['collect_rest'] ?? false)];
 }
 
-function ai_organize_prefs_save(string $instruction, bool $collectRest): void {
-    $uid = (int)(wb_current_user()['id'] ?? 1);
-    $p = ai_organize_prefs();
+function ai_organize_prefs_save(int $uid, string $instruction, bool $collectRest): void {
+    $p = ai_organize_prefs($uid);
     if ($instruction !== '') {
         $p['recent'] = array_values(array_slice(array_unique(array_merge([$instruction], $p['recent'])), 0, 3));
     }
     $p['collect_rest'] = $collectRest;
-    setting_set('ai_organize_prefs_u' . $uid, json_encode($p, JSON_UNESCAPED_UNICODE));
+    user_setting_set($uid, 'ai_organize_prefs', json_encode($p, JSON_UNESCAPED_UNICODE));
 }
 
 /**
@@ -106,7 +104,7 @@ function ai_organize_board(array $board, array $in): array {
         $user .= "<buendel>\n" . implode("\n", array_map(fn($g) => 'B#' . $g['id'] . ($isColumns ? ' [Spalte: ' . $colOf($g['column_id']) . ']' : '') . ' ' . $g['title'] . ($g['summary'] ? ' — ' . str_replace("\n", ' ', $g['summary']) : ''), $bundles)) . "\n</buendel>\n\n";
     }
     $user .= "<beitraege>\n" . implode("\n", $lines) . "\n</beitraege>\n\n";
-    $user .= ($instruction !== '' ? $instruction : ai_auto_prompt());
+    $user .= ($instruction !== '' ? $instruction : ai_auto_prompt((int)$board['owner_user_id']));
     if ($scope === 'loose') {
         $user .= "\n\n" . ($lang === 'en'
             ? 'Only the posts listed are loose; the existing bundles stay as they are. Assign a loose post to an existing bundle (assign) when it fits, or create new bundles (new_bundles) when loose posts form a topic of their own.'
@@ -137,11 +135,11 @@ function ai_organize_board(array $board, array $in): array {
         ]);
         $plan = ai_organize_validate($result['data'], $scope, $posts, $bundleById, $isColumns, $colOf, $lang);
     } catch (Throwable $e) {
-        ai_usage_log($board['id'], 'organize', $cred, $result, $e);
+        ai_usage_log($board['id'], 'organize', $cred, $result, $e, (int)$board['owner_user_id']);
         throw $e;
     }
-    ai_usage_log($board['id'], 'organize', $cred, $result, null);
-    ai_organize_prefs_save($instruction, $collectRest);
+    ai_usage_log($board['id'], 'organize', $cred, $result, null, (int)$board['owner_user_id']);
+    ai_organize_prefs_save((int)$board['owner_user_id'], $instruction, $collectRest);
 
     // Lose gebliebene Beiträge sammeln (Differenz berechnet der Server, nicht das Modell).
     $assigned = [];

@@ -282,6 +282,8 @@ function db_migrations(): array {
             "INSERT IGNORE INTO settings (k, v) VALUES ('registration_mode', 'off')",
             "INSERT IGNORE INTO settings (k, v) VALUES ('orgs_enabled', '0')",
         ],
+        // 15 (0.22.0, U1a der Nutzerverwaltung): Konten, Sitzungen, Rollen, Protokoll, Mail; siehe lib/schema_u1a.php.
+        15 => array_merge(db_schema_u1a(), db_migration_15_alter()),
     ];
 }
 
@@ -307,17 +309,30 @@ function db_fix_reserved_slugs(): array {
     return $changed;
 }
 
+/** Führt ausstehende Migrationen aus. Nur von der Kommandozeile (tools/cyon-deploy.sh, tools/seed.php, Tests). */
 function db_migrate(): int {
+    if (PHP_SAPI !== 'cli') throw new RuntimeException('Migrationen laufen nur beim Ausrollen.');
+    // Sperre in der Datenbank: Zwei gleichzeitige Läufe (zwei Ausrollvorgänge) migrieren nie nebeneinander.
+    if ((int)(db_row("SELECT GET_LOCK('tafula_migrate', 30) AS l")['l'] ?? 0) !== 1) throw new RuntimeException('Migration läuft schon (Sperre tafula_migrate).');
+    try {
+        return db_migrate_locked();
+    } finally {
+        db_exec("SELECT RELEASE_LOCK('tafula_migrate')");
+    }
+}
+
+function db_migrate_locked(): int {
     $current = (int)(setting_get('schema_version') ?? 0);
     $applied = 0;
     foreach (db_migrations() as $version => $statements) {
         if ($version <= $current) continue;
+        if ($version === 15) db_migration_15_precheck();
         foreach ($statements as $sql) {
             try {
                 db()->exec($sql);
             } catch (PDOException $e) {
                 // Spalte oder Index existiert bereits (zum Beispiel nach Neuinstallation mit aktuellem Schema).
-                if (!in_array($e->getCode(), ['42S21', '42000'], true) || !preg_match('/Duplicate|already exists/i', $e->getMessage())) {
+                if (!in_array($e->getCode(), ['42S21', '42000'], true) || !preg_match('/Duplicate|already exists|check that (column\/key|it) exists/i', $e->getMessage())) {
                     throw $e;
                 }
             }
@@ -329,8 +344,10 @@ function db_migrate(): int {
             }
         }
         if ($version === 3) {
-            db_ensure_superadmin();
+            // Stand von Migration 3: die Tabelle hat noch role und display_name (Migration 15 baut sie um).
+            if (!db_row('SELECT id FROM users WHERE id = 1')) db_exec("INSERT INTO users (id, role, display_name, created_at) VALUES (1, 'superadmin', 'Lehrperson', ?)", [wb_now()]);
         }
+        if ($version === 15) db_migration_15_finish();
         if ($version === 14) {
             foreach (db_fix_reserved_slugs() as $line) {
                 if (PHP_SAPI === 'cli') fwrite(STDERR, "Reserviertes Kurzwort ersetzt: $line\n");
@@ -339,5 +356,6 @@ function db_migrate(): int {
         setting_set('schema_version', (string)$version);
         $applied++;
     }
+    @unlink(WB_ROOT . '/uploads/.schema');
     return $applied;
 }

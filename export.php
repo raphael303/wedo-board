@@ -11,7 +11,7 @@ require __DIR__ . '/lib/bootstrap.php';
 
 $board = db_is_installed() ? board_by_key((string)($_GET['key'] ?? '')) : null;
 $lang = wb_resolve_lang($board['lang'] ?? (string)wb_config('default_lang', 'de'));
-if (!$board || $board['status'] === 'archived') {
+if (!$board || !wb_can_participate($board)) {
     http_response_code(404);
     header('Content-Type: text/plain; charset=utf-8');
     exit(t('not_found', $lang));
@@ -32,7 +32,7 @@ if (isset($_GET['summary'])) {
     if (($_SERVER['HTTP_X_TAFULA'] ?? '') !== '1') wb_error('forbidden', 403);
     $force = false;
     if ($owner && !empty(wb_read_json_body()['force'])) { wb_check_csrf_header(); $force = true; }
-    if (!$owner && guest_block_active($uid, $board['id']) !== null) {
+    if (!$owner && guest_block_active($uid, $board) !== null) {
         $st = summary_status($board, $mode);
         if ($st['state'] === 'generate') $st['state'] = 'blocked';
         wb_json($pub($st));

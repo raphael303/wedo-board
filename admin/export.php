@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/_layout.php';
 admin_require_login();
-$board = board_by_key((string)($_GET['key'] ?? ''));
+$board = board_owned((string)($_GET['key'] ?? ''));
 if (!$board) { http_response_code(404); exit('Board nicht gefunden.'); }
 $data = board_export_data($board);
 $groups = [];

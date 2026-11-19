@@ -26,7 +26,7 @@ $lang = wb_resolve_lang($board['lang'] ?? (string)wb_config('default_lang', 'de'
 $uid = wb_client_uid();
 $owner = $board ? wb_can('board.manage', $board) : false;
 
-if (!$board || $board['status'] === 'archived') {
+if (!$board || !wb_can_participate($board)) {
     http_response_code(404);
     ?><!doctype html><html lang="<?= e($lang) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title><?= e(wb_app_name()) ?></title><link rel="stylesheet" href="/assets/board.css"></head>
     <body class="bg-graphit"><main class="notfound"><h1><?= e(t('not_found', $lang)) ?></h1></main></body></html><?php
@@ -34,7 +34,7 @@ if (!$board || $board['status'] === 'archived') {
 }
 
 $name = wb_guest_name($board, $uid);
-$blocked = !$owner && guest_block_active($uid, $board['id']) !== null;
+$blocked = !$owner && guest_block_active($uid, $board) !== null;
 $boot = [
     'board' => board_public($board, $lang),
     'me' => ['name' => $name, 'hue' => wb_author_hue($name), 'owner' => $owner, 'uid' => $uid, 'blocked' => $blocked, 'fresh' => !empty($GLOBALS['wb_uid_fresh'])],

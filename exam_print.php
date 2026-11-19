@@ -21,9 +21,9 @@ $fail = function (int $code, string $msg) use ($lang): never {
         . '<style>body{font:16px/1.5 -apple-system,"Helvetica Neue",Arial,sans-serif;color:#1d2128;background:#f3f4f6;margin:0;padding:12vh 6vw;text-align:center}</style></head><body><p>' . e($msg) . '</p></body></html>';
     exit;
 };
-if (!$a || $a['type'] !== 'exam' || $a['status'] === 'archived') $fail(404, t('exam_not_found', $lang));
+if (!$a || $a['type'] !== 'exam' || !wb_can_participate($a)) $fail(404, t('exam_not_found', $lang));
 
-$owner = wb_can('board.manage');
+$owner = wb_can('activity.manage', $a);
 $cfg = $a['config'];
 $wantSolutions = ($_GET['solutions'] ?? '1') !== '0';
 $row = null;

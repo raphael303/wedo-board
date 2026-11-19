@@ -43,7 +43,8 @@ function board_by_id(int $id): ?array {
 
 function board_normalize(array $b): array {
     $b['id'] = (int)$b['id'];
-    $b['owner_user_id'] = (int)($b['owner_user_id'] ?? 1);
+    $b['owner_user_id'] = (int)$b['owner_user_id'];
+    $b['org_id'] = isset($b['org_id']) ? (int)$b['org_id'] : null;
     $b['deleted_at'] = $b['deleted_at'] ?? null;
     $b['columns'] = json_decode($b['columns_json'] ?? '[]', true) ?: [];
     $b['settings'] = array_merge(wb_default_settings(), json_decode($b['settings_json'] ?? '{}', true) ?: []);
@@ -172,11 +173,12 @@ function board_create(array $in): array {
     }
     $now = wb_now();
     $key = wb_random_key(16);
-    $ownerId = (int)(wb_current_user()['id'] ?? 1);
+    // Besitzerin und Arbeitsbereich kommen aus der Anmeldung; ohne Anmeldung entsteht kein Board.
+    $ownerId = wb_user_id();
     $id = db_insert(
-        'INSERT INTO boards (bkey, slug, owner_user_id, name, type, columns_json, background, lang, settings_json, status, note, tags, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [$key, $slug, $ownerId, $name, $type, json_encode($columns, JSON_UNESCAPED_UNICODE), $bg, $lang,
+        'INSERT INTO boards (bkey, slug, owner_user_id, org_id, identity_seed, name, type, columns_json, background, lang, settings_json, status, note, tags, created_at, updated_at, last_activity_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [$key, $slug, $ownerId, wb_workspace_org_id(), bin2hex(random_bytes(16)), $name, $type, json_encode($columns, JSON_UNESCAPED_UNICODE), $bg, $lang,
          json_encode($settings, JSON_UNESCAPED_UNICODE), 'open', $note, implode(', ', $tags), $now, $now, $now]
     );
     return board_by_id($id);
@@ -347,9 +349,10 @@ function board_purge_deleted(int $days = 30): int {
     return $n;
 }
 
-function boards_list(array $opt = []): array {
-    $where = [];
-    $params = [];
+/** Boards einer Person in einem Arbeitsbereich. owner_user_id und org_id sind Pflicht (wb_scope()). */
+function boards_list(array $opt): array {
+    [$scopeSql, $params] = wb_scope_sql($opt);
+    $where = [$scopeSql];
     $status = $opt['status'] ?? 'active';
     $where[] = $status === 'trash' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
     if ($status === 'active') { $where[] = "status IN ('open','closed')"; }

@@ -38,4 +38,21 @@ return [
     // Nur Testinstanz und Sandbox: Zugangsdaten des Besitzers, die tools/seed.php setzt (sonst zufällig bzw. fest
     // in der Sandbox).
     // 'test_logins' => ['owner_password' => '…', 'api_token' => '…'],
+
+    // --- Nutzerverwaltung (seit 0.22.0) ---
+    // Adresse des ersten Kontos (Benutzer 1, Super-Admin). Migration 15 und tools/seed.php brauchen sie; ohne sie
+    // bricht die Migration ab, bevor sie etwas ändert. 'owner_name' ist der Vorname, falls das Konto noch keinen hat.
+    // 'owner_email' => 'ich@example.org',
+    // 'owner_name' => 'Vorname',
+    // Mailversand über SMTP. Ohne diesen Schlüssel verschickt die Installation nichts (Produktion: Status «failed»,
+    // Testinstanz und Sandbox: Sammelpostfach). Das Passwort steht nur hier.
+    // 'smtp' => ['host' => 'mail.cyon.ch', 'port' => 465, 'secure' => 'ssl', 'user' => 'system@example.org', 'pass' => '…',
+    //            'from' => 'system@example.org', 'from_name' => 'Tafula'],
+    // Der Cronjob dieser Installation liest die Rückläufer im Postfach des Absenders (IMAP, selber Zugang wie smtp;
+    // optional 'imap_host' und 'imap_port' in 'smtp'). Genau eine Installation pro Postfach.
+    // 'mail_bounces' => true,
+    // Nur Testinstanz und Sandbox: Adressen, die echte Mails erhalten; alle anderen Mails bleiben im Sammelpostfach
+    // (/test/mail). Zeitverschiebung in Sekunden für fachliche Fristen (nie für Sitzungen, Links, Codes, Bremsen).
+    // 'mail_allowlist' => ['ich@example.org'],
+    // 'clock_offset' => 0,
 ];

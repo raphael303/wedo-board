@@ -41,7 +41,7 @@ function db_insert(string $sql, array $params = []): int {
 }
 
 function db_schema(): array {
-    return [
+    return array_merge([
         "CREATE TABLE IF NOT EXISTS settings (
             k VARCHAR(64) NOT NULL PRIMARY KEY,
             v TEXT NULL
@@ -49,20 +49,38 @@ function db_schema(): array {
 
         "CREATE TABLE IF NOT EXISTS users (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            role ENUM('superadmin','admin','teacher','student','guest') NOT NULL DEFAULT 'guest',
-            display_name VARCHAR(80) NOT NULL DEFAULT '',
+            first_name VARCHAR(80) NOT NULL DEFAULT '',
+            last_name VARCHAR(80) NOT NULL DEFAULT '',
             email VARCHAR(200) NULL,
             password_hash VARCHAR(255) NULL,
+            locale CHAR(2) NOT NULL DEFAULT 'de',
             created_at DATETIME(6) NOT NULL,
             disabled_at DATETIME(6) NULL,
-            KEY ix_role (role)
+            email_verified_at DATETIME(6) NULL,
+            age_confirmed_at DATETIME(6) NULL,
+            invited_by INT UNSIGNED NULL,
+            teacher_requested_at DATETIME(6) NULL,
+            teacher_approved_at DATETIME(6) NULL,
+            teacher_approved_by INT UNSIGNED NULL,
+            teacher_revoked_at DATETIME(6) NULL,
+            totp_secret_enc VARCHAR(255) NULL,
+            totp_last_step BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            recovery_codes_json TEXT NULL,
+            totp_removal_at DATETIME(6) NULL,
+            password_changed_at DATETIME(6) NULL,
+            last_login_at DATETIME(6) NULL,
+            last_active_at DATETIME(6) NULL,
+            deleted_at DATETIME(6) NULL,
+            UNIQUE KEY uk_email (email)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
         "CREATE TABLE IF NOT EXISTS boards (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             bkey CHAR(16) NOT NULL,
             slug VARCHAR(32) NULL,
-            owner_user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            owner_user_id INT UNSIGNED NOT NULL,
+            org_id INT UNSIGNED NULL,
+            identity_seed CHAR(32) NOT NULL DEFAULT '',
             name VARCHAR(200) NOT NULL,
             type ENUM('wall','columns') NOT NULL DEFAULT 'wall',
             columns_json TEXT NULL,
@@ -79,6 +97,7 @@ function db_schema(): array {
             UNIQUE KEY uk_bkey (bkey),
             KEY ix_slug (slug),
             KEY ix_owner (owner_user_id),
+            KEY ix_owner_org (owner_user_id, org_id),
             KEY ix_status (status),
             KEY ix_activity (last_activity_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -147,7 +166,7 @@ function db_schema(): array {
 
         "CREATE TABLE IF NOT EXISTS undo_log (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            user_id INT UNSIGNED NOT NULL,
             board_id INT UNSIGNED NOT NULL,
             action VARCHAR(40) NOT NULL,
             label VARCHAR(200) NOT NULL DEFAULT '',
@@ -160,7 +179,7 @@ function db_schema(): array {
 
         "CREATE TABLE IF NOT EXISTS guest_blocks (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            user_id INT UNSIGNED NOT NULL,
             board_id INT UNSIGNED NULL,
             guest_key CHAR(32) NOT NULL,
             display_name VARCHAR(80) NOT NULL DEFAULT '',
@@ -173,7 +192,7 @@ function db_schema(): array {
 
         "CREATE TABLE IF NOT EXISTS ai_credentials (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            user_id INT UNSIGNED NOT NULL,
             provider VARCHAR(32) NOT NULL,
             label VARCHAR(80) NOT NULL DEFAULT '',
             api_key_enc TEXT NOT NULL,
@@ -188,7 +207,7 @@ function db_schema(): array {
 
         "CREATE TABLE IF NOT EXISTS ai_usage (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            user_id INT UNSIGNED NOT NULL,
             board_id INT UNSIGNED NULL,
             feature VARCHAR(40) NOT NULL,
             provider VARCHAR(32) NOT NULL,
@@ -235,7 +254,9 @@ function db_schema(): array {
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             akey CHAR(16) NOT NULL,
             slug VARCHAR(32) NULL,
-            owner_user_id INT UNSIGNED NOT NULL DEFAULT 1,
+            owner_user_id INT UNSIGNED NOT NULL,
+            org_id INT UNSIGNED NULL,
+            identity_seed CHAR(32) NOT NULL DEFAULT '',
             type VARCHAR(24) NOT NULL DEFAULT 'target',
             name VARCHAR(200) NOT NULL,
             config_json TEXT NULL,
@@ -253,6 +274,7 @@ function db_schema(): array {
             UNIQUE KEY uk_akey (akey),
             KEY ix_slug (slug),
             KEY ix_owner (owner_user_id),
+            KEY ix_owner_org (owner_user_id, org_id),
             KEY ix_activity (last_activity_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS activity_responses (
@@ -356,7 +378,7 @@ function db_schema(): array {
             KEY ix_status (status, id),
             KEY ix_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    ];
+    ], db_schema_u1a());
 }
 
 function setting_get(string $k, ?string $default = null): ?string {
@@ -368,17 +390,43 @@ function setting_set(string $k, ?string $v): void {
     db_exec('INSERT INTO settings (k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)', [$k, $v]);
 }
 
-/** Legt den Super-Admin (Benutzer 1) an, falls er fehlt; Installation und Migration rufen das auf. */
-function db_ensure_superadmin(): void {
-    $row = db_row('SELECT id FROM users WHERE id = 1');
-    if ($row) return;
-    db_exec("INSERT INTO users (id, role, display_name, created_at) VALUES (1, 'superadmin', 'Lehrperson', ?)", [wb_now()]);
+/** Einstellung eines Kontos (settings, Schlüssel «u<id>:<name>»). */
+function user_setting_get(int $userId, string $k, ?string $default = null): ?string {
+    return setting_get('u' . $userId . ':' . $k, $default);
 }
 
+function user_setting_set(int $userId, string $k, ?string $v): void {
+    if ($v === null) { db_exec('DELETE FROM settings WHERE k = ?', ['u' . $userId . ':' . $k]); return; }
+    setting_set('u' . $userId . ':' . $k, $v);
+}
+
+/** Installiert ist, wessen Datenbank einen Schemastand trägt (bis 0.21.0: wer ein Admin-Passwort hatte). */
 function db_is_installed(): bool {
     try {
-        return setting_get('admin_password_hash') !== null;
+        return setting_get('schema_version') !== null;
     } catch (Throwable $e) {
         return false;
     }
+}
+
+/**
+ * Schemastand ohne Datenbankabfrage im Normalfall: Die Zahl steht nach einer erfolgreichen Prüfung in
+ * uploads/.schema (kein Geheimnis). Weicht sie vom Code ab, entscheidet die Datenbank.
+ */
+function db_schema_current(): bool {
+    static $ok = null;
+    if ($ok !== null) return $ok;
+    $file = WB_ROOT . '/uploads/.schema';
+    $want = (string)WB_SCHEMA_VERSION;
+    if (@file_get_contents($file) === $want) return $ok = true;
+    try {
+        $have = setting_get('schema_version');
+    } catch (Throwable $e) {
+        return $ok = false;
+    }
+    if ($have === $want) {
+        @file_put_contents($file, $want, LOCK_EX);
+        return $ok = true;
+    }
+    return $ok = false;
 }

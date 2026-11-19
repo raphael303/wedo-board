@@ -19,22 +19,30 @@ if (!$errors && db_is_installed()) {
 }
 
 if (!$errors && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Das erste Konto wird Super-Admin (Benutzer 1). Es meldet sich danach unter /login an.
+    $email = wb_email_normalize((string)($_POST['email'] ?? ''));
     $pw = (string)($_POST['password'] ?? '');
     $pw2 = (string)($_POST['password2'] ?? '');
-    if (strlen($pw) < 8) $errors[] = 'Das Passwort braucht mindestens 8 Zeichen.';
+    if ($email === null) $errors[] = 'Die E-Mail-Adresse ist ungültig.';
+    elseif (ai_secret_key() === null) $errors[] = 'In config.php fehlt app_secret, und die Datei ist nicht beschreibbar. Zeile zum Einfügen: ' . trim((string)ai_secret_missing_line());
+    elseif (($p = wb_password_problem($pw, [$email])) !== null) $errors[] = $p;
     elseif ($pw !== $pw2) $errors[] = 'Die Passwörter stimmen nicht überein.';
     if (!$errors) {
         try {
             foreach (db_schema() as $sql) db()->exec($sql);
             $token = bin2hex(random_bytes(24));
             setting_set('api_token', $token);
-            setting_set('admin_password_hash', password_hash($pw, PASSWORD_DEFAULT));
             setting_set('installed_at', date('c'));
-            setting_set('schema_version', (string)WB_SCHEMA_VERSION);
             setting_set('registration_mode', 'off');
             setting_set('orgs_enabled', '0');
-            db_ensure_superadmin();
+            setting_set('teacher_approval', 'manual');
+            $now = wb_now();
+            db_exec('INSERT INTO users (id, first_name, last_name, email, password_hash, created_at, email_verified_at, age_confirmed_at, password_changed_at) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [wb_clean_text($_POST['first_name'] ?? '', 80), wb_clean_text($_POST['last_name'] ?? '', 80), $email, password_hash($pw, PASSWORD_DEFAULT), $now, $now, $now, $now]);
+            db_exec("INSERT INTO memberships (user_id, scope_type, scope_id, role, created_at) VALUES (1, 'system', 0, 'superadmin', ?)", [$now]);
             if (!is_dir(__DIR__ . '/uploads')) @mkdir(__DIR__ . '/uploads', 0755);
+            // Zuletzt, damit eine halbe Installation nicht als installiert gilt.
+            setting_set('schema_version', (string)WB_SCHEMA_VERSION);
             $done = true;
         } catch (Throwable $e) {
             $errors[] = 'Installation fehlgeschlagen: ' . $e->getMessage();
@@ -76,7 +84,8 @@ code{background:#f3f4f6;padding:.15rem .4rem;border-radius:4px;word-break:break-
   <h1>Installation abgeschlossen</h1>
   <p>Die Datenbank ist eingerichtet. Dein Schlüssel für die Schnittstelle (API‑Token) lautet:</p>
   <p><code><?= e($token) ?></code></p>
-  <p>Du findest ihn jederzeit wieder in der Bibliothek unter «Einstellungen». Lösche jetzt die Datei <code>install.php</code> vom Server oder lasse sie liegen; sie ist ab sofort gesperrt.</p>
+  <p>Melde dich jetzt unter <a href="/login">/login</a> mit deiner Adresse und deinem Passwort an und richte in deinem Konto die Authenticator-App ein; sie ist für den Super-Admin Pflicht.</p>
+  <p>Du findest den Token jederzeit wieder in der Bibliothek unter «Einstellungen». Lösche jetzt die Datei <code>install.php</code> vom Server oder lasse sie liegen; sie ist ab sofort gesperrt.</p>
   <p><a href="<?= e(wb_admin_url()) ?>">Zur Bibliothek</a> (<code><?= e(wb_base_url() . wb_admin_url()) ?></code>, Pfad über <code>admin_path</code> in config.php)</p>
 <?php else: ?>
   <h1><?= e(wb_app_name()) ?> einrichten</h1>
@@ -87,10 +96,16 @@ code{background:#f3f4f6;padding:.15rem .4rem;border-radius:4px;word-break:break-
     <?php endforeach; ?>
   </ul>
   <form method="post">
-    <label for="password">Admin‑Passwort</label>
-    <input id="password" name="password" type="password" minlength="8" required autocomplete="new-password">
+    <label for="first_name">Vorname</label>
+    <input id="first_name" name="first_name" type="text" autocomplete="given-name" value="<?= e((string)($_POST['first_name'] ?? '')) ?>">
+    <label for="last_name">Nachname</label>
+    <input id="last_name" name="last_name" type="text" autocomplete="family-name" value="<?= e((string)($_POST['last_name'] ?? '')) ?>">
+    <label for="email">E‑Mail‑Adresse (Benutzername des ersten Kontos)</label>
+    <input id="email" name="email" type="email" required autocomplete="username" value="<?= e((string)($_POST['email'] ?? '')) ?>">
+    <label for="password">Passwort (mindestens zwölf Zeichen)</label>
+    <input id="password" name="password" type="password" minlength="12" required autocomplete="new-password">
     <label for="password2">Passwort wiederholen</label>
-    <input id="password2" name="password2" type="password" minlength="8" required autocomplete="new-password">
+    <input id="password2" name="password2" type="password" minlength="12" required autocomplete="new-password">
     <button type="submit">Installieren</button>
   </form>
 <?php endif; ?>

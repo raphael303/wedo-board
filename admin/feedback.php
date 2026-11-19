@@ -3,6 +3,8 @@ declare(strict_types=1);
 // Rückmeldungen: Liste mit Filtern und Detailseite (Kontext, Analyse, Vorschlag, Freigaben).
 require __DIR__ . '/_layout.php';
 admin_require_login();
+// Rückmeldungen sind Fremdtext: nur Super-Admin und Admin, nur in der Sitzung der Bibliothek.
+if (!wb_can('feedback.manage')) { http_response_code(404); admin_header('Nicht gefunden'); echo '<section class="card"><h1>Nicht gefunden</h1></section>'; admin_footer(); exit; }
 admin_check_csrf();
 
 $id = (int)($_GET['id'] ?? 0);

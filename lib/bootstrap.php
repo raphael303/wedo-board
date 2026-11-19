@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.21.0');
-define('WB_SCHEMA_VERSION', 14);
+define('WB_VERSION', '0.22.0');
+define('WB_SCHEMA_VERSION', 15);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {
@@ -47,9 +47,18 @@ function wb_redirect_legacy_host(): void {
 wb_redirect_legacy_host();
 
 require WB_ROOT . '/lib/helpers.php';
+require WB_ROOT . '/lib/schema_u1a.php';
 require WB_ROOT . '/lib/db.php';
 require WB_ROOT . '/lib/instance.php';
+require WB_ROOT . '/lib/crypto.php';
+require WB_ROOT . '/lib/users.php';
 require WB_ROOT . '/lib/auth.php';
+require WB_ROOT . '/lib/rights.php';
+require WB_ROOT . '/lib/audit.php';
+require WB_ROOT . '/lib/totp.php';
+require WB_ROOT . '/lib/mail.php';
+require WB_ROOT . '/lib/accounts.php';
+require WB_ROOT . '/lib/ui.php';
 require WB_ROOT . '/lib/i18n.php';
 require WB_ROOT . '/lib/names.php';
 require WB_ROOT . '/lib/boards.php';
@@ -67,3 +76,6 @@ require WB_ROOT . '/lib/exam_print.php';
 require WB_ROOT . '/lib/feedback.php';
 require WB_ROOT . '/lib/migrate.php';
 wb_instance_page_setup();
+// Migrationen laufen nur beim Ausrollen. Ist das Schema älter als der Code, zeigt jede Anfrage aus dem Web einen
+// Wartungshinweis (503). Im Normalfall kostet die Prüfung keine Datenbankabfrage (db_schema_current).
+if (PHP_SAPI !== 'cli' && !db_schema_current() && db_is_installed()) ui_maintenance();

@@ -95,7 +95,8 @@ function activity_default_config(string $type): array {
 
 function activity_normalize(array $a): array {
     $a['id'] = (int)$a['id'];
-    $a['owner_user_id'] = (int)($a['owner_user_id'] ?? 1);
+    $a['owner_user_id'] = (int)$a['owner_user_id'];
+    $a['org_id'] = isset($a['org_id']) ? (int)$a['org_id'] : null;
     $a['round'] = (int)($a['round'] ?? 1);
     $a['revealed'] = (bool)(int)($a['revealed'] ?? 0);
     $a['deleted_at'] = $a['deleted_at'] ?? null;
@@ -265,11 +266,11 @@ function activity_create(array $in): array {
     }
     $key = wb_random_key(16);
     $now = wb_now();
-    $ownerId = (int)(wb_current_user()['id'] ?? 1);
+    $ownerId = wb_user_id();
     $id = db_insert(
-        'INSERT INTO activities (akey, slug, owner_user_id, type, name, config_json, background, lang, status, revealed, round, note, tags, created_at, updated_at, last_activity_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)',
-        [$key, $slug, $ownerId, $type, $name, json_encode($config, JSON_UNESCAPED_UNICODE), $bg, $lang,
+        'INSERT INTO activities (akey, slug, owner_user_id, org_id, identity_seed, type, name, config_json, background, lang, status, revealed, round, note, tags, created_at, updated_at, last_activity_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)',
+        [$key, $slug, $ownerId, wb_workspace_org_id(), bin2hex(random_bytes(16)), $type, $name, json_encode($config, JSON_UNESCAPED_UNICODE), $bg, $lang,
          in_array($in['status'] ?? '', ['open', 'closed'], true) ? $in['status'] : 'open',
          wb_clean_text($in['note'] ?? '', 5000), implode(', ', wb_parse_tags($in['tags'] ?? '')), $now, $now, $now]
     );
@@ -391,9 +392,10 @@ function activity_duplicate(array $a, ?string $name = null): array {
     ]);
 }
 
-function activities_list(array $opt = []): array {
-    $where = [];
-    $params = [];
+/** Aktivitäten einer Person in einem Arbeitsbereich. owner_user_id und org_id sind Pflicht (wb_scope()). */
+function activities_list(array $opt): array {
+    [$scopeSql, $params] = wb_scope_sql($opt);
+    $where = [$scopeSql];
     $status = $opt['status'] ?? 'active';
     $where[] = $status === 'trash' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL';
     if ($status === 'active') { $where[] = "status IN ('open','closed')"; }

@@ -4,25 +4,17 @@ require __DIR__ . '/_layout.php';
 admin_require_login();
 admin_check_csrf();
 
+$me = wb_user_id();
+// Der bisherige api_token steht bis U1b für den Benutzer 1 im Arbeitsbereich «Privat»; nur er sieht und erneuert ihn.
+$isTokenOwner = $me === 1 && wb_workspace_org_id() === null;
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
-    if ($action === 'password') {
-        $pw = (string)($_POST['password'] ?? '');
-        if (strlen($pw) < 8) $error = 'Das Passwort braucht mindestens 8 Zeichen.';
-        elseif ($pw !== (string)($_POST['password2'] ?? '')) $error = 'Die Passwörter stimmen nicht überein.';
-        else {
-            $hash = password_hash($pw, PASSWORD_DEFAULT);
-            setting_set('admin_password_hash', $hash);
-            $_SESSION['admin_hash'] = $hash;
-            admin_flash('Passwort geändert.');
-            header('Location: ' . wb_admin_url() . 'settings.php'); exit;
-        }
-    } elseif ($action === 'token') {
+    if ($action === 'token' && $isTokenOwner) {
         setting_set('api_token', bin2hex(random_bytes(24)));
         admin_flash('Neuer API‑Token erzeugt. Der alte gilt nicht mehr; trage den neuen im Connector ein.');
         header('Location: ' . wb_admin_url() . 'settings.php'); exit;
-    } elseif ($action === 'purge') {
+    } elseif ($action === 'purge' && wb_can('maintenance.purge')) {
         $n = board_purge_deleted(30);
         admin_flash("$n gelöschte Elemente endgültig entfernt.");
         header('Location: ' . wb_admin_url() . 'settings.php'); exit;
@@ -34,34 +26,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($provider === 'fake' && !wb_config('ai_allow_fake', false) && !wb_ai_fake_only()) throw new InvalidArgumentException('Der Fake-Anbieter ist nur für lokale Tests freigeschaltet.');
                     $model = trim((string)($_POST['model'] ?? ''));
                     if ($model === '__other' || $model === '') $model = trim((string)($_POST['model_other'] ?? ''));
-                    $hadCredential = ai_credential_default() !== null;
-                    $c = ai_credential_save($provider, (string)($_POST['api_key'] ?? ''), $model);
-                    if (!$hadCredential && setting_get('ai_enabled') === null) setting_set('ai_enabled', '1');
+                    $hadCredential = ai_credential_default($me) !== null;
+                    $c = ai_credential_save($provider, (string)($_POST['api_key'] ?? ''), $model, null, $me);
+                    if (!$hadCredential && user_setting_get($me, 'ai_enabled') === null) user_setting_set($me, 'ai_enabled', '1');
                     $test = ai_credential_test($c + ['api_key' => ai_decrypt((string)$c['api_key_enc'])]);
                     admin_flash('KI-Zugang gespeichert. Verbindungstest: ' . $test['message']);
                     break;
                 case 'ai_test':
-                    $c = ai_credential_default();
+                    $c = ai_credential_default($me);
                     if (!$c) throw new InvalidArgumentException('Kein KI-Zugang gespeichert.');
                     $test = ai_credential_test($c);
                     admin_flash(($test['ok'] ? 'Verbindung in Ordnung. ' : 'Verbindung fehlgeschlagen: ') . $test['message']);
                     break;
                 case 'ai_delete':
-                    $c = ai_credential_default();
-                    if ($c) ai_credential_delete((int)$c['id']);
+                    $c = ai_credential_default($me);
+                    if ($c) ai_credential_delete((int)$c['id'], $me);
                     admin_flash('KI-Zugang entfernt.');
                     break;
                 case 'ai_toggle':
-                    setting_set('ai_enabled', !empty($_POST['ai_enabled']) ? '1' : '0');
+                    user_setting_set($me, 'ai_enabled', !empty($_POST['ai_enabled']) ? '1' : '0');
                     admin_flash(!empty($_POST['ai_enabled']) ? 'KI-Funktionen eingeschaltet.' : 'KI-Funktionen ausgeschaltet.');
                     break;
                 case 'ai_prompt':
                     $pr = wb_clean_text($_POST['ai_auto_prompt'] ?? '', 4000);
-                    setting_set('ai_auto_prompt', $pr === '' ? null : $pr);
+                    user_setting_set($me, 'ai_auto_prompt', $pr === '' ? null : $pr);
                     admin_flash('Standard-Anweisung gespeichert.');
                     break;
                 case 'ai_prompt_reset':
-                    setting_set('ai_auto_prompt', null);
+                    user_setting_set($me, 'ai_auto_prompt', null);
                     admin_flash('Standard-Anweisung zurückgesetzt.');
                     break;
             }
@@ -71,7 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: ' . wb_admin_url() . 'settings.php#ki'); exit;
     } elseif ($action === 'backup') {
         $all = [];
-        foreach (db_all('SELECT * FROM boards WHERE deleted_at IS NULL ORDER BY id') as $b) $all[] = board_export_data(board_normalize($b));
+        // Nur die eigenen Boards im gewählten Arbeitsbereich.
+        [$scopeSql, $scopeParams] = wb_scope_sql(wb_scope());
+        foreach (db_all("SELECT * FROM boards WHERE $scopeSql AND deleted_at IS NULL ORDER BY id", $scopeParams) as $b) $all[] = board_export_data(board_normalize($b));
         header('Content-Type: application/json; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . wb_app_slug() . '-backup-' . date('Y-m-d') . '.json"');
         echo json_encode(['exported_at' => date('c'), 'boards' => $all], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
@@ -79,22 +73,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $csrf = wb_csrf_token();
-$token = (string)setting_get('api_token');
+$token = $isTokenOwner ? (string)setting_get('api_token') : '';
 $aiSecretLine = ai_secret_missing_line();
-$aiCred = ai_credential_default();
+$aiCred = ai_credential_default($me);
 $aiCredPublic = $aiCred ? ai_credential_row_public($aiCred) : null;
 $aiProviders = AI_PROVIDERS;
 if (!wb_config('ai_allow_fake', false) && !wb_ai_fake_only() && (!$aiCred || $aiCred['provider'] !== 'fake')) unset($aiProviders['fake']);
 if (wb_ai_fake_only()) $aiProviders = array_intersect_key($aiProviders, ['fake' => 1]);
 $aiModels = $aiCred ? ai_models_cached($aiCred['provider']) : [];
 $aiModelKnown = $aiCred && in_array($aiCred['model'], array_column($aiModels, 'id'), true);
-$aiUsage = ai_usage_summary();
-$aiRecent = ai_usage_recent(8);
-$counts = db_row("SELECT (SELECT COUNT(*) FROM boards WHERE deleted_at IS NULL) AS boards, (SELECT COUNT(*) FROM boards WHERE deleted_at IS NOT NULL) AS trashed_boards, (SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL) AS posts, (SELECT COUNT(*) FROM posts WHERE deleted_at IS NOT NULL) AS trashed");
+$aiUsage = ai_usage_summary($me);
+$aiRecent = ai_usage_recent(8, $me);
+[$scopeSql, $scopeParams] = wb_scope_sql(wb_scope(), 'b');
+$counts = db_row("SELECT
+    (SELECT COUNT(*) FROM boards b WHERE $scopeSql AND b.deleted_at IS NULL) AS boards,
+    (SELECT COUNT(*) FROM boards b WHERE $scopeSql AND b.deleted_at IS NOT NULL) AS trashed_boards,
+    (SELECT COUNT(*) FROM posts p JOIN boards b ON b.id = p.board_id WHERE $scopeSql AND p.deleted_at IS NULL) AS posts,
+    (SELECT COUNT(*) FROM posts p JOIN boards b ON b.id = p.board_id WHERE $scopeSql AND p.deleted_at IS NOT NULL) AS trashed",
+    array_merge($scopeParams, $scopeParams, $scopeParams, $scopeParams));
 admin_header('Einstellungen', 'settings');
 ?>
 <div class="page-head"><h1>Einstellungen</h1></div>
 
+<?php if ($isTokenOwner): ?>
 <section class="card">
   <h2>Schnittstelle für Claude</h2>
   <p class="muted">Mit diesem Token darf Claude (oder jedes andere Programm) Boards anlegen, lesen, leeren und löschen. Behandle ihn wie ein Passwort.</p>
@@ -105,18 +106,11 @@ admin_header('Einstellungen', 'settings');
   <p><code class="token"><?= e(wb_base_url()) ?>/mcp/<?= e($token) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e(wb_base_url()) ?>/mcp/<?= e($token) ?>">Kopieren</button></p>
   <form method="post" data-confirm="Neuen Token erzeugen? Der bisherige funktioniert danach nicht mehr."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="token"><button class="btn-ghost" type="submit">Neuen Token erzeugen</button></form>
 </section>
+<?php endif; ?>
 
 <section class="card">
-  <h2>Passwort ändern</h2>
-  <?php if ($error): ?><p class="error"><?= e($error) ?></p><?php endif; ?>
-  <form method="post" class="form">
-    <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="password">
-    <div class="row two">
-      <div><label for="pw">Neues Passwort</label><input id="pw" name="password" type="password" minlength="8" autocomplete="new-password" required></div>
-      <div><label for="pw2">Wiederholen</label><input id="pw2" name="password2" type="password" minlength="8" autocomplete="new-password" required></div>
-    </div>
-    <div class="actions"><button class="btn" type="submit">Passwort speichern</button></div>
-  </form>
+  <h2>Konto</h2>
+  <p class="muted">Passwort, Adresse, zweite Stufe, Sitzungen und bekannte Geräte verwaltest du in deinem <a href="/account">Konto</a>. Arbeitsbereich dieser Einstellungen: <strong><?= e(wb_workspace_name()) ?></strong>.</p>
 </section>
 
 <section class="card" id="ki">
@@ -127,7 +121,7 @@ admin_header('Einstellungen', 'settings');
   <?php else: ?>
   <form method="post" class="form">
     <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="ai_toggle">
-    <div class="checks"><label><input type="checkbox" name="ai_enabled" <?= ai_enabled() ? 'checked' : '' ?>> <strong>KI-Funktionen aktiv</strong> (Hauptschalter für alle Boards)</label> <button class="btn-ghost small" type="submit">Übernehmen</button></div>
+    <div class="checks"><label><input type="checkbox" name="ai_enabled" <?= ai_enabled($me) ? 'checked' : '' ?>> <strong>KI-Funktionen aktiv</strong> (Hauptschalter für alle Boards)</label> <button class="btn-ghost small" type="submit">Übernehmen</button></div>
   </form>
 
   <h3>Zugang</h3>
@@ -174,7 +168,7 @@ admin_header('Einstellungen', 'settings');
   <h3>Standard-Anweisung für «Automatisch nach Themen bündeln»</h3>
   <form method="post" class="form">
     <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="ai_prompt">
-    <div class="row"><textarea name="ai_auto_prompt" rows="5"><?= e(ai_auto_prompt()) ?></textarea>
+    <div class="row"><textarea name="ai_auto_prompt" rows="5"><?= e(ai_auto_prompt($me)) ?></textarea>
     <p class="hint">Dieser Text ist der Auftrag im Auto-Modus. Die technischen Regeln (nur Beitragsnummern aus der Liste, keine erzwungene Zuordnung, Bündel bleiben in ihrer Spalte) gelten immer und stehen fest im Systemprompt.</p></div>
     <div class="actions"><button class="btn" type="submit">Anweisung speichern</button> <button class="btn-ghost" type="submit" name="action" value="ai_prompt_reset">Zurücksetzen</button></div>
   </form>
@@ -197,7 +191,9 @@ admin_header('Einstellungen', 'settings');
   <p class="muted"><?= (int)$counts['boards'] ?> Boards, <?= (int)$counts['posts'] ?> Beiträge; im Papierkorb <?= (int)$counts['trashed_boards'] ?> Boards (<a href="<?= e(wb_admin_url()) ?>?status=trash">anzeigen</a>) und <?= (int)$counts['trashed'] ?> Beiträge.</p>
   <div class="action-grid">
     <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="backup"><button class="btn-ghost" type="submit">Alle Boards als JSON sichern</button></form>
+    <?php if (wb_can('maintenance.purge')): ?>
     <form method="post" data-confirm="Gelöschte Boards, Beiträge und Kommentare, die älter als 30 Tage sind, endgültig entfernen?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="purge"><button class="btn-ghost" type="submit">Papierkorb leeren (älter als 30 Tage)</button></form>
+    <?php endif; ?>
   </div>
   <p class="muted">Anzeigename «<?= e(wb_app_name()) ?>» und Adresse <code><?= e(wb_base_url()) ?></code> stammen aus <code>config.php</code><?php $lh = (array)wb_config('legacy_hosts', []); ?><?= $lh ? '; frühere Domains, die dorthin umleiten: ' . e(implode(', ', $lh)) : '' ?>. Die Checkliste für einen Domainwechsel steht in <code>DEVELOPMENT.md</code>.</p>
   <p class="muted">Version <?= WB_VERSION ?> · PHP <?= PHP_VERSION ?></p>

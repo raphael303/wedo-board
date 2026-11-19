@@ -25,7 +25,7 @@ TXT;
 
 /** Gleiche Voraussetzungen wie bei den Boards; statt des Board-Schalters gilt der Schalter der Wortwolke. */
 function ai_wordcloud_reason(array $a): ?string {
-    $reason = ai_unavailable_reason(['owner_user_id' => $a['owner_user_id'], 'settings' => ['ai' => $a['config']['ai']]]);
+    $reason = ai_unavailable_reason($a + ['settings' => ['ai' => $a['config']['ai']]]);
     return $reason === 'board_off' ? 'activity_off' : $reason;
 }
 

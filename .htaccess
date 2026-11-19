@@ -30,6 +30,9 @@ RewriteRule ^api/(.*)$ api/index.php?route=$1 [L,QSA]
 # Connector: /mcp/<token>
 RewriteRule ^mcp/([a-f0-9]{48})/?$ mcp/index.php?token=$1 [L,QSA]
 
+# Seiten der Nutzerverwaltung (seit 0.22.0): /login, /signup, /invite, /account, /manage, /help, /test
+RewriteRule ^(login|logout|signup|invite|account|manage|help|test)(?:/([a-z0-9-]+))?/?$ page.php?p=$1&s=$2 [L,QSA]
+
 # Bibliothek unter eigenem Pfad (config.php: admin_path): /<pfad>/<seite>.php -> admin/<seite>.php.
 # Die Seiten prüfen selbst, ob der Pfad stimmt (sonst 404). /<pfad> und /<pfad>/ übernimmt board.php.
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -57,7 +60,7 @@ Header always set Content-Security-Policy-Report-Only "default-src 'self'; scrip
 <FilesMatch "^(config\.php|config\.example\.php|dev-router\.php|[^/]*\.md|\.gitignore)$">
   Require all denied
 </FilesMatch>
-RedirectMatch 404 ^/(lib|lang|vendor|tools|docs|\.git|\.cyon)(/|$)
+RedirectMatch 404 ^/(lib|lang|vendor|tools|docs|pages|\.git|\.cyon)(/|$)
 
 # Uploads: 10 MB
 <IfModule mod_php.c>

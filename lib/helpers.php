@@ -44,6 +44,12 @@ function wb_short_word(): string {
  * Neugierigen; er ist kein Passwortersatz. Der Ordner heisst weiterhin admin/, .htaccess leitet um.
  */
 function wb_admin_path(): string {
+    // Solange die Registrierung auf «aus» steht, bleibt der geheime Pfad; sonst liegt die Bibliothek unter /library.
+    static $open = null;
+    if ($open === null) {
+        try { $open = function_exists('wb_registration_mode') && wb_registration_mode() !== 'off'; } catch (Throwable $e) { $open = false; }
+    }
+    if ($open) return 'library';
     $p = strtolower(trim((string)wb_config('admin_path', 'admin'), "/ \t"));
     return preg_match('/^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/', $p) ? $p : 'admin';
 }
@@ -54,7 +60,7 @@ function wb_admin_url(string $rest = ''): string {
 }
 
 function wb_reserved_slugs(): array {
-    return [wb_admin_path(), 'admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about',
+    return [wb_admin_path(), strtolower(trim((string)wb_config('admin_path', 'admin'), "/ \t")), 'admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about',
         // Seit 0.21.0 für die Nutzerverwaltung reserviert (Konzept Abschnitt 6), auch Wörter, die heute noch nichts tun.
         'signup', 'account', 'library', 'manage', 'hilfe', 'konto', 'registrieren', 'verwaltung', 'bibliothek', 'anmelden',
         'oauth', 'authorize', 'token', 'register', 'invite', 'join', 'support', 'abuse', 'report', 'melden', 'status', 'test',

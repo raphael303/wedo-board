@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 const WB_INSTANCES = ['sandbox', 'test'];
 const WB_REGISTRATION_MODES = ['off', 'invite', 'open'];
+/** Reservierte Domain der Testkonten (tools/seed.php); nur sie lassen sich unter /test auf einen Klick anmelden. */
+const WB_TEST_DOMAIN = 'tafula.test';
 
 /** 'production', 'test' oder 'sandbox'. */
 function wb_instance(): string {

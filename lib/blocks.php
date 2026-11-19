@@ -9,9 +9,11 @@ declare(strict_types=1);
  */
 
 /** Aktive Sperre eines Gastes für ein Board (board-eigene oder globale), sonst null. */
-function guest_block_active(string $uid, int $boardId): ?array {
+function guest_block_active(string $uid, array $board): ?array {
     if ($uid === '' || $uid === WB_OWNER_KEY) return null;
-    return db_row('SELECT * FROM guest_blocks WHERE guest_key = ? AND lifted_at IS NULL AND (board_id IS NULL OR board_id = ?) ORDER BY board_id IS NULL DESC, id DESC LIMIT 1', [$uid, $boardId]) ?: null;
+    // «Auf allen Boards» gilt für die Boards der Person, die gesperrt hat, nicht systemweit.
+    return db_row('SELECT * FROM guest_blocks WHERE guest_key = ? AND lifted_at IS NULL AND (board_id = ? OR (board_id IS NULL AND user_id = ?)) ORDER BY board_id IS NULL DESC, id DESC LIMIT 1',
+        [$uid, (int)$board['id'], (int)$board['owner_user_id']]) ?: null;
 }
 
 /**
@@ -28,13 +30,13 @@ function guest_block_create(array $board, string $uid, string $displayName, bool
         $displayName = $row['author_name'] ?? wb_guest_name($board, $uid);
     }
     // Eine bestehende gleichwertige Sperre wird nicht verdoppelt.
-    $existing = db_row('SELECT * FROM guest_blocks WHERE guest_key = ? AND lifted_at IS NULL AND ' . ($allBoards ? 'board_id IS NULL' : 'board_id = ?'), $allBoards ? [$uid] : [$uid, $board['id']]);
+    $existing = db_row('SELECT * FROM guest_blocks WHERE guest_key = ? AND lifted_at IS NULL AND ' . ($allBoards ? 'board_id IS NULL AND user_id = ?' : 'board_id = ?'), $allBoards ? [$uid, (int)$board['owner_user_id']] : [$uid, $board['id']]);
     if ($existing) {
         $id = (int)$existing['id'];
         if ($hide && !(int)$existing['hide_content']) db_exec('UPDATE guest_blocks SET hide_content = 1 WHERE id = ?', [$id]);
     } else {
         $id = db_insert('INSERT INTO guest_blocks (user_id, board_id, guest_key, display_name, hide_content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [(int)(wb_current_user()['id'] ?? 1), $allBoards ? null : $board['id'], $uid, $displayName, $hide ? 1 : 0, $now]);
+            [(int)$board['owner_user_id'], $allBoards ? null : $board['id'], $uid, $displayName, $hide ? 1 : 0, $now]);
     }
     $payload = ['block_id' => $id, 'post_ids' => [], 'comment_ids' => []];
     if ($hide) {
@@ -65,7 +67,8 @@ function guest_block_create(array $board, string $uid, string $displayName, bool
  */
 function guest_block_lift(int $id): array {
     $block = db_row('SELECT * FROM guest_blocks WHERE id = ?', [$id]);
-    if (!$block) throw new InvalidArgumentException('Sperre nicht gefunden.');
+    // Eine fremde Sperre verhält sich wie eine unbekannte.
+    if (!$block || !wb_can('block.lift', $block)) throw new InvalidArgumentException('Sperre nicht gefunden.');
     $note = null;
     if ($block['lifted_at'] === null) {
         $entry = db_row("SELECT * FROM undo_log WHERE action = 'guest_block' AND undone_at IS NULL AND JSON_EXTRACT(payload, '$.block_id') = ? ORDER BY id DESC LIMIT 1", [$id]);
@@ -100,7 +103,8 @@ function guest_block_public(array $b): array {
     ];
 }
 
-function guest_blocks_list(bool $activeOnly = true, int $limit = 200): array {
-    $rows = db_all('SELECT * FROM guest_blocks' . ($activeOnly ? ' WHERE lifted_at IS NULL' : '') . ' ORDER BY lifted_at IS NULL DESC, id DESC LIMIT ' . max(1, min(500, $limit)));
+/** Sperren, die eine Person gesetzt hat. */
+function guest_blocks_list(int $userId, bool $activeOnly = true, int $limit = 200): array {
+    $rows = db_all('SELECT * FROM guest_blocks WHERE user_id = ?' . ($activeOnly ? ' AND lifted_at IS NULL' : '') . ' ORDER BY lifted_at IS NULL DESC, id DESC LIMIT ' . max(1, min(500, $limit)), [$userId]);
     return array_map('guest_block_public', $rows);
 }

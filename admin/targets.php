@@ -8,7 +8,7 @@ $q = trim((string)($_GET['q'] ?? ''));
 $status = (string)($_GET['status'] ?? 'active');
 $sort = (string)($_GET['sort'] ?? 'activity');
 $tag = trim((string)($_GET['tag'] ?? ''));
-$list = activities_list(['q' => $q, 'status' => $status, 'sort' => $sort, 'tag' => $tag, 'type' => 'target']);
+$list = activities_list(wb_scope() + ['q' => $q, 'status' => $status, 'sort' => $sort, 'tag' => $tag, 'type' => 'target']);
 
 admin_header('Zielscheiben', 'targets');
 ?>

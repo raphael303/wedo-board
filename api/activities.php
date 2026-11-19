@@ -7,9 +7,9 @@ if (!defined('WB_ROOT')) exit;
 
 function activity_guest_api(string $method, array $p): never {
     $a = activity_by_key($p[1] ?? '');
-    if (!$a || $a['status'] === 'archived') wb_error('Nicht gefunden.', 404);
     $uid = wb_client_uid();
-    $owner = wb_can('board.manage');
+    if (!$a || !wb_can_participate($a)) wb_error('Nicht gefunden.', 404);
+    $owner = wb_can('activity.manage', $a);
     $lang = wb_resolve_lang($a['lang']);
     $sub = $p[2] ?? '';
 
@@ -125,10 +125,7 @@ function activity_guest_api(string $method, array $p): never {
     if ($sub === 'response' && $method === 'POST') {
         if ($isCloud) wb_error('Unbekannter Aufruf.', 404);
         if (!$owner) {
-            if ($a['status'] !== 'open') wb_error(t('target_closed', $lang), 403, ['code' => 'closed']);
-            // Sperren für alle Boards gelten auch hier; Sperren für ein einzelnes Board nicht.
-            if (guest_block_active($uid, 0) !== null) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
-            rate_limit($uid);
+            activity_guest_guard($a, $uid, false, $lang);
         }
         $in = wb_read_json_body();
         try {
@@ -145,8 +142,10 @@ function activity_guest_api(string $method, array $p): never {
 function activity_guest_guard(array $a, string $uid, bool $owner, string $lang): void {
     if ($owner) return;
     $closedKey = ['wordcloud' => 'wc_closed', 'exam' => 'exam_closed'][$a['type']] ?? 'target_closed';
-    if ($a['status'] !== 'open') wb_error(t($closedKey, $lang), 403, ['code' => 'closed']);
-    if (guest_block_active($uid, 0) !== null) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
+    // Sperren «auf allen Boards» der Besitzerin gelten auch hier; Sperren für ein einzelnes Board nicht.
+    $part = wb_participation($a, $uid);
+    if ($part['reason'] === 'closed' || $part['reason'] === 'gone') wb_error(t($closedKey, $lang), 403, ['code' => 'closed']);
+    if (!$part['write']) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
     rate_limit($uid);
 }
 
@@ -193,25 +192,28 @@ function activity_owner_api(string $method, array $p): never {
         exit;
     }
 
-    wb_require_owner();
-    db_migrate();
+    wb_require_login();
     $in = wb_read_json_body();
 
     if ($key === '') {
         if ($method === 'GET') {
-            wb_json(['ok' => true, 'activities' => activities_list([
+            wb_json(['ok' => true, 'activities' => activities_list(wb_scope() + [
                 'q' => $_GET['q'] ?? '', 'status' => $_GET['status'] ?? 'active', 'sort' => $_GET['sort'] ?? 'activity',
                 'tag' => $_GET['tag'] ?? '', 'type' => $_GET['type'] ?? '',
             ])]);
         }
         if ($method === 'POST') {
+            wb_require_can('content.create');
+            wb_check_csrf_header();
             wb_json(['ok' => true, 'activity' => activity_owner_view(activity_create($in))], 201);
         }
         wb_error('Unbekannter Aufruf.', 404);
     }
 
-    $a = activity_find($key, true);
+    // Eine fremde Aktivität antwortet wie eine unbekannte.
+    $a = activity_owned($key, true);
     if (!$a) wb_error('Nicht gefunden.', 404);
+    if ($method !== 'GET') wb_check_csrf_header();
 
     if ($action === '') {
         if ($method === 'GET') wb_json(['ok' => true, 'activity' => activity_owner_view($a)]);

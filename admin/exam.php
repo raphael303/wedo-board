@@ -7,7 +7,8 @@ admin_require_login();
 admin_check_csrf();
 
 $isNew = isset($_GET['new']);
-$act = $isNew ? null : activity_by_key((string)($_GET['key'] ?? ''), true);
+$act = $isNew ? null : activity_owned((string)($_GET['key'] ?? ''), true);
+if ($isNew && !wb_can('content.create')) { http_response_code(403); exit('Nicht berechtigt.'); }
 if ($act && $act['type'] !== 'exam') { header('Location: ' . wb_admin_url() . ($act['type'] === 'wordcloud' ? 'wordcloud' : 'target') . '.php?key=' . $act['akey']); exit; }
 if (!$isNew && !$act) {
     http_response_code(404);

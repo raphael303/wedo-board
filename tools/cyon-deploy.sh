@@ -44,6 +44,7 @@ echo "Zweig: \$(git rev-parse --abbrev-ref HEAD) (erwartet $4)"
 if [ -n "\$(git status --porcelain --untracked-files=no)" ]; then echo 'WARNUNG: Änderungen an versionierten Dateien'; fi
 php -r '\$c = require "config.php"; echo empty(\$c["admin_path"]) ? "WARNUNG: admin_path fehlt in config.php\n" : "admin_path ist gesetzt\n"; \$i = \$c["instance"] ?? null; echo "Instanzart: ", in_array(\$i, ["sandbox", "test"], true) ? \$i : "Produktion", "\n";'
 php -r 'require "lib/bootstrap.php"; echo "Schema: ", setting_get("schema_version"), " (Code erwartet ", WB_SCHEMA_VERSION, ")\n"; \$m = function_exists("wb_instance") ? setting_get("instance_marker") : null; echo "Marker: ", \$m ?? "keiner", "\n"; \$r = setting_get("reserved_renamed"); if (\$r) echo "Ersetzte Kurzwörter: \$r\n";'
+php -r 'require "lib/bootstrap.php"; if (!function_exists("mail_config")) exit; echo "Registrierung: ", wb_registration_mode(), " · Mail: ", mail_config() ? "SMTP eingerichtet" : "kein SMTP", wb_config("mail_bounces") ? ", liest Rückläufer" : "", " · owner_email ", wb_config("owner_email") ? "gesetzt" : "FEHLT", "\n"; \$c = (int)setting_get("cron_last_at", "0"); echo "Cronjob: ", \$c ? "zuletzt vor " . (time() - \$c) . " s" : "noch nie gelaufen", "\n";' 2>/dev/null || true
 EOF
   curl -sS -o /dev/null -w "Startseite: HTTP %{http_code}\n" "$3/"
 }

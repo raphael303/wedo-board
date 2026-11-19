@@ -33,7 +33,7 @@ TXT;
 /** Ist die Zusammenfassung dieser Art möglich? null oder ein Grund-Code: disabled, no_credential, board_off, too_few, too_many, no_units, no_table. */
 function summary_unavailable_reason(array $board, string $mode, ?array $data = null): ?string {
     if (!summary_table_exists()) return 'no_table';
-    if (!ai_enabled()) return 'disabled';
+    if (!ai_enabled((int)$board['owner_user_id'])) return 'disabled';
     if (empty($board['settings']['ai'])) return 'board_off';
     if (ai_credential_default((int)$board['owner_user_id']) === null) return 'no_credential';
     $data = $data ?? export_collect($board);

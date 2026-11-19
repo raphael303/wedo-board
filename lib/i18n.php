@@ -36,3 +36,23 @@ function wb_resolve_lang(string $boardLang): string {
     if ($c && in_array($c, wb_langs(), true)) return $c;
     return in_array($boardLang, wb_langs(), true) ? $boardLang : 'de';
 }
+
+/**
+ * Texte des Verwaltungsteils (Anmeldung, Konto, Verwaltung, Mails): Der deutsche Satz ist der Schlüssel.
+ * Eine Übersetzung steht in lang/ui.<sprache>.php als Feld «deutscher Satz» => «Übersetzung»; fehlt sie,
+ * erscheint der deutsche Text. Sprache: die des angemeldeten Kontos, sonst Deutsch.
+ */
+function tx(string $de, array $vars = [], ?string $lang = null): string {
+    static $maps = [];
+    $lang = $lang ?? ($GLOBALS['wb_ui_lang'] ?? 'de');
+    $s = $de;
+    if ($lang !== 'de' && preg_match('/^[a-z]{2}$/', $lang)) {
+        if (!isset($maps[$lang])) {
+            $f = WB_ROOT . '/lang/ui.' . $lang . '.php';
+            $maps[$lang] = is_file($f) ? (array)require $f : [];
+        }
+        $s = $maps[$lang][$de] ?? $de;
+    }
+    foreach ($vars as $k => $v) $s = str_replace('{' . $k . '}', (string)$v, $s);
+    return $s;
+}

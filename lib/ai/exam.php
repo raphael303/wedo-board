@@ -48,8 +48,8 @@ TXT;
  * Seite einer teilnehmenden Person nach der Abgabe die KI-Korrektur der Lehrperson auslösen.
  */
 function ai_exam_reason(array $a, bool $checkUser = true): ?string {
-    if ($checkUser && !wb_can('ai.use', ['owner_user_id' => $a['owner_user_id']])) return 'forbidden';
-    if (!ai_enabled()) return 'disabled';
+    if ($checkUser && !wb_can('ai.use', $a)) return 'forbidden';
+    if (!ai_enabled((int)$a['owner_user_id'])) return 'disabled';
     if (ai_credential_default((int)$a['owner_user_id']) === null) return 'no_credential';
     if (empty($a['config']['ai'])) return 'exam_off';
     return null;

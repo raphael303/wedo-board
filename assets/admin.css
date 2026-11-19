@@ -211,3 +211,23 @@ h3 { font-size: 0.95rem; margin: 18px 0 6px; }
 .exam-admin-answer { padding: 8px 12px; border-radius: 8px; background: rgba(27, 31, 36, 0.05); overflow-wrap: anywhere; }
 .exam-shuffle-all { margin-top: 12px; }
 .table-wrap { overflow-x: auto; }
+/* Konto, Anmeldung, Verwaltung (seit 0.22.0) */
+.form input[type="email"], .form input[type="number"], .form input[type="search"] { width: 100%; border: 1px solid #cfd4db; border-radius: 8px; padding: 9px 11px; background: var(--paper); }
+.form .row.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.checks.col { flex-direction: column; gap: 8px; }
+.card.narrow.wide { max-width: 560px; }
+.card.narrow h1 { margin-bottom: 14px; }
+.nav-account { display: inline-flex; align-items: center; gap: 2px; }
+.nav .nav-link { border: 0; background: none; padding: 8px 12px; border-radius: 8px; font-weight: 500; color: var(--muted); }
+.nav .nav-link:hover { color: var(--ink); background: #f0f2f5; }
+.nav .ws-form select { border: 1px solid #cfd4db; border-radius: 8px; padding: 6px 8px; background: var(--paper); max-width: 160px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.results.plain td:nth-child(n), .results.plain th:nth-child(n) { text-align: left; display: table-cell; vertical-align: top; }
+.results.plain { margin-bottom: 12px; }
+.card:has(> .results.plain) { overflow-x: auto; }
+.codes { font: 600 1.05rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f6f7f9; border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; columns: 2; margin: 12px 0; }
+.mailbody { white-space: pre-wrap; overflow-wrap: anywhere; font: 0.92rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #f6f7f9; border-radius: 8px; padding: 14px; }
+.qr-box .qr svg { width: 180px; height: 180px; display: block; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.help h2 { font-size: 1.25rem; margin: 0 0 12px; } .help h3 { font-size: 1.02rem; margin: 20px 0 6px; } .help p, .help li { max-width: 68ch; }
+@media (max-width: 640px) { .form .row.two { grid-template-columns: 1fr; } .codes { columns: 1; } }
+@media print { .nav, .admin-foot, .actions, .flash { display: none !important; } }

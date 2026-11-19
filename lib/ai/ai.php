@@ -151,8 +151,7 @@ function ai_credential_row_public(array $c): array {
 }
 
 /** Der Standardzugang des Benutzers mit entschlüsseltem Schlüssel, oder null. */
-function ai_credential_default(?int $userId = null): ?array {
-    $userId = $userId ?? (int)(wb_current_user()['id'] ?? 1);
+function ai_credential_default(int $userId): ?array {
     $c = db_row('SELECT * FROM ai_credentials WHERE user_id = ? ORDER BY is_default DESC, id DESC LIMIT 1', [$userId]);
     if (!$c) return null;
     $c['api_key'] = ai_decrypt((string)$c['api_key_enc']);
@@ -161,10 +160,9 @@ function ai_credential_default(?int $userId = null): ?array {
 }
 
 /** Speichert oder ersetzt den Zugang eines Anbieters; ein leerer Schlüssel behält den gespeicherten. */
-function ai_credential_save(string $provider, ?string $apiKey, ?string $model, ?string $label = null, ?int $userId = null): array {
+function ai_credential_save(string $provider, ?string $apiKey, ?string $model, ?string $label, int $userId): array {
     if (!isset(AI_PROVIDERS[$provider])) throw new InvalidArgumentException('Unbekannter Anbieter.');
     if ($provider !== 'fake' && wb_ai_fake_only()) throw new InvalidArgumentException('Ausserhalb der Produktion ist nur der Fake-Anbieter erlaubt.');
-    $userId = $userId ?? (int)(wb_current_user()['id'] ?? 1);
     $now = wb_now();
     $existing = db_row('SELECT * FROM ai_credentials WHERE user_id = ? AND provider = ? ORDER BY id DESC LIMIT 1', [$userId, $provider]);
     $apiKey = trim((string)$apiKey);
@@ -187,8 +185,7 @@ function ai_credential_save(string $provider, ?string $apiKey, ?string $model, ?
     return db_row('SELECT * FROM ai_credentials WHERE id = ?', [$id]);
 }
 
-function ai_credential_delete(int $id, ?int $userId = null): void {
-    $userId = $userId ?? (int)(wb_current_user()['id'] ?? 1);
+function ai_credential_delete(int $id, int $userId): void {
     db_exec('DELETE FROM ai_credentials WHERE id = ? AND user_id = ?', [$id, $userId]);
 }
 
@@ -223,19 +220,20 @@ function ai_models_cached(string $provider): array {
 
 /* ---------- Schalter und Prompts ---------- */
 
-function ai_enabled(): bool {
-    return setting_get('ai_enabled', '0') === '1';
+/** Hauptschalter der KI-Funktionen eines Kontos (bis 0.21.0 ein Schalter für die eine Besitzerin). */
+function ai_enabled(int $userId): bool {
+    return user_setting_get($userId, 'ai_enabled', '0') === '1';
 }
 
-function ai_auto_prompt(): string {
-    $p = setting_get('ai_auto_prompt');
+function ai_auto_prompt(int $userId): string {
+    $p = user_setting_get($userId, 'ai_auto_prompt');
     return $p !== null && trim($p) !== '' ? $p : AI_DEFAULT_AUTO_PROMPT;
 }
 
 /** Ist die KI für dieses Board nutzbar? Liefert null oder einen Grund-Code: disabled, no_credential, board_off, forbidden. */
 function ai_unavailable_reason(array $board): ?string {
     if (!wb_can('ai.use', $board)) return 'forbidden';
-    if (!ai_enabled()) return 'disabled';
+    if (!ai_enabled((int)$board['owner_user_id'])) return 'disabled';
     if (ai_credential_default((int)$board['owner_user_id']) === null) return 'no_credential';
     if (empty($board['settings']['ai'])) return 'board_off';
     return null;
@@ -243,9 +241,11 @@ function ai_unavailable_reason(array $board): ?string {
 
 /* ---------- Protokoll der Aufrufe ---------- */
 
-function ai_usage_log(?int $boardId, string $feature, array $credential, ?array $result, ?Throwable $error, ?int $userId = null): int {
+/** Jeder Aufruf wird der Besitzerin des Boards oder der Aktivität zugerechnet ($userId ist Pflicht). */
+
+function ai_usage_log(?int $boardId, string $feature, array $credential, ?array $result, ?Throwable $error, int $userId): int {
     return db_insert('INSERT INTO ai_usage (user_id, board_id, feature, provider, model, input_tokens, output_tokens, duration_ms, ok, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-        $userId ?? (int)(wb_current_user()['id'] ?? 1), $boardId, $feature, (string)$credential['provider'],
+        $userId, $boardId, $feature, (string)$credential['provider'],
         (string)($result['model'] ?? $credential['model'] ?? ''),
         (int)($result['input_tokens'] ?? 0), (int)($result['output_tokens'] ?? 0), (int)($result['duration_ms'] ?? 0),
         $error === null ? 1 : 0, $error === null ? null : mb_substr(($error instanceof AiException ? $error->kind . ': ' : '') . $error->getMessage(), 0, 500), wb_now(),
@@ -253,8 +253,7 @@ function ai_usage_log(?int $boardId, string $feature, array $credential, ?array 
 }
 
 /** Token des laufenden und des letzten Monats (nach lokaler Zeit). */
-function ai_usage_summary(?int $userId = null): array {
-    $userId = $userId ?? (int)(wb_current_user()['id'] ?? 1);
+function ai_usage_summary(int $userId): array {
     $tz = new DateTimeZone((string)wb_config('timezone', 'Europe/Zurich'));
     $startThis = (new DateTime('first day of this month 00:00', $tz));
     $startLast = (clone $startThis)->modify('-1 month');
@@ -267,7 +266,6 @@ function ai_usage_summary(?int $userId = null): array {
     ];
 }
 
-function ai_usage_recent(int $limit = 20, ?int $userId = null): array {
-    $userId = $userId ?? (int)(wb_current_user()['id'] ?? 1);
+function ai_usage_recent(int $limit, int $userId): array {
     return db_all('SELECT u.*, b.name AS board_name FROM ai_usage u LEFT JOIN boards b ON b.id = u.board_id WHERE u.user_id = ? ORDER BY u.id DESC LIMIT ' . max(1, min(100, $limit)), [$userId]);
 }

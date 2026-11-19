@@ -23,13 +23,13 @@ function mcp_rpc_error(mixed $id, int $code, string $message): array {
 }
 
 // Token prüfen: falscher oder fehlender Token sieht aus wie eine nicht existierende Seite.
-$token = (string)($_GET['token'] ?? '');
-$stored = db_is_installed() ? (string)setting_get('api_token') : '';
-if ($token === '' || $stored === '' || !hash_equals($stored, $token)) {
+// Bis U1b gilt der bisherige api_token; er meldet über dieselbe Funktion wie /api/ den Benutzer 1 im
+// Arbeitsbereich «Privat» an (lib/auth.php), und jedes Werkzeug läuft durch wb_can().
+$auth = db_is_installed() && db_schema_current() ? wb_auth() : null;
+if ($auth === null || $auth['kind'] !== 'token') {
     http_response_code(404);
     exit;
 }
-db_migrate();
 
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
@@ -123,7 +123,7 @@ function mcp_json(array $data): array {
 function mcp_board_ref(array $args): array {
     $ref = trim((string)($args['board'] ?? ''));
     if ($ref === '') throw new InvalidArgumentException('Parameter «board» (Kurzwort oder Schlüssel) fehlt.');
-    $b = board_find($ref);
+    $b = board_owned($ref);
     if (!$b) {
         // Archivierte Boards sind über das Kurzwort nicht erreichbar; der Schlüssel findet sie trotzdem.
         throw new InvalidArgumentException('Kein aktives Board mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte Boards lassen sich über list_boards mit status=archived und ihren Schlüssel ansprechen.');
@@ -557,9 +557,14 @@ function mcp_tools(): array {
 }
 
 function mcp_call(string $name, array $a): array {
+    // Anlegen braucht das Recht im Arbeitsbereich; alle anderen Werkzeuge finden ihr Objekt über board_owned()
+    // und activity_owned(), die nur Eigenes liefern.
+    if (str_starts_with($name, 'create_') && !in_array($name, ['create_post', 'create_comment', 'create_bundle'], true) && !wb_can('content.create')) {
+        throw new InvalidArgumentException('Nicht berechtigt.');
+    }
     switch ($name) {
         case 'list_boards':
-            $list = boards_list(['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'sort' => $a['sort'] ?? 'activity']);
+            $list = boards_list(wb_scope() + ['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'sort' => $a['sort'] ?? 'activity']);
             if (!$list) return mcp_text('Keine Boards gefunden.');
             return mcp_json(['count' => count($list), 'boards' => array_map('mcp_board_summary', $list)]);
 
@@ -654,14 +659,14 @@ function mcp_call(string $name, array $a): array {
 
         case 'get_board_qr':
             $ref = trim((string)($a['board'] ?? ''));
-            if (!board_find($ref) && ($t = activity_find($ref))) $v = activity_owner_view($t);
+            if (!board_owned($ref) && ($t = activity_owned($ref))) $v = activity_owner_view($t);
             else $v = board_owner_view(mcp_board_ref($a));
             return ['content' => [
                 ['type' => 'text', 'text' => 'QR-Code für ' . $v['url'] . "\nPNG: " . $v['qr_png'] . "?px=20\nSVG: " . $v['qr_svg']],
                 ['type' => 'image', 'data' => base64_encode(wb_qr_png($v['url'], 10)), 'mimeType' => 'image/png'],
             ]];
         case 'list_targets':
-            $list = activities_list(['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'target']);
+            $list = activities_list(wb_scope() + ['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'target']);
             if (!$list) return mcp_text('Keine Zielscheiben gefunden.');
             return mcp_json(['count' => count($list), 'targets' => array_map('mcp_target_summary', $list)]);
 
@@ -690,7 +695,7 @@ function mcp_call(string $name, array $a): array {
             return mcp_text('Zielscheibe «' . $t['name'] . '» in den Papierkorb gelegt; der Besitzer kann sie in der Bibliothek dreissig Tage lang wiederherstellen.');
 
         case 'list_wordclouds':
-            $list = activities_list(['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'wordcloud']);
+            $list = activities_list(wb_scope() + ['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'wordcloud']);
             if (!$list) return mcp_text('Keine Wortwolken gefunden.');
             return mcp_json(['count' => count($list), 'wordclouds' => array_map('mcp_wordcloud_summary', $list)]);
 
@@ -724,7 +729,7 @@ function mcp_call(string $name, array $a): array {
             return mcp_text('Wortwolke «' . $w['name'] . '» in den Papierkorb gelegt; der Besitzer kann sie in der Bibliothek dreissig Tage lang wiederherstellen.');
 
         case 'list_exams':
-            $list = activities_list(['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'exam']);
+            $list = activities_list(wb_scope() + ['q' => $a['query'] ?? '', 'status' => $a['status'] ?? 'active', 'tag' => $a['tag'] ?? '', 'type' => 'exam']);
             if (!$list) return mcp_text('Keine Prüfungen gefunden.');
             return mcp_json(['count' => count($list), 'exams' => array_map('mcp_exam_summary', $list)]);
 
@@ -836,7 +841,7 @@ function mcp_call(string $name, array $a): array {
 function mcp_wordcloud_ref(array $args): array {
     $ref = trim((string)($args['wordcloud'] ?? $args['target'] ?? $args['board'] ?? ''));
     if ($ref === '') throw new InvalidArgumentException('Parameter «wordcloud» (Kurzwort oder Schlüssel) fehlt.');
-    $w = activity_find($ref);
+    $w = activity_owned($ref);
     if (!$w || $w['type'] !== 'wordcloud') throw new InvalidArgumentException('Keine aktive Wortwolke mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_wordclouds und status=archived über ihren Schlüssel.');
     return $w;
 }
@@ -855,7 +860,7 @@ function mcp_wordcloud_summary(array $v): array {
 function mcp_target_ref(array $args): array {
     $ref = trim((string)($args['target'] ?? $args['board'] ?? ''));
     if ($ref === '') throw new InvalidArgumentException('Parameter «target» (Kurzwort oder Schlüssel) fehlt.');
-    $t = activity_find($ref);
+    $t = activity_owned($ref);
     if (!$t || $t['type'] !== 'target') throw new InvalidArgumentException('Keine aktive Zielscheibe mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_targets und status=archived über ihren Schlüssel.' . ($t ? ' «' . $ref . '» ist eine Wortwolke; dafür gibt es die Werkzeuge *_wordcloud.' : ''));
     return $t;
 }
@@ -874,7 +879,7 @@ function mcp_target_summary(array $v): array {
 function mcp_exam_ref(array $args): array {
     $ref = trim((string)($args['exam'] ?? $args['board'] ?? ''));
     if ($ref === '') throw new InvalidArgumentException('Parameter «exam» (Kurzwort oder Schlüssel) fehlt.');
-    $x = activity_find($ref);
+    $x = activity_owned($ref);
     if (!$x || $x['type'] !== 'exam') throw new InvalidArgumentException('Keine aktive Prüfung mit Kurzwort oder Schlüssel «' . $ref . '». Archivierte findest du mit list_exams und status=archived über ihren Schlüssel.');
     return $x;
 }

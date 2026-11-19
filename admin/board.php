@@ -5,7 +5,8 @@ admin_require_login();
 admin_check_csrf();
 
 $isNew = isset($_GET['new']);
-$board = $isNew ? null : board_by_key((string)($_GET['key'] ?? ''), true);
+$board = $isNew ? null : board_owned((string)($_GET['key'] ?? ''), true);
+if ($isNew && !wb_can('content.create')) { http_response_code(403); exit('Nicht berechtigt.'); }
 if (!$isNew && !$board) {
     http_response_code(404);
     admin_header('Nicht gefunden');

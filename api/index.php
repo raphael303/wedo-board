@@ -29,21 +29,25 @@ try {
     } elseif ($head === 'activities') {
         activity_owner_api($method, $parts);
     } elseif ($head === 'me' && $method === 'GET') {
-        wb_require_owner();
-        db_migrate();
-        wb_json(['ok' => true, 'owner' => true, 'version' => WB_VERSION, 'base_url' => wb_base_url()]);
+        $u = wb_require_login();
+        wb_json(['ok' => true, 'owner' => true, 'version' => WB_VERSION, 'base_url' => wb_base_url(),
+            'user' => ['id' => (int)$u['id'], 'name' => user_name($u), 'email' => $u['email']],
+            'workspace' => ['org_id' => wb_workspace_org_id(), 'name' => wb_workspace_name()],
+            'roles' => user_system_roles((int)$u['id']), 'auth' => wb_auth_kind()]);
     } elseif ($head === 'blocks') {
-        wb_require_can('guest.block');
-        db_migrate();
+        wb_require_login();
         $bid = (int)($parts[1] ?? 0);
         if ($method === 'GET' && $bid === 0) {
-            wb_json(['ok' => true, 'blocks' => guest_blocks_list(($_GET['status'] ?? 'active') !== 'all')]);
+            wb_json(['ok' => true, 'blocks' => guest_blocks_list(wb_user_id(), ($_GET['status'] ?? 'active') !== 'all')]);
         }
         if ($method === 'POST' && $bid > 0 && ($parts[2] ?? '') === 'lift') {
+            wb_check_csrf_header();
             wb_json(['ok' => true, 'block' => guest_block_lift($bid)]);
         }
     } elseif ($head === 'maintenance' && ($parts[1] ?? '') === 'purge' && $method === 'POST') {
-        wb_require_owner();
+        // Räumt den Papierkorb aller auf: nur der Super-Admin in einer Sitzung (sonst erledigt es der Cronjob).
+        wb_require_can('maintenance.purge');
+        wb_check_csrf_header();
         wb_json(['ok' => true, 'purged' => board_purge_deleted(30)]);
     } elseif ($head === 'feedback') {
         feedback_api($method, $parts);
@@ -71,7 +75,7 @@ function feedback_api(string $method, array $p): never {
         $lang = in_array($in['lang'] ?? '', wb_langs(), true) ? (string)$in['lang'] : 'de';
         $uid = wb_client_uid();
         try {
-            if (!wb_can('board.manage')) rate_limit($uid, 10);
+            if (wb_current_user() === null) rate_limit($uid, 10);
             $r = feedback_create($in, $uid, feedback_client_ip());
         } catch (InvalidArgumentException | RuntimeException $e) {
             $code = $e->getMessage();
@@ -79,8 +83,8 @@ function feedback_api(string $method, array $p): never {
         }
         wb_json(['ok' => true, 'id' => $r['id']], 201);
     }
-    wb_require_owner();
-    db_migrate();
+    // Rückmeldungen sind Fremdtext: nur Super-Admin und Admin in einer Sitzung, nie ein Token (wb_can prüft beides).
+    wb_require_can('feedback.manage');
     if ($method === 'GET' && $id === 0) {
         $list = feedback_list(['status' => $_GET['status'] ?? 'all', 'kind' => $_GET['kind'] ?? '', 'since' => $_GET['since'] ?? '', 'q' => $_GET['q'] ?? '', 'limit' => $_GET['limit'] ?? 200]);
         wb_json(['ok' => true, 'counts' => feedback_counts(), 'feedback' => array_map(fn($f) => feedback_view($f, true), $list)]);
@@ -111,11 +115,12 @@ function feedback_api(string $method, array $p): never {
 
 function guest_api(string $method, array $p): never {
     $board = board_by_key($p[1] ?? '');
-    if (!$board || $board['status'] === 'archived') wb_error('Board nicht gefunden.', 404);
     $uid = wb_client_uid();
+    $part = $board ? wb_participation($board, $uid) : null;
+    if (!$board || !$part['see']) wb_error('Board nicht gefunden.', 404);
     $owner = wb_can('board.manage', $board);
     $lang = wb_resolve_lang($board['lang']);
-    $blocked = !$owner && guest_block_active($uid, $board['id']) !== null;
+    $blocked = !$owner && $part['blocked'];
     $sub = $p[2] ?? '';
     $id = (int)($p[3] ?? 0);
     $action = $p[4] ?? '';
@@ -168,8 +173,8 @@ function guest_api(string $method, array $p): never {
 
     // Ab hier nur schreibende Aufrufe.
     if (!$owner) {
-        if ($board['status'] !== 'open') wb_error('board_closed', 403);
-        if ($blocked) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
+        if ($part['reason'] === 'closed') wb_error('board_closed', 403);
+        if (!$part['write']) wb_error(t('blocked', $lang), 403, ['code' => 'blocked']);
         rate_limit($uid);
     }
     $in = wb_read_json_body();
@@ -388,25 +393,28 @@ function owner_boards_api(string $method, array $p): never {
         exit;
     }
 
-    wb_require_owner();
-    db_migrate();
+    wb_require_login();
     $in = wb_read_json_body();
 
     if ($key === '') {
         if ($method === 'GET') {
-            wb_json(['ok' => true, 'boards' => boards_list([
+            wb_json(['ok' => true, 'boards' => boards_list(wb_scope() + [
                 'q' => $_GET['q'] ?? '', 'status' => $_GET['status'] ?? 'active', 'sort' => $_GET['sort'] ?? 'activity', 'tag' => $_GET['tag'] ?? '',
             ])]);
         }
         if ($method === 'POST') {
+            wb_require_can('content.create');
+            wb_check_csrf_header();
             $b = board_create($in);
             wb_json(['ok' => true, 'board' => board_owner_view($b)], 201);
         }
         wb_error('Unbekannter Aufruf.', 404);
     }
 
-    $board = board_find($key, true);
+    // Ein fremdes Board antwortet wie ein unbekanntes.
+    $board = board_owned($key, true);
     if (!$board) wb_error('Board nicht gefunden.', 404);
+    if ($method !== 'GET') wb_check_csrf_header();
 
     if ($action === '') {
         if ($method === 'GET') wb_json(['ok' => true, 'board' => board_owner_view($board)]);
@@ -422,7 +430,6 @@ function owner_boards_api(string $method, array $p): never {
         wb_json(['ok' => true, 'entries' => undo_history($board, max(1, min(50, (int)($_GET['limit'] ?? 10))))]);
     }
     if ($action === 'undo' && $method === 'POST' && (int)($p[3] ?? 0) > 0) {
-        wb_check_csrf_header();
         wb_json(['ok' => true, 'entry' => undo_apply($board, (int)$p[3])]);
     }
     if ($action === 'ai-organize' && $method === 'POST') {

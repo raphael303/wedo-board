@@ -378,7 +378,7 @@ function db_schema(): array {
             KEY ix_status (status, id),
             KEY ix_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-    ], db_schema_u1a());
+    ], db_schema_u1a(), db_schema_u1b());
 }
 
 function setting_get(string $k, ?string $default = null): ?string {

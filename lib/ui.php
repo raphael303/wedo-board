@@ -128,7 +128,7 @@ function ui_maintenance(): never {
     header('Retry-After: 30');
     header('Cache-Control: no-store');
     $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
-    if (str_starts_with($uri, '/api/') || str_starts_with($uri, '/mcp/')) {
+    if (str_starts_with($uri, '/api/') || str_starts_with($uri, '/mcp/') || str_starts_with($uri, '/oauth/token') || str_starts_with($uri, '/oauth/register') || str_starts_with($uri, '/.well-known/')) {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok' => false, 'error' => 'Wartung: Die Datenbank wird gerade aktualisiert. Bitte in einer Minute wieder versuchen.', 'code' => 'maintenance'], JSON_UNESCAPED_UNICODE);
         exit;

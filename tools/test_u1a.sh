@@ -68,7 +68,7 @@ LB=$(curl -s "${LX[@]}" "${JH[@]}" -d '{"name":"Leas Board","note":"Test","tags"
 [ -n "$LB" ] && [ "$(code "${AUTH[@]}" "$BASE/api/boards/$LB")" = 404 ] && ! curl -s "${AUTH[@]}" "$BASE/api/boards?status=all" | jq -r '.boards[].name' | grep -q 'Leas Board' \
   && [ "$(P 'echo implode(" ", array_map("strval", db_row("SELECT owner_user_id <> 1 AS o, org_id IS NULL AS p, LENGTH(identity_seed) AS s FROM boards WHERE bkey = ?", [$argv[1]])));' "$LB")" = '1 1 32' ] \
   && ok 'Lea legt ein Board an: gehört ihr, liegt in «Privat», hat einen Zufallswert; der Token des Benutzers 1 sieht es nicht' || bad "Leas Board: $LB"
-MCPX() { curl -s "${JH[@]}" -H 'Accept: application/json, text/event-stream' -d "$1" "$BASE/mcp/$TOKEN"; }
+MCPX() { curl -s "${JH[@]}" -H 'Accept: application/json, text/event-stream' -d "$1" -H "Authorization: Bearer $ATOK" "$BASE/mcp/private"; }
 R=$(MCPX '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_board","arguments":{"board":"'"$LB"'"}}}')
 echo "$R" | grep -q 'Kein aktives Board' && ! MCPX '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"list_boards","arguments":{"status":"all"}}}' | grep -q 'Leas Board' && ok 'Connector erreicht nur Eigenes (read_board, list_boards)' || bad "Connector und fremdes Board: $(echo "$R" | head -c 200)"
 [ "$(code "$BASE/mcp/$(printf '0%.0s' $(seq 48))")" = 404 ] && ok 'Connector mit falschem Token: 404' || bad 'Connector mit falschem Token'
@@ -217,9 +217,9 @@ php tools/rescue.php status > "$TMP/resc.out" 2>&1 && grep -q "$OWNER · bestät
 [ "$(code "$BASE/tools/rescue.php")" = 404 ] && [ "$(code "$BASE/tools/cron.php")" = 404 ] && ok 'Skripte unter tools/ sind aus dem Web nicht erreichbar' || bad 'tools/ erreichbar'
 # Wartung: Schema älter als der Code
 P 'setting_set("schema_version", "14");'; rm -f uploads/.schema
-R=$(curl -s -w ' %{http_code}' "${AUTH[@]}" "$BASE/api/me"); H=$(code "$BASE/"); M=$(code "$BASE/mcp/$TOKEN")
+R=$(curl -s -w ' %{http_code}' "${AUTH[@]}" "$BASE/api/me"); H=$(code "$BASE/"); M=$(code -H "Authorization: Bearer $ATOK" "$BASE/mcp/private")
 P 'setting_set("schema_version", (string)WB_SCHEMA_VERSION);'; rm -f uploads/.schema
-echo "$R" | grep -q '"code":"maintenance".* 503$' && [ "$H" = 503 ] && [ "$M" = 503 ] && [ "$(code "${AUTH[@]}" "$BASE/api/me")" = 200 ] && [ "$(cat uploads/.schema)" = 15 ] \
+echo "$R" | grep -q '"code":"maintenance".* 503$' && [ "$H" = 503 ] && [ "$M" = 503 ] && [ "$(code "${AUTH[@]}" "$BASE/api/me")" = 200 ] && [ "$(cat uploads/.schema)" = 16 ] \
   && ok 'veraltetes Schema: Wartungshinweis (503) statt Migration aus dem Web; danach wieder erreichbar' || bad "Wartung: $R / $H / $M"
 [ "$(curl -s "$BASE/install.php" -o /dev/null -w '%{http_code}')" = 403 ] && ok 'install.php nach der Installation gesperrt' || bad 'install.php offen'
 
@@ -271,8 +271,9 @@ OUT=$(php -r 'require "lib/bootstrap.php"; echo db_migrate(), " ", setting_get("
   $b = db_all("SELECT owner_user_id, org_id, identity_seed FROM boards UNION ALL SELECT owner_user_id, org_id, identity_seed FROM activities"); echo count($b), count(array_unique(array_column($b, "identity_seed"))), array_sum(array_column($b, "owner_user_id")), " ", preg_match("/^[0-9a-f]{32}$/", $b[0]["identity_seed"]), " ";
   echo user_setting_get(1, "ai_enabled"), user_setting_get(1, "ai_auto_prompt"), user_setting_get(1, "ai_organize_prefs"), setting_get("ai_enabled") ?? "-", " ", setting_get("teacher_approval"), " ";
   wb_auth_cli(1); echo count(boards_list(wb_scope())), " "; try { db_exec("INSERT INTO boards (bkey, name, created_at, updated_at, last_activity_at) VALUES (\"dddddddddddddddd\", \"x\", ?, ?, ?)", array_fill(0, 3, wb_now())); echo "vorgabe"; } catch (PDOException $e) { echo "keine-vorgabe"; }' 2>&1)
-[ "$OUT" = '1 15 raphael@example.org pw bestätigt superadmin ohne-role hash-weg token 333 1 1Meine Anweisung{}- manual 2 keine-vorgabe' ] \
-  && ok 'Migration 15: Benutzer 1 mit Adresse, bisherigem Passwort und Rolle; Token bleibt; Boards behalten ihre Besitzerin und erhalten Zufallswerte; Vorgabe DEFAULT 1 entfernt' || bad "Migration 15: $OUT"
-[ "$(php -r 'require "lib/bootstrap.php"; echo db_migrate();')" = 0 ] && ok 'Migration 15 ein zweites Mal: nichts zu tun' || bad 'Migration 15 nicht idempotent'
+[ "$OUT" = '2 16 raphael@example.org pw bestätigt superadmin ohne-role hash-weg kein-token 333 1 1Meine Anweisung{}- manual 2 keine-vorgabe' ] \
+  && [ "$(php -r 'require "lib/bootstrap.php"; $t = db_row("SELECT * FROM api_tokens"); echo $t["purpose"], " ", $t["user_id"], " ", $t["token_hash"] === hash("sha256", str_repeat("ab", 24)) ? "hash" : "klartext", " ", $t["expires_at"] !== null ? "ablauf" : "ewig";')" = 'legacy_connector 1 hash ablauf' ] \
+  && ok 'Migrationen 15 und 16: Benutzer 1 mit Adresse, bisherigem Passwort und Rolle; der alte Token wird ein Hash mit Ablauf; Boards behalten ihre Besitzerin und erhalten Zufallswerte; Vorgabe DEFAULT 1 entfernt' || bad "Migration 15: $OUT"
+[ "$(php -r 'require "lib/bootstrap.php"; echo db_migrate();')" = 0 ] && ok 'Migration ein zweites Mal: nichts zu tun' || bad 'Migration 15 nicht idempotent'
 cp "$TMP/config.main.php" config.php; rm -f uploads/.schema; sleep 1
 set -o pipefail

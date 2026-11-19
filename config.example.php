@@ -37,7 +37,7 @@ return [
     // 'instance' => 'test',
     // Nur Testinstanz und Sandbox: Zugangsdaten des Besitzers, die tools/seed.php setzt (sonst zufällig bzw. fest
     // in der Sandbox).
-    // 'test_logins' => ['owner_password' => '…', 'api_token' => '…'],
+    // 'test_logins' => ['owner_password' => '…', 'api_token' => '…'],   // api_token: persönliches Token des Benutzers 1 für /api/
 
     // --- Nutzerverwaltung (seit 0.22.0) ---
     // Adresse des ersten Kontos (Benutzer 1, Super-Admin). Migration 15 und tools/seed.php brauchen sie; ohne sie

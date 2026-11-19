@@ -72,8 +72,16 @@ ok 'MariaDB 11.4 und PHP-Server laufen'
 echo '3. Installation'
 OWNER=owner@tafula.test
 OWNERPW=rauchtest-passwort-1
-TOKEN=$(curl -s -d "first_name=Olga&last_name=Owner&email=$OWNER&password=$OWNERPW&password2=$OWNERPW" "$BASE/install.php" | grep -oE '[0-9a-f]{48}' | head -1 || true)
-[ -n "$TOKEN" ] && ok 'install.php liefert API-Token' || bad 'kein API-Token aus install.php'
+curl -s -d "first_name=Olga&last_name=Owner&email=$OWNER&password=$OWNERPW&password2=$OWNERPW" "$BASE/install.php" > "$TMP/install.html"
+grep -q 'Installation abgeschlossen' "$TMP/install.html" && ! grep -qE '[0-9a-f]{48}|tfp_' "$TMP/install.html" && ok 'install.php richtet ein und zeigt kein Token mehr' || bad 'install.php'
+# Seit 0.23.0: persönliches Token für /api/ und ein Zugriffstoken einer OAuth-Verbindung für den Connector /mcp/private
+# (hier direkt über die Fachfunktionen erzeugt; den ganzen Ablauf über HTTP prüft tools/test_u1b.sh).
+TOKEN=$(php -r 'require "lib/bootstrap.php"; echo api_token_create(1, null, "personal", "Rauchtest", 30)[1];')
+ATOK=$(php -r 'require "lib/bootstrap.php"; $c = oauth_client_register(["client_name" => "Rauchtest-Connector", "redirect_uris" => ["https://rauchtest.example/cb"]]);
+  $cid = (int)db_row("SELECT id FROM oauth_clients WHERE client_id = ?", [$c["client_id"]])["id"]; oauth_client_touch($cid);
+  $g = db_insert("INSERT INTO oauth_grants (client_id, user_id, org_id, resource, scope, created_at) VALUES (?, 1, NULL, ?, ?, ?)", [$cid, mcp_resource_url(null), OAUTH_SCOPE, wb_now()]);
+  $t = oauth_issue_tokens($g); db_exec("UPDATE oauth_tokens SET expires_at = ? WHERE grant_id = ?", [wb_utc(time() + 86400), $g]); db_exec("DELETE FROM rate_limits"); echo $t["access_token"];')
+[ "${TOKEN:0:4}" = tfp_ ] && [ "${ATOK:0:4}" = tfa_ ] && ok 'persönliches Token und Zugriffstoken des Connectors erzeugt' || bad "Tokens für den Test: $TOKEN / $ATOK"
 AUTH=(-H "Authorization: Bearer $TOKEN")
 # Hilfen für die Anmeldung (seit 0.22.0): CSRF-Feld einer Seite, letzter Mailcode, Anmeldung in zwei Stufen.
 csrf_of() { curl -s -b "$1" -c "$1" "$BASE$2" | grep -oE 'name="csrf" value="[0-9a-f]{32}"' | head -1 | grep -oE '[0-9a-f]{32}'; }
@@ -102,7 +110,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 [ "$(code "$BASE/tools/test.sh")" = 404 ] && ok 'tools/ gesperrt' || bad 'tools/ sollte 404 sein'
 
 echo '5. Schnittstelle'
-curl -s "${AUTH[@]}" "$BASE/api/me" | jq -e '.owner == true and .user.id == 1 and .user.email == "owner@tafula.test" and .auth == "token" and .workspace.org_id == null and .roles == ["superadmin"]' >/dev/null && ok 'GET /api/me mit Token: Benutzer 1, Arbeitsbereich Privat' || bad '/api/me'
+curl -s "${AUTH[@]}" "$BASE/api/me" | jq -e '.owner == true and .user.id == 1 and .user.email == "owner@tafula.test" and .auth == "token" and .via == "personal" and .workspace.org_id == null and .roles == ["superadmin"]' >/dev/null && ok 'GET /api/me mit Token: Benutzer 1, Arbeitsbereich Privat' || bad '/api/me'
 [ "$(code "$BASE/api/me")" = 401 ] && [ "$(code -H 'Authorization: Bearer falsch' "$BASE/api/boards")" = 401 ] && ok 'ohne oder mit falschem Token: 401' || bad '401 ohne Anmeldung'
 BOARD=$(curl -s "${AUTH[@]}" -H 'Content-Type: application/json' \
   -d '{"name":"Rauchtest","type":"columns","columns":["Pro","Contra"],"note":"Test","tags":"test"}' "$BASE/api/boards")
@@ -120,13 +128,13 @@ curl -s "${J[@]}" "$BASE/api/b/$KEY/state?since=0" | jq -e '(.posts | length) >=
 
 echo '7. Connector'
 TOOLS=$(curl -s -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$BASE/mcp/$TOKEN" | jq '.result.tools | length' 2>/dev/null || echo 0)
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' -H "Authorization: Bearer $ATOK" "$BASE/mcp/private" | jq '.result.tools | length' 2>/dev/null || echo 0)
 [ "${TOOLS:-0}" -gt 20 ] && ok "tools/list liefert $TOOLS Werkzeuge" || bad "tools/list ($TOOLS)"
 NFB=$(curl -s -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$BASE/mcp/$TOKEN" | jq '[.result.tools[].name | select(test("feedback"))] | length' 2>/dev/null || echo x)
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' -H "Authorization: Bearer $ATOK" "$BASE/mcp/private" | jq '[.result.tools[].name | select(test("feedback"))] | length' 2>/dev/null || echo x)
 [ "$NFB" = "0" ] && ok 'Connector bietet keine Rückmeldungswerkzeuge an' || bad "Rückmeldungswerkzeuge im Connector ($NFB)"
 R=$(curl -s -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"list_feedback","arguments":{}}}' "$BASE/mcp/$TOKEN")
+  -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"list_feedback","arguments":{}}}' -H "Authorization: Bearer $ATOK" "$BASE/mcp/private")
 echo "$R" | grep -q 'Unbekanntes Werkzeug' && ok 'list_feedback über den Connector abgelehnt' || bad "list_feedback: $R"
 
 echo '8. Migrationen auf der Kommandozeile (wie beim Ausrollen)'
@@ -161,7 +169,7 @@ R=$(curl -s "${G[@]}" "${JH[@]}" -d '{"prompt":"Geändert?"}' "$BASE/api/a/$EKEY
 R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"type":"multi","prompt":"Welche sind Primzahlen?","options":[{"text":"2","correct":true},{"text":"4","correct":false},{"text":"5","correct":true}],"points":3}' "$BASE/api/activities/$EKEY/questions")
 [ "$(echo "$R" | jq -r '.question.status')" = accepted ] && [ "$(echo "$R" | jq -r '.question.points')" = 3 ] && ok 'Besitzer legt Frage mit eigenen Punkten an' || bad "Besitzerfrage: $R"
 curl -s "${AUTH[@]}" "$BASE/api/activities/$EKEY/results.md" | grep -q 'Hauptstadt der Schweiz' && ok 'Prüfung als Markdown' || bad 'results.md'
-MCP() { curl -s "${JH[@]}" -H 'Accept: application/json, text/event-stream' -d "$1" "$BASE/mcp/$TOKEN"; }
+MCP() { curl -s "${JH[@]}" -H 'Accept: application/json, text/event-stream' -d "$1" -H "Authorization: Bearer $ATOK" "$BASE/mcp/private"; }
 R=$(MCP '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"create_exam","arguments":{"name":"Connector-Prüfung","quota_max":0,"note":"Test","tags":["test"],"questions":[{"type":"truefalse","prompt":"Aussagen zu Wasser","options":[{"text":"Wasser kocht auf Meereshöhe bei 100 °C.","correct":true},{"text":"Eis ist schwerer als Wasser.","correct":false}]}]}}}')
 echo "$R" | jq -r '.result.content[0].text' | jq -e '.questions_added == 1' >/dev/null && ok 'Connector: create_exam mit Frage' || bad "create_exam: $R"
 R=$(MCP '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_exam","arguments":{"exam":"'"$EKEY"'"}}}')
@@ -468,7 +476,7 @@ grep -q 'id="ausgaben"' "$TMP/page.html" && grep -q 'name="student_pdf"' "$TMP/p
 
 echo '10. Migration 13 von Schema 12'
 OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
-[ "$OUT" = "3 15 3" ] && ok 'Migrationen 13 bis 15 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
+[ "$OUT" = "4 16 3" ] && ok 'Migrationen 13 bis 16 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
 
 echo '11. Sicherheit: Kopfzeilen, Sperren, Login-Bremse'
 curl -sI "$BASE/" > "$TMP/hdr"
@@ -480,12 +488,13 @@ DR=$(grep -E '^(Strict-Transport-Security|Referrer-Policy|X-Frame-Options|X-Cont
 [ -n "$HT" ] && [ "$HT" = "$DR" ] && ok 'Sicherheits-Kopfzeilen gesetzt, .htaccess und dev-router.php stimmen überein' || bad "Kopfzeilen weichen ab: .htaccess=[$HT] dev-router=[$DR]"
 [ "$(code "$BASE/dev-router.php")" = 404 ] && grep -q 'dev-router\\.php' .htaccess && ok 'dev-router.php gesperrt (lokal 404, Regel in .htaccess)' || bad 'dev-router.php nicht gesperrt'
 . tools/test_u1a.sh
+. tools/test_u1b.sh
 
 echo '12. Nutzerverwaltung U0: Schalter, reservierte Wörter, Instanz, Testbestand'
 php -r 'require "lib/bootstrap.php"; echo wb_registration_mode(), " ", wb_orgs_enabled() ? 1 : 0, " ", wb_instance(), " ", wb_test_helpers_enabled() ? 1 : 0;' > "$TMP/u0" 2>&1
 [ "$(cat "$TMP/u0")" = 'off 0 production 0' ] && ok 'Vorgaben: Registrierung aus, Organisationen aus, Produktion, keine Testhilfen' || bad "Vorgaben: $(cat "$TMP/u0")"
 OUT=$(php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM settings WHERE k IN (\"registration_mode\",\"orgs_enabled\")"); wb_auth_cli(1); $b = board_create(["name" => "Altes Konto-Board"]); db_exec("UPDATE boards SET slug = \"konto\" WHERE id = ?", [$b["id"]]); setting_set("schema_version", "13"); echo db_migrate(), " ", setting_get("schema_version"), " ", setting_get("registration_mode"), " ", setting_get("orgs_enabled"), " ", board_by_id($b["id"])["slug"] === "konto" ? "alt" : "neu", " ", setting_get("reserved_renamed") ? "vermerkt" : "-";' 2>/dev/null)
-[ "$OUT" = '2 15 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
+[ "$OUT" = '3 16 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
 for w in konto login oauth test datenschutz k; do
   R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"name":"Reserviert","slug":"'"$w"'","note":"Test","tags":"test"}' "$BASE/api/boards")
   echo "$R" | jq -e '.board' >/dev/null && bad "reserviertes Wort $w angenommen"

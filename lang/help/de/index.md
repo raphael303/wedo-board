@@ -6,6 +6,7 @@ Diese Hilfe ist im Aufbau. Sie wächst mit jeder Etappe der Nutzerverwaltung und
 
 - [Anmelden und zweite Stufe](/help/anmelden)
 - [Konto, Passwort und Adresse](/help/konto)
+- [Connector für Claude und persönliche Tokens](/help/connector)
 
 ## Boards und Aktivitäten
 

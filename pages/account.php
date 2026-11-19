@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
-// /account: Profil, Passwort, Adresse, zweite Stufe, Sitzungen, bekannte Geräte. Unterseiten: workspace (Wechsel
-// des Arbeitsbereichs), totp (App einrichten), email, email-revert und keep-totp (Links aus Mails).
+// /account: Profil, Passwort, Adresse, zweite Stufe, Connector und Verbindungen, persönliche Tokens, Sitzungen,
+// bekannte Geräte. Unterseiten: workspace (Wechsel des Arbeitsbereichs), totp (App einrichten), token (neues
+// persönliches Token), email, email-revert und keep-totp (Links aus Mails).
 if (!defined('WB_ROOT')) exit;
 require_once WB_ROOT . '/lib/qr.php';
 ui_check_csrf();
@@ -116,6 +117,52 @@ if ($sub === 'totp') {
     ui_footer();
     exit;
 }
+if ($sub === 'token') {
+    // Neues persönliches Token: erst nach erneuter Passwortabfrage; der Klartext erscheint nur in dieser einen Antwort.
+    if (!wb_can('api_token.manage')) page_not_found();
+    ui_require_reauth();
+    $spaces = wb_workspaces($u);
+    $raw = null;
+    if ($post) {
+        $label = wb_clean_text($_POST['label'] ?? '', 80);
+        $days = (int)($_POST['days'] ?? 0);
+        $wsIn = (string)($_POST['workspace'] ?? 'private');
+        $org = $wsIn === 'private' ? null : wb_valid_workspace($u, (int)$wsIn);
+        if ($label === '') $error = tx('Gib dem Token eine Bezeichnung, an der du es wiedererkennst.');
+        elseif (!in_array($days, API_TOKEN_DAYS, true)) $error = tx('Bitte eine Gültigkeit wählen.');
+        elseif ($wsIn !== 'private' && $org === null) $error = tx('Diesen Arbeitsbereich gibt es für dein Konto nicht.');
+        elseif (count(api_tokens_list($uid)) >= API_TOKEN_MAX) $error = tx('Du hast schon {n} Tokens. Widerrufe eines, das du nicht mehr brauchst.', ['n' => API_TOKEN_MAX]);
+        else {
+            [$tid, $raw] = api_token_create($uid, $org, 'personal', $label, $days);
+            audit_log('token.create', 'api_token', $tid, ['label' => $label, 'days' => $days], $org, $uid, 'self');
+            account_notify($u, tx('Neues persönliches Token für dein Konto bei {app}', ['app' => wb_app_name()]), tx("In deinem Konto wurde soeben das persönliche Token «{label}» für die Schnittstelle erzeugt.\n\nWenn du das nicht warst, widerrufe es sofort und ändere dein Passwort:\n\n{url}", ['label' => $label, 'url' => wb_base_url() . '/account#tokens']));
+        }
+    }
+    ui_header(tx('Persönliches Token'), 'account');
+    if ($raw !== null): ?>
+<section class="card narrow wide">
+  <h1><?= e(tx('Dein neues Token')) ?></h1>
+  <p><?= e(tx('Kopiere es jetzt. Es wird nur dieses eine Mal angezeigt; gespeichert ist nur ein Hash.')) ?></p>
+  <p><code class="token" style="word-break:break-all"><?= e($raw) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e($raw) ?>"><?= e(tx('Kopieren')) ?></button></p>
+  <p class="muted"><?= e(tx('Schick es im Header «Authorization: Bearer <Token>» an {url}. Behandle es wie ein Passwort.', ['url' => wb_base_url() . '/api/'])) ?></p>
+  <div class="actions"><a class="btn" href="/account#tokens"><?= e(tx('Ich habe es gesichert')) ?></a></div>
+</section>
+<?php else: ?>
+<section class="card narrow wide">
+  <h1><?= e(tx('Neues persönliches Token')) ?></h1>
+  <?php if ($error): ?><p class="error" role="alert"><?= e($error) ?></p><?php endif; ?>
+  <p class="muted"><?= e(tx('Ein persönliches Token ist für eigene Skripte an der Schnittstelle gedacht. Es erreicht nur deine eigenen Boards und Aktivitäten im gewählten Arbeitsbereich. Für Claude brauchst du keines: Dort trägst du die Adresse des Connectors ein.')) ?></p>
+  <form method="post" class="form"><?= ui_csrf_field() ?>
+    <div class="row"><label for="tl"><?= e(tx('Bezeichnung')) ?></label><input id="tl" name="label" type="text" maxlength="80" value="<?= e((string)($_POST['label'] ?? '')) ?>" required autofocus></div>
+    <div class="row two"><div><label for="tw"><?= e(tx('Arbeitsbereich')) ?></label><select id="tw" name="workspace"><?php foreach ($spaces as $sp): ?><option value="<?= $sp['org_id'] === null ? 'private' : (int)$sp['org_id'] ?>"><?= e($sp['name']) ?></option><?php endforeach; ?></select></div>
+      <div><label for="td"><?= e(tx('Gültig')) ?></label><select id="td" name="days"><?php foreach (API_TOKEN_DAYS as $d): ?><option value="<?= $d ?>" <?= $d === 90 ? 'selected' : '' ?>><?= e(tx('{n} Tage', ['n' => $d])) ?></option><?php endforeach; ?></select></div></div>
+    <div class="actions"><button class="btn" type="submit"><?= e(tx('Token erzeugen')) ?></button> <a href="/account#tokens"><?= e(tx('Abbrechen')) ?></a></div>
+  </form>
+</section>
+<?php endif;
+    ui_footer();
+    exit;
+}
 if ($sub !== '') page_not_found();
 
 $newCodes = null;
@@ -159,6 +206,12 @@ if ($post) {
             ui_require_reauth();
             if (user_has_totp($u)) $newCodes = totp_recovery_regenerate($uid);
             break;
+        case 'grant_revoke':
+            if (wb_can('connector.connect')) oauth_grant_revoke_own((int)($_POST['id'] ?? 0), $uid);
+            ui_redirect('/account#verbindungen', tx('Verbindung widerrufen. Das Programm hat ab sofort keinen Zugang mehr.'));
+        case 'token_revoke':
+            if (wb_can('api_token.manage')) api_token_revoke((int)($_POST['id'] ?? 0), $uid);
+            ui_redirect('/account#tokens', tx('Token widerrufen.'));
         case 'session_revoke':
             wb_session_revoke((int)($_POST['id'] ?? 0), $uid);
             ui_redirect('/account#sitzungen', tx('Sitzung beendet.'));
@@ -236,6 +289,43 @@ ui_header(tx('Konto'), 'account');
   <?php endif; ?>
 </section>
 </div>
+<?php
+$spaces = wb_workspaces($u);
+$grants = oauth_grants_list($uid);
+$tokens = api_tokens_list($uid);
+$spaceName = function (?string $org) use ($spaces): string {
+    foreach ($spaces as $sp) if (($sp['org_id'] === null && $org === null) || ($org !== null && $sp['org_id'] === (int)$org)) return $sp['name'];
+    return (string)(org_by_id((int)$org)['name'] ?? '?');
+};
+?>
+<section class="card" id="verbindungen"><h2><?= e(tx('Connector für Claude')) ?></h2>
+  <p class="muted"><?= e(tx('Trage in Claude unter «Connectoren» die Adresse deines Arbeitsbereichs als eigenen Connector ein. Claude leitet dich danach hierher, du meldest dich an und stimmst der Verbindung zu. Jeder Arbeitsbereich hat seinen eigenen Connector; du kannst mehrere nebeneinander verbinden.')) ?> <a href="/help/connector"><?= e(tx('Mehr dazu in der Hilfe')) ?></a></p>
+  <table class="results plain"><tr><th><?= e(tx('Arbeitsbereich')) ?></th><th><?= e(tx('Adresse des Connectors')) ?></th></tr>
+  <?php foreach ($spaces as $sp): $url = (string)mcp_resource_url($sp['org_id']); ?>
+    <tr><td><?= e($sp['name']) ?></td><td><code class="token" style="word-break:break-all"><?= e($url) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e($url) ?>"><?= e(tx('Kopieren')) ?></button></td></tr>
+  <?php endforeach; ?></table>
+  <h3><?= e(tx('Verbindungen')) ?></h3>
+  <?php if (!$grants): ?><p class="muted"><?= e(tx('Kein Programm ist mit deinem Konto verbunden.')) ?></p><?php else: ?>
+  <table class="results plain"><tr><th><?= e(tx('Programm')) ?></th><th><?= e(tx('Arbeitsbereich')) ?></th><th><?= e(tx('Verbunden')) ?></th><th><?= e(tx('Zuletzt benutzt')) ?></th><th></th></tr>
+  <?php foreach ($grants as $g): $ru = (array)json_decode((string)$g['redirect_uris_json'], true); ?>
+    <tr><td><?= e($g['client_name'] !== '' ? (string)$g['client_name'] : tx('Programm ohne Namen')) ?><br><span class="muted"><?= e(oauth_redirect_host((string)($ru[0] ?? ''))) ?></span></td>
+      <td><?= e($spaceName($g['org_id'])) ?></td><td><?= e((string)wb_local_time((string)$g['created_at'])) ?></td><td><?= e($g['last_used_at'] ? (string)wb_local_time((string)$g['last_used_at']) : '–') ?></td>
+      <td><form method="post" class="inline" data-confirm="<?= e(tx('Verbindung widerrufen? Das Programm verliert den Zugang sofort.')) ?>"><?= ui_csrf_field() ?><input type="hidden" name="action" value="grant_revoke"><input type="hidden" name="id" value="<?= (int)$g['id'] ?>"><button class="link-danger" type="submit"><?= e(tx('Widerrufen')) ?></button></form></td></tr>
+  <?php endforeach; ?></table>
+  <?php endif; ?>
+</section>
+<section class="card" id="tokens"><h2><?= e(tx('Persönliche Tokens')) ?></h2>
+  <p class="muted"><?= e(tx('Für eigene Skripte an der Schnittstelle. Ein Token erreicht nur deine eigenen Inhalte in seinem Arbeitsbereich und nie die Verwaltung.')) ?></p>
+  <?php if ($tokens): ?>
+  <table class="results plain"><tr><th><?= e(tx('Bezeichnung')) ?></th><th><?= e(tx('Arbeitsbereich')) ?></th><th><?= e(tx('Erzeugt')) ?></th><th><?= e(tx('Zuletzt benutzt')) ?></th><th><?= e(tx('Gültig bis')) ?></th><th></th></tr>
+  <?php foreach ($tokens as $t): ?>
+    <tr><td><?= e((string)$t['label']) ?><?= $t['purpose'] === 'legacy_connector' ? ' <span class="pill status-closed">' . e(tx('alter Connector')) . '</span>' : '' ?><br><code class="muted"><?= e((string)$t['token_prefix']) ?>…</code></td>
+      <td><?= e($spaceName($t['org_id'])) ?></td><td><?= e((string)wb_local_time((string)$t['created_at'])) ?></td><td><?= e($t['last_used_at'] ? (string)wb_local_time((string)$t['last_used_at']) : '–') ?></td><td><?= e($t['expires_at'] ? (string)wb_local_time((string)$t['expires_at']) : tx('ohne Ablauf')) ?></td>
+      <td><form method="post" class="inline" data-confirm="<?= e(tx('Token widerrufen? Skripte mit diesem Token verlieren den Zugang sofort.')) ?>"><?= ui_csrf_field() ?><input type="hidden" name="action" value="token_revoke"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>"><button class="link-danger" type="submit"><?= e(tx('Widerrufen')) ?></button></form></td></tr>
+  <?php endforeach; ?></table>
+  <?php endif; ?>
+  <div class="actions"><a class="btn-ghost" href="/account/token"><?= e(tx('Neues Token')) ?></a></div>
+</section>
 <section class="card" id="sitzungen"><h2><?= e(tx('Sitzungen')) ?></h2>
   <table class="results plain"><tr><th><?= e(tx('Gerät')) ?></th><th><?= e(tx('IP-Adresse')) ?></th><th><?= e(tx('Angemeldet')) ?></th><th><?= e(tx('Zuletzt aktiv')) ?></th><th></th></tr>
   <?php foreach ($sessions as $s): $cur = (int)$s['id'] === $session['id']; ?>

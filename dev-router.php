@@ -36,9 +36,29 @@ if (preg_match('~^/api/(.*)$~', $uri, $m)) {
     require __DIR__ . '/api/index.php';
     return true;
 }
-if (preg_match('~^/mcp/([a-f0-9]{48})/?$~', $uri, $m)) {
-    $_GET['token'] = $m[1];
+if (preg_match('~^/mcp/(private)/?$~', $uri, $m) || preg_match('~^/mcp/o/([a-z0-9]{16})/?$~', $uri, $m)) {
+    $_GET = ['ws' => $m[1]];
     require __DIR__ . '/mcp/index.php';
+    return true;
+}
+if (preg_match('~^/mcp/([a-f0-9]{48})/?$~', $uri, $m)) {
+    $_GET = ['token' => $m[1]];
+    require __DIR__ . '/mcp/index.php';
+    return true;
+}
+if ($uri === '/.well-known/oauth-authorization-server') {
+    $_GET = ['r' => 'as-meta'];
+    require __DIR__ . '/oauth.php';
+    return true;
+}
+if (preg_match('~^/\\.well-known/oauth-protected-resource/(mcp/private|mcp/o/[a-z0-9]{16})/?$~', $uri, $m)) {
+    $_GET = ['r' => 'pr-meta', 'res' => $m[1]];
+    require __DIR__ . '/oauth.php';
+    return true;
+}
+if (preg_match('~^/oauth/(register|authorize|token|revoke)/?$~', $uri, $m)) {
+    $_GET['r'] = $m[1];
+    require __DIR__ . '/oauth.php';
     return true;
 }
 if (preg_match('~^/(login|logout|signup|invite|account|manage|help|test)(?:/([a-z0-9-]+))?/?$~', $uri, $m)) {

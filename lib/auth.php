@@ -6,7 +6,7 @@ declare(strict_types=1);
  *
  * Ein Aufruf weist sich auf eine von zwei Arten aus:
  *   - mit einer Sitzung aus der Tabelle sessions (Cookie __Host-tafula_s, nur als Hash gespeichert),
- *   - bis U1b mit dem bisherigen api_token aus settings; er steht für den Benutzer 1 im Arbeitsbereich «Privat».
+ *   - mit einem Token (seit 0.23.0): OAuth-Verbindung eines Connectors, persönliches Token oder der frühere api_token.
  * wb_auth() liefert den Zusammenhang, wb_current_user() das Konto. Rechte entscheidet lib/rights.php.
  */
 
@@ -165,13 +165,11 @@ function wb_csrf_ok(string $given): bool {
     return $given !== '' && hash_equals(wb_csrf_token(), $given);
 }
 
+/** Token nur aus dem Header Authorization: Bearer. Der Ersatz ?token= ist seit 0.23.0 entfallen. */
 function wb_bearer_token(): ?string {
     $h = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '');
-    if (preg_match('/^Bearer\s+(.+)$/i', trim($h), $m)) {
-        return trim($m[1]);
-    }
-    if (!empty($_GET['token'])) {
-        return (string)$_GET['token'];
+    if (preg_match('/^Bearer\s+(\S+)$/i', trim((string)$h), $m)) {
+        return $m[1];
     }
     return null;
 }
@@ -179,7 +177,7 @@ function wb_bearer_token(): ?string {
 /* ---------- Wer ruft auf ---------- */
 
 /**
- * Zusammenhang des Aufrufs: ['kind' => 'session'|'token'|'cli', 'user' => Konto, 'session' => Zeile|null,
+ * Zusammenhang des Aufrufs: ['kind' => 'session'|'token'|'cli', 'via' => bei Tokens oauth|personal|legacy, 'user' => Konto, 'session' => Zeile|null,
  * 'org_id' => Arbeitsbereich (null bedeutet «Privat»)] oder null.
  */
 function wb_auth(): ?array {
@@ -194,17 +192,24 @@ function wb_auth(): ?array {
     return null;
 }
 
-/** Der bisherige api_token (bis U1b): Benutzer 1, Arbeitsbereich «Privat», nur Inhaltsrechte. */
+/**
+ * Die einzige Stelle, die Tokens prüft (seit 0.23.0 gegen die Tabellen oauth_tokens und api_tokens, nur Hashes).
+ * Welche Art gilt, bestimmt der Ort des Aufrufs in $GLOBALS['wb_token_context'] = [Ort, Adresse des Connectors]:
+ *   «api»    (Vorgabe) persönliche Tokens (tfp_…),
+ *   «mcp»    Zugriffstokens einer OAuth-Verbindung (tfa_…), nur am Connector, für den sie erteilt wurden,
+ *   «legacy» der frühere api_token an der alten Connector-Adresse /mcp/<token>.
+ * Das Ergebnis hat immer kind «token» (nie Systemrechte, nie Rückmeldungen), dazu via = oauth|personal|legacy.
+ * Konto und Zugehörigkeit zum Arbeitsbereich werden bei jedem Aufruf neu geprüft (lib/oauth.php).
+ */
 function wb_auth_from_token(string $token): ?array {
+    [$place, $resource] = $GLOBALS['wb_token_context'] ?? ['api', null];
     try {
-        $stored = (string)setting_get('api_token');
+        if (str_starts_with($token, 'tfr_') || str_starts_with($token, 'tfc_')) return null;
+        if (str_starts_with($token, 'tfa_')) return $place === 'mcp' && is_string($resource) ? oauth_access_auth($token, $resource) : null;
+        return $place === 'mcp' ? null : api_token_auth($token, (string)$place);
     } catch (Throwable $e) {
         return null;
     }
-    if ($stored === '' || !hash_equals($stored, $token)) return null;
-    $u = user_by_id(1);
-    if (!$u || !user_is_active($u)) return null;
-    return ['kind' => 'token', 'user' => $u, 'session' => null, 'org_id' => null];
 }
 
 /** Nur Kommandozeile (Testbestand, Cronjob, Tests): als ein Konto in einem Arbeitsbereich handeln. */

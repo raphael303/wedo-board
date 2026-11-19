@@ -12,7 +12,8 @@ declare(strict_types=1);
  * Eine Route, die Daten liest oder schreibt, ohne eine der beiden zu durchlaufen, ist ein Fehler.
  *
  * Grundregeln (Matrix, Abschnitt 1): Inhaltsrechte folgen nie aus einer System- oder Verwalterrolle; im
- * Verwaltungsteil gelten nur die Rechte des gewählten Arbeitsbereichs; ein Token trägt nie Systemrechte.
+ * Verwaltungsteil gelten nur die Rechte des gewählten Arbeitsbereichs; ein Token trägt nie Systemrechte. Das gilt
+ * für alle drei Arten von Tokens (OAuth-Verbindung, persönliches Token, früherer api_token): kind ist «token».
  */
 
 /** Fähigkeiten an einem Board oder einer Aktivität: nur die Besitzerin, nur im Arbeitsbereich des Objekts. */
@@ -51,6 +52,11 @@ function wb_can(string $ability, ?array $object = null): bool {
             // Jedes selbst verwaltete Konto führt Inhalte in «Privat»; in einer Schule nur als Lehrperson
             // (wb_auth() hat den Arbeitsbereich schon geprüft). Karten-Konten (U2) nehmen nur teil.
             return true;
+        case 'connector.connect':
+        case 'api_token.manage':
+            // Matrix «Eigenes Konto»: Verbindungen und persönliche Tokens verwaltet jedes selbst verwaltete Konto,
+            // aber nur in einer Sitzung, nie über ein Token. Der Plan wird ab U3 geprüft.
+            return $auth['kind'] === 'session';
         case 'block.lift':
             return $object !== null && isset($object['user_id']) && (int)$object['user_id'] === $uid;
         case 'ai.credential.manage':

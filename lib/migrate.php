@@ -284,6 +284,8 @@ function db_migrations(): array {
         ],
         // 15 (0.22.0, U1a der Nutzerverwaltung): Konten, Sitzungen, Rollen, Protokoll, Mail; siehe lib/schema_u1a.php.
         15 => array_merge(db_schema_u1a(), db_migration_15_alter()),
+        // 16 (0.23.0, U1b der Nutzerverwaltung): OAuth-Clients, Verbindungen, Tokens; siehe lib/schema_u1b.php.
+        16 => db_schema_u1b(),
     ];
 }
 
@@ -348,6 +350,7 @@ function db_migrate_locked(): int {
             if (!db_row('SELECT id FROM users WHERE id = 1')) db_exec("INSERT INTO users (id, role, display_name, created_at) VALUES (1, 'superadmin', 'Lehrperson', ?)", [wb_now()]);
         }
         if ($version === 15) db_migration_15_finish();
+        if ($version === 16) db_migration_16_finish();
         if ($version === 14) {
             foreach (db_fix_reserved_slugs() as $line) {
                 if (PHP_SAPI === 'cli') fwrite(STDERR, "Reserviertes Kurzwort ersetzt: $line\n");

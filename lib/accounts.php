@@ -366,6 +366,7 @@ function account_reset_finish(string $rawToken, string $pw, string $pw2): ?strin
     if (!login_token_use((int)$t['id'])) return tx('Dieser Link ist nicht mehr gültig. Fordere einen neuen an.');
     user_set_password((int)$u['id'], $pw);
     wb_sessions_revoke_user((int)$u['id']);
+    tokens_revoke_user((int)$u['id'], 'password_reset');
     db_exec('DELETE FROM known_devices WHERE user_id = ?', [(int)$u['id']]);
     account_notify($u, tx('Dein Passwort für {app} wurde geändert', ['app' => wb_app_name()]),
         tx("Das Passwort deines Kontos wurde soeben über einen Link per Mail neu gesetzt. Alle Sitzungen wurden beendet.\n\nWenn du das nicht warst, setze das Passwort sofort noch einmal zurück:\n\n{url}", ['url' => wb_base_url() . '/login/reset']));
@@ -433,6 +434,7 @@ function account_email_revert(string $rawToken, string $pw, string $pw2): ?strin
     db_exec('UPDATE users SET email = ? WHERE id = ?', [$old, (int)$u['id']]);
     user_set_password((int)$u['id'], $pw);
     wb_sessions_revoke_user((int)$u['id']);
+    tokens_revoke_user((int)$u['id'], 'password_reset');
     db_exec('DELETE FROM known_devices WHERE user_id = ?', [(int)$u['id']]);
     db_exec("UPDATE login_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL", [wb_now(), (int)$u['id']]);
     audit_log('account.email_revert', 'user', (int)$u['id'], [], null, (int)$u['id'], 'self');
@@ -492,6 +494,7 @@ function accounts_cleanup(): array {
     db_exec('DELETE FROM login_tokens WHERE expires_at < ?', [$old]);
     db_exec('DELETE FROM known_devices WHERE expires_at < ?', [wb_now()]);
     db_exec('DELETE FROM rate_limits WHERE minute < ?', [intdiv(time(), 60) - 61]);
+    $out['oauth_clients'] = oauth_cleanup()['clients'];
     return $out;
 }
 

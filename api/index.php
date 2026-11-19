@@ -33,7 +33,7 @@ try {
         wb_json(['ok' => true, 'owner' => true, 'version' => WB_VERSION, 'base_url' => wb_base_url(),
             'user' => ['id' => (int)$u['id'], 'name' => user_name($u), 'email' => $u['email']],
             'workspace' => ['org_id' => wb_workspace_org_id(), 'name' => wb_workspace_name()],
-            'roles' => user_system_roles((int)$u['id']), 'auth' => wb_auth_kind()]);
+            'roles' => user_system_roles((int)$u['id']), 'auth' => wb_auth_kind(), 'via' => wb_auth()['via'] ?? null]);
     } elseif ($head === 'blocks') {
         wb_require_login();
         $bid = (int)($parts[1] ?? 0);

@@ -4,7 +4,6 @@ require __DIR__ . '/lib/bootstrap.php';
 
 $errors = [];
 $done = false;
-$token = null;
 
 try {
     db();
@@ -30,8 +29,6 @@ if (!$errors && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$errors) {
         try {
             foreach (db_schema() as $sql) db()->exec($sql);
-            $token = bin2hex(random_bytes(24));
-            setting_set('api_token', $token);
             setting_set('installed_at', date('c'));
             setting_set('registration_mode', 'off');
             setting_set('orgs_enabled', '0');
@@ -82,10 +79,9 @@ code{background:#f3f4f6;padding:.15rem .4rem;border-radius:4px;word-break:break-
 <main>
 <?php if ($done): ?>
   <h1>Installation abgeschlossen</h1>
-  <p>Die Datenbank ist eingerichtet. Dein Schlüssel für die Schnittstelle (API‑Token) lautet:</p>
-  <p><code><?= e($token) ?></code></p>
+  <p>Die Datenbank ist eingerichtet.</p>
   <p>Melde dich jetzt unter <a href="/login">/login</a> mit deiner Adresse und deinem Passwort an und richte in deinem Konto die Authenticator-App ein; sie ist für den Super-Admin Pflicht.</p>
-  <p>Du findest den Token jederzeit wieder in der Bibliothek unter «Einstellungen». Lösche jetzt die Datei <code>install.php</code> vom Server oder lasse sie liegen; sie ist ab sofort gesperrt.</p>
+  <p>Den Connector für Claude und persönliche Tokens für die Schnittstelle richtest du danach in deinem Konto ein. Lösche jetzt die Datei <code>install.php</code> vom Server oder lasse sie liegen; sie ist ab sofort gesperrt.</p>
   <p><a href="<?= e(wb_admin_url()) ?>">Zur Bibliothek</a> (<code><?= e(wb_base_url() . wb_admin_url()) ?></code>, Pfad über <code>admin_path</code> in config.php)</p>
 <?php else: ?>
   <h1><?= e(wb_app_name()) ?> einrichten</h1>

@@ -5,16 +5,10 @@ admin_require_login();
 admin_check_csrf();
 
 $me = wb_user_id();
-// Der bisherige api_token steht bis U1b für den Benutzer 1 im Arbeitsbereich «Privat»; nur er sieht und erneuert ihn.
-$isTokenOwner = $me === 1 && wb_workspace_org_id() === null;
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
-    if ($action === 'token' && $isTokenOwner) {
-        setting_set('api_token', bin2hex(random_bytes(24)));
-        admin_flash('Neuer API‑Token erzeugt. Der alte gilt nicht mehr; trage den neuen im Connector ein.');
-        header('Location: ' . wb_admin_url() . 'settings.php'); exit;
-    } elseif ($action === 'purge' && wb_can('maintenance.purge')) {
+    if ($action === 'purge' && wb_can('maintenance.purge')) {
         $n = board_purge_deleted(30);
         admin_flash("$n gelöschte Elemente endgültig entfernt.");
         header('Location: ' . wb_admin_url() . 'settings.php'); exit;
@@ -73,7 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 $csrf = wb_csrf_token();
-$token = $isTokenOwner ? (string)setting_get('api_token') : '';
 $aiSecretLine = ai_secret_missing_line();
 $aiCred = ai_credential_default($me);
 $aiCredPublic = $aiCred ? ai_credential_row_public($aiCred) : null;
@@ -95,18 +88,12 @@ admin_header('Einstellungen', 'settings');
 ?>
 <div class="page-head"><h1>Einstellungen</h1></div>
 
-<?php if ($isTokenOwner): ?>
 <section class="card">
-  <h2>Schnittstelle für Claude</h2>
-  <p class="muted">Mit diesem Token darf Claude (oder jedes andere Programm) Boards anlegen, lesen, leeren und löschen. Behandle ihn wie ein Passwort.</p>
-  <p><code class="token" id="token"><?= e($token) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e($token) ?>">Kopieren</button></p>
-  <p class="muted">Basis‑Adresse der Schnittstelle: <code><?= e(wb_base_url()) ?>/api/</code>. Beschreibung in <code>API.md</code> im Repository.</p>
-  <h3>Connector für die Claude‑App</h3>
-  <p class="muted">Diese Adresse in den Claude‑Einstellungen unter «Connectoren» als eigenen Connector eintragen (ohne Anmeldung). Wer die Adresse kennt, kann Boards verwalten; bei einem neuen Token ändert sie sich.</p>
-  <p><code class="token"><?= e(wb_base_url()) ?>/mcp/<?= e($token) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e(wb_base_url()) ?>/mcp/<?= e($token) ?>">Kopieren</button></p>
-  <form method="post" data-confirm="Neuen Token erzeugen? Der bisherige funktioniert danach nicht mehr."><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="action" value="token"><button class="btn-ghost" type="submit">Neuen Token erzeugen</button></form>
+  <h2>Connector und Schnittstelle</h2>
+  <p class="muted">Der Connector dieses Arbeitsbereichs (<?= e(wb_workspace_name()) ?>) für Claude hat die Adresse:</p>
+  <p><code class="token"><?= e((string)mcp_resource_url(wb_workspace_org_id())) ?></code> <button class="btn-ghost" type="button" data-copy="<?= e((string)mcp_resource_url(wb_workspace_org_id())) ?>">Kopieren</button></p>
+  <p class="muted">Trage sie in Claude als eigenen Connector ein; Claude leitet dich danach zur Anmeldung und Zustimmung hierher. Verbindungen und persönliche Tokens für die Schnittstelle (<code><?= e(wb_base_url()) ?>/api/</code>) verwaltest du in deinem <a href="/account#verbindungen">Konto</a>.</p>
 </section>
-<?php endif; ?>
 
 <section class="card">
   <h2>Konto</h2>

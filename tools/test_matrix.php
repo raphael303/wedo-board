@@ -103,6 +103,69 @@ $check('Lea darf nicht in die Schule wechseln', wb_valid_workspace(user_by_id($p
 $check('Tom darf in die Schule wechseln', wb_valid_workspace(user_by_id($people['LP']), $school) === $school, true);
 $check('Super-Admin gehört keiner Schule an', wb_valid_workspace(user_by_id($people['SA']), $school) === null, true);
 
+/* ---------- U1b: Verbindungen und Tokens (Matrix «Eigenes Konto» und Grundregel 8) ---------- */
+foreach (['connector.connect', 'api_token.manage'] as $ability) {
+    foreach ($people as $role => $uid) {
+        $as($uid); $check("$ability für $role (Sitzung)", wb_can($ability), true);
+        $as($uid, null, 'token'); $check("$ability für $role (Token)", wb_can($ability), false);
+    }
+    $as(null); $check("$ability für Gast", wb_can($ability), false);
+}
+// Echte Tokens aller drei Arten durch wb_auth_from_token(): immer kind «token», nie Systemrechte, nie Rückmeldungen,
+// nur Eigenes im Arbeitsbereich der Verbindung, und jede Art nur an ihrem Ort.
+$mkOauth = function (int $uid, ?int $org): string {
+    $cid = db_insert('INSERT INTO oauth_clients (client_id, name, redirect_uris_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', ['tc_matrix_' . bin2hex(random_bytes(6)), 'Matrix', '["https://m.example/cb"]', wb_now(), wb_utc(time() + 3600)]);
+    $g = db_insert('INSERT INTO oauth_grants (client_id, user_id, org_id, resource, scope, created_at) VALUES (?, ?, ?, ?, ?, ?)', [$cid, $uid, $org, mcp_resource_url($org), OAUTH_SCOPE, wb_now()]);
+    return oauth_issue_tokens($g)['access_token'];
+};
+$via = function (string $raw, string $place, ?string $resource = null): ?array {
+    $GLOBALS['wb_token_context'] = [$place, $resource];
+    $a = wb_auth_from_token($raw);
+    $GLOBALS['wb_auth_cache'] = $a;
+    if ($a === null) wb_auth_cli(null);
+    return $a;
+};
+$privRes = mcp_resource_url(null); $schoolRes = mcp_resource_url($school);
+$check('Die Attrappe hat eine Connector-Adresse', is_string($schoolRes) && str_contains((string)$schoolRes, '/mcp/o/'), true);
+$tokens = [
+    'oauth' => [$mkOauth($people['SA'], null), 'mcp', $privRes],
+    'personal' => [api_token_create($people['SA'], null, 'personal', 'Matrix', 30)[1], 'api', null],
+    'legacy' => [api_token_create($people['SA'], null, 'legacy_connector', 'Matrix', 30, bin2hex(random_bytes(24)))[1], 'legacy', null],
+];
+foreach ($tokens as $kind => [$raw, $place, $res]) {
+    $a = $via($raw, $place, $res);
+    $check("Token ($kind) der Super-Admin meldet an", $a !== null && $a['kind'] === 'token' && $a['via'] === $kind, true);
+    foreach (array_keys(WB_SYSTEM_ABILITIES) as $ability) $check("$ability über Token ($kind) der Super-Admin", wb_can($ability), false);
+    $check("connector.connect über Token ($kind)", wb_can('connector.connect'), false);
+    $check("board.manage an Leas Board über Token ($kind) der Super-Admin", wb_can('board.manage', $objects['Leas Board'][0]), false);
+    foreach (['api', 'mcp', 'legacy'] as $other) {
+        if ($other === $place) continue;
+        $check("Token ($kind) gilt nicht am Ort «{$other}»", $via($raw, $other, $other === 'mcp' ? $privRes : null) === null, true);
+    }
+}
+$check('Zugriffstoken gilt nicht am Connector eines anderen Arbeitsbereichs', $via($tokens['oauth'][0], 'mcp', $schoolRes) === null, true);
+// Nora: Verbindung der Schule erreicht nur ihr Schulboard, die private nur ihr privates Board.
+$noraSchool = $mkOauth($people['LP2'], $school); $noraPriv = $mkOauth($people['LP2'], null);
+$via($noraSchool, 'mcp', $schoolRes);
+$check('Noras Schul-Verbindung: eigenes Schulboard', wb_can('board.manage', $objects['Noras Schulboard'][0]), true);
+$check('Noras Schul-Verbindung: eigenes privates Board', wb_can('board.manage', $objects['Noras privates Board'][0]), false);
+$check('Noras Schul-Verbindung: Toms Schulboard', wb_can('board.manage', $objects['Toms Schulboard'][0]), false);
+$via($noraPriv, 'mcp', $privRes);
+$check('Noras private Verbindung: eigenes privates Board', wb_can('board.manage', $objects['Noras privates Board'][0]), true);
+$check('Noras private Verbindung: eigenes Schulboard', wb_can('board.manage', $objects['Noras Schulboard'][0]), false);
+membership_remove($people['LP2'], 'org', $school, 'teacher');
+$check('nach dem Austritt wirkt Noras Schul-Verbindung nicht mehr', $via($noraSchool, 'mcp', $schoolRes) === null, true);
+$check('nach dem Austritt wirkt Noras private Verbindung weiter', $via($noraPriv, 'mcp', $privRes) !== null, true);
+membership_add($people['LP2'], 'org', $school, 'teacher', 1);
+$check('Lea bekommt keine Verbindung zur Schule (oauth_subject_ok)', oauth_subject_ok($people['P'], $school) === null, true);
+$check('ein Erneuerungstoken meldet nirgends an', $via('tfr_irgendwas', 'mcp', $privRes) === null && $via('tfr_irgendwas', 'api') === null, true);
+db_exec("DELETE FROM oauth_tokens WHERE grant_id IN (SELECT id FROM oauth_grants WHERE client_id IN (SELECT id FROM oauth_clients WHERE name = 'Matrix'))");
+db_exec("DELETE FROM oauth_grants WHERE client_id IN (SELECT id FROM oauth_clients WHERE name = 'Matrix')");
+db_exec("DELETE FROM oauth_clients WHERE name = 'Matrix'");
+db_exec("DELETE FROM api_tokens WHERE label = 'Matrix'");
+$GLOBALS['wb_token_context'] = ['api', null];
+$as(null);
+
 /* ---------- Was spätere Etappen bauen, ist «nein» ---------- */
 foreach (['class.create', 'class.manage', 'org.manage', 'license.manage', 'plan.edit', 'abuse.manage', 'account.delete', 'support.read', 'ai.models', 'demo.login', 'gibtsnicht'] as $ability) {
     foreach ($people as $role => $uid) { $as($uid); $check("$ability für $role (noch nicht gebaut)", wb_can($ability), false); }

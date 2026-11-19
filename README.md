@@ -35,7 +35,7 @@ Das Skript ändert weder `config.php` noch `uploads/`. Änderungen am Datenbanks
 
 ## Connector für Claude
 
-In der Bibliothek unter Einstellungen steht die Connector-Adresse `https://tafula.top/mcp/<token>`. Sie wird in den Claude-Einstellungen unter Connectoren als eigener Connector ohne Anmeldung hinzugefügt; danach kann Claude Boards anlegen, suchen, lesen, leeren, archivieren und QR-Codes liefern.
+Unter «Konto» steht die Adresse des Connectors für jeden Arbeitsbereich, zum Beispiel `https://tafula.top/mcp/private`. Sie wird in den Claude-Einstellungen unter Connectoren als eigener Connector hinzugefügt; Claude leitet danach zur Anmeldung und Zustimmung zu Tafula (OAuth). Danach kann Claude Boards anlegen, suchen, lesen, leeren, archivieren und QR-Codes liefern. Bis zur Umstellung der Produktion (Etappe U1c der Nutzerverwaltung) gilt dort noch die frühere Adresse `https://tafula.top/mcp/<token>` ohne Anmeldung.
 
 ## Lokale Entwicklung und Tests
 

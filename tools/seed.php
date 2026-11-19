@@ -20,7 +20,7 @@ declare(strict_types=1);
  * Personen mit und ohne Lehrperson-Freigabe, eine Schule als Attrappe, ein unbestätigtes Konto, eine offene
  * Einladung). Ihr Passwort steht unten und im öffentlichen Repository; es gilt nur in Sandbox und Testinstanz,
  * wo unter /test ohnehin ein Klick genügt.
- * config.php kann 'test_logins' => ['owner_password' => …, 'api_token' => …] setzen.
+ * config.php kann 'test_logins' => ['owner_password' => …, 'api_token' => …] setzen (api_token: persönliches Token des Benutzers 1).
  */
 
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
@@ -34,7 +34,9 @@ const SEED_SANDBOX_TOKEN = '5a4e4b0c5a4e4b0c5a4e4b0c5a4e4b0c5a4e4b0c5a4e4b0c';
 const SEED_CONTENT_TABLES = ['reactions', 'comments', 'posts', 'bundles', 'board_summaries', 'guest_names', 'guest_blocks', 'undo_log',
     'activity_responses', 'activity_groupings', 'exam_attempts', 'exam_questions', 'activity_guest_names', 'activities', 'boards',
     'feedback', 'ai_usage', 'ai_credentials', 'rate_limits',
-    'sessions', 'login_tokens', 'known_devices', 'invitations', 'terms_acceptances', 'audit_log', 'mail_queue', 'mail_suppressions', 'orgs'];
+    'sessions', 'login_tokens', 'known_devices', 'invitations', 'terms_acceptances', 'audit_log', 'mail_queue', 'mail_suppressions', 'orgs',
+    // Verbindungen hängen an Arbeitsbereichen, die beim Neuladen neu entstehen; persönliche Tokens des Benutzers 1 in «Privat» bleiben (siehe unten).
+    'oauth_tokens', 'oauth_codes', 'oauth_grants', 'oauth_clients'];
 
 function seed_fail(string $msg, int $code = 2): never {
     fwrite(STDERR, "seed: $msg\n");
@@ -74,6 +76,7 @@ if (seed_has_content()) {
     if (!$reset) seed_fail('Die Datenbank enthält schon einen Testbestand. Neu laden mit --reset.', 3);
     foreach (SEED_CONTENT_TABLES as $t) if (seed_table_exists($t)) db()->exec("DELETE FROM $t");
     // Alle Konten ausser dem Benutzer 1 (Besitzerin der Instanz) samt ihren Rollen.
+    if (seed_table_exists('api_tokens')) db()->exec('DELETE FROM api_tokens WHERE user_id <> 1 OR org_id IS NOT NULL');
     if (seed_table_exists('memberships')) { db()->exec('DELETE FROM memberships WHERE user_id <> 1 OR scope_type <> \'system\''); db()->exec('DELETE FROM users WHERE id <> 1'); }
     foreach (['reserved_renamed'] as $k) db_exec('DELETE FROM settings WHERE k = ?', [$k]);
     db_exec("DELETE FROM settings WHERE k LIKE 'exam\\_ai\\_pause\\_%' OR k LIKE 'u%:ai\\_%'");
@@ -103,7 +106,7 @@ if ($instance === 'sandbox') {
     $token = (string)($logins['api_token'] ?? SEED_SANDBOX_TOKEN);
 } else {
     $pw = isset($logins['owner_password']) ? (string)$logins['owner_password'] : null;
-    $token = (string)($logins['api_token'] ?? bin2hex(random_bytes(24)));
+    $token = isset($logins['api_token']) ? (string)$logins['api_token'] : null;
 }
 $now = wb_now();
 $owner = db_row('SELECT * FROM users WHERE id = 1');
@@ -117,7 +120,12 @@ if (!$owner) {
 }
 db_exec("INSERT IGNORE INTO memberships (user_id, scope_type, scope_id, role, created_at) VALUES (1, 'system', 0, 'superadmin', ?)", [$now]);
 db_exec("DELETE FROM settings WHERE k = 'admin_password_hash'");
-setting_set('api_token', $token);
+// Seit 0.23.0 gibt es keinen api_token in settings mehr. Die Sandbox (und eine Testinstanz mit test_logins) erhält
+// stattdessen ein persönliches Token des Benutzers 1 mit bekanntem Wert für die Schnittstelle /api/.
+db_exec("DELETE FROM settings WHERE k = 'api_token'");
+if ($token !== null && !db_row('SELECT id FROM api_tokens WHERE token_hash = ?', [wb_token_hash($token)])) {
+    api_token_create(1, null, 'personal', 'Testbestand', null, $token);
+}
 // Schalter: offene Registrierung und Organisationen auf Test und Sandbox.
 setting_set('registration_mode', 'open');
 setting_set('orgs_enabled', '1');
@@ -322,7 +330,11 @@ if ($set === 'test') {
 
     // Schule als Attrappe, damit Arbeitsbereiche geprüft werden können, bevor U4 Schulen baut.
     $district = db_insert("INSERT INTO orgs (okey, type, parent_id, name, place, verified_at, created_at, updated_at) VALUES (?, 'district', NULL, 'Testbezirk (Attrappe)', 'Testwil', ?, ?, ?)", [wb_random_key(16), $now, $now, $now]);
-    $school = db_insert("INSERT INTO orgs (okey, type, parent_id, name, place, verified_at, created_at, updated_at) VALUES (?, 'school', ?, 'Testschule (Attrappe)', 'Testwil', ?, ?, ?)", [wb_random_key(16), $district, $now, $now, $now]);
+    // Der Schlüssel der Attrappe ist fest pro Instanz, damit die Adresse ihres Connectors (/mcp/o/<okey>) ein
+    // Neuladen des Testbestands übersteht. Er ist kein Geheimnis.
+    $school = db_insert("INSERT INTO orgs (okey, type, parent_id, name, place, verified_at, created_at, updated_at) VALUES (?, 'school', ?, 'Testschule (Attrappe)', 'Testwil', ?, ?, ?)", [substr(hash('sha256', 'attrappe-schule|' . wb_base_url()), 0, 16), $district, $now, $now, $now]);
+    // Die Besitzerin der Instanz ist dort Lehrperson, damit sie zwei Connectoren (privat und Schule) nebeneinander prüfen kann (U1b).
+    membership_add(1, 'org', $school, 'teacher', 1);
     membership_add($tom, 'org', $school, 'teacher', 1);
     membership_add($nora, 'org', $school, 'teacher', 1);
 

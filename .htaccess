@@ -27,8 +27,16 @@ RewriteRule ^b/([a-z0-9]{16})/?$ board.php?key=$1 [L,QSA]
 # Schnittstelle: /api/...
 RewriteRule ^api/(.*)$ api/index.php?route=$1 [L,QSA]
 
-# Connector: /mcp/<token>
-RewriteRule ^mcp/([a-f0-9]{48})/?$ mcp/index.php?token=$1 [L,QSA]
+# Connector pro Arbeitsbereich (seit 0.23.0, Anmeldung über OAuth): /mcp/private und /mcp/o/<okey>
+RewriteRule ^mcp/private/?$ mcp/index.php?ws=private [L]
+RewriteRule ^mcp/o/([a-z0-9]{16})/?$ mcp/index.php?ws=$1 [L]
+# Früherer Connector: /mcp/<token> (gilt bis zum Ablauf des alten Tokens)
+RewriteRule ^mcp/([a-f0-9]{48})/?$ mcp/index.php?token=$1 [L]
+
+# Autorisierungsserver (seit 0.23.0): Metadaten, Registrierung, Zustimmung, Tokens
+RewriteRule ^\.well-known/oauth-authorization-server/?$ oauth.php?r=as-meta [L]
+RewriteRule ^\.well-known/oauth-protected-resource/(mcp/private|mcp/o/[a-z0-9]{16})/?$ oauth.php?r=pr-meta&res=$1 [L]
+RewriteRule ^oauth/(register|authorize|token|revoke)/?$ oauth.php?r=$1 [L,QSA]
 
 # Seiten der Nutzerverwaltung (seit 0.22.0): /login, /signup, /invite, /account, /manage, /help, /test
 RewriteRule ^(login|logout|signup|invite|account|manage|help|test)(?:/([a-z0-9-]+))?/?$ page.php?p=$1&s=$2 [L,QSA]

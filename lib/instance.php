@@ -55,8 +55,8 @@ function wb_instance_band(): string {
     if (wb_is_production()) return '';
     $label = wb_instance() === 'sandbox' ? 'Sandbox' : 'Testumgebung';
     // Senkrecht am linken Rand, damit es keine Bedienelemente verdeckt (unten liegen Eingabefelder, oben die Kopfzeile).
-    return '<style>.wb-instance-band{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:2147483647;background:#b45309;color:#fff;'
-        . 'writing-mode:vertical-rl;transform-origin:center;rotate:180deg;font:600 11px/1 -apple-system,system-ui,sans-serif;padding:8px 3px;'
+    return '<style>.wb-instance-band{position:fixed;left:0;top:50%;transform:translateY(-50%) rotate(180deg);z-index:2147483647;background:#b45309;color:#fff;'
+        . 'writing-mode:vertical-rl;font:600 11px/1 -apple-system,system-ui,sans-serif;padding:8px 3px;'
         . 'border-top-left-radius:5px;border-bottom-left-radius:5px;pointer-events:none;opacity:.88}'
         . '@media print{.wb-instance-band{display:none}}</style>'
         . '<div class="wb-instance-band" data-instance="' . wb_instance() . '">' . $label . ' · nicht für den Unterricht</div>';

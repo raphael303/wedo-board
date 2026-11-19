@@ -26,6 +26,6 @@ Die Wiederherstellung läuft in dieser Reihenfolge und wird als `tools/restore.s
 
 Probe: Eine Sicherung, die nie zurückgespielt wurde, ist keine. Einmal im Quartal und vor jeder Umstellung der Produktion spielt Claude die neueste Sicherung der Produktion in die Sandbox auf dem Pi ein (ohne Ausgang ins Netz), prüft Anmeldung, ein Board und ein Bild und löscht die Kopie wieder. Derselbe Ablauf dient dem Probelauf der Migration in U1c.
 
-## Offene Entscheide für Raphael
+## Entscheide von Raphael (19.11.2026)
 
-Erstens, ob die Kopie ausser Haus auf dem Pi liegen soll oder zusätzlich an einem dritten Ort. Zweitens, ob es Monatsstände über neunzig Tage hinaus geben soll. Drittens, wo der Ausdruck des privaten Schlüssels liegt.
+Die Kopie ausser Haus liegt vorerst nur auf dem Pi; einen dritten Ort gibt es nicht. Aufbewahrt wird höchstens neunzig Tage, auch auf dem Pi; Monatsstände darüber hinaus gibt es nicht (statt «30 Tage und 12 Monatsstände» also die Stände der letzten neunzig Tage). Offen ist noch, wo der Ausdruck des privaten Schlüssels liegt; das entscheidet Raphael, bevor die Sicherung vor U1c eingerichtet wird.

@@ -291,6 +291,7 @@ function post_create(array $board, array $in, string $uid, string $name): array 
     $image = null;
     if (!empty($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
         if (!$board['settings']['images']) wb_error('Bilder sind ausgeschaltet.', 403);
+        if (!wb_is_production()) wb_error('Auf der Testumgebung laden Gäste keine Bilder hoch.', 403);
         $image = wb_store_image($_FILES['image'], $board['bkey']);
     }
     if ($body === '' && $image === null && $link === null) wb_error('body_required', 422);
@@ -346,6 +347,7 @@ function post_update(array $board, array $post, array $in, bool $owner, ?int &$u
     }
     if (!empty($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
         if (!$board['settings']['images'] && !$owner) wb_error('Bilder sind ausgeschaltet.', 403);
+        if (!$owner && !wb_is_production()) wb_error('Auf der Testumgebung laden Gäste keine Bilder hoch.', 403);
         $img = wb_store_image($_FILES['image'], $board['bkey']);
         if ($post['image']) post_delete_image($board['bkey'], $post['image']);
         $fields[] = 'image = ?'; $params[] = $img;

@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.20.0');
-define('WB_SCHEMA_VERSION', 13);
+define('WB_VERSION', '0.21.0');
+define('WB_SCHEMA_VERSION', 14);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {
@@ -48,6 +48,7 @@ wb_redirect_legacy_host();
 
 require WB_ROOT . '/lib/helpers.php';
 require WB_ROOT . '/lib/db.php';
+require WB_ROOT . '/lib/instance.php';
 require WB_ROOT . '/lib/auth.php';
 require WB_ROOT . '/lib/i18n.php';
 require WB_ROOT . '/lib/names.php';
@@ -65,3 +66,4 @@ require WB_ROOT . '/lib/exam_attempt.php';
 require WB_ROOT . '/lib/exam_print.php';
 require WB_ROOT . '/lib/feedback.php';
 require WB_ROOT . '/lib/migrate.php';
+wb_instance_page_setup();

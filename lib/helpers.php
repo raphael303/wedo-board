@@ -54,7 +54,11 @@ function wb_admin_url(string $rest = ''): string {
 }
 
 function wb_reserved_slugs(): array {
-    return [wb_admin_path(), 'admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about'];
+    return [wb_admin_path(), 'admin', 'api', 'a', 'b', 'mcp', 'install', 'uploads', 'assets', 'lib', 'lang', 'vendor', 'index', 'board', 'login', 'logout', 'export', 'config', 'www', 'static', 'help', 'about',
+        // Seit 0.21.0 für die Nutzerverwaltung reserviert (Konzept Abschnitt 6), auch Wörter, die heute noch nichts tun.
+        'signup', 'account', 'library', 'manage', 'hilfe', 'konto', 'registrieren', 'verwaltung', 'bibliothek', 'anmelden',
+        'oauth', 'authorize', 'token', 'register', 'invite', 'join', 'support', 'abuse', 'report', 'melden', 'status', 'test',
+        'demo', 'k', 'terms', 'privacy', 'impressum', 'datenschutz', 'settings', 'billing', 'docs', 'robots', 'well-known'];
 }
 
 function wb_valid_slug(?string $s): ?string {

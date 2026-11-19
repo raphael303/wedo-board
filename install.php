@@ -31,6 +31,8 @@ if (!$errors && $_SERVER['REQUEST_METHOD'] === 'POST') {
             setting_set('admin_password_hash', password_hash($pw, PASSWORD_DEFAULT));
             setting_set('installed_at', date('c'));
             setting_set('schema_version', (string)WB_SCHEMA_VERSION);
+            setting_set('registration_mode', 'off');
+            setting_set('orgs_enabled', '0');
             db_ensure_superadmin();
             if (!is_dir(__DIR__ . '/uploads')) @mkdir(__DIR__ . '/uploads', 0755);
             $done = true;

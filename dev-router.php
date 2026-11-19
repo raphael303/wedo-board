@@ -50,7 +50,7 @@ if (preg_match('~^/([a-z0-9][a-z0-9-]{1,30}[a-z0-9])/?$~', $uri, $m) && !is_dir(
     require __DIR__ . '/board.php';
     return true;
 }
-if (preg_match('~^/(lib|lang|vendor|tools|\.git|\.cyon)(/|$)~', $uri) || preg_match('~^/(config.*\.php|dev-router\.php|.*\.md)$~', $uri)) {
+if (preg_match('~^/(lib|lang|vendor|tools|docs|\.git|\.cyon)(/|$)~', $uri) || preg_match('~^/(config.*\.php|dev-router\.php|.*\.md)$~', $uri)) {
     http_response_code(404);
     return true;
 }

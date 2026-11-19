@@ -277,7 +277,34 @@ function db_migrations(): array {
                 UNIQUE KEY ux_activity_name (activity_id, name)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ],
+        // 14 (0.21.0, U0 der Nutzerverwaltung): Schalter mit Vorgabe «aus»; die Prüfung der reservierten Wörter folgt unten.
+        14 => [
+            "INSERT IGNORE INTO settings (k, v) VALUES ('registration_mode', 'off')",
+            "INSERT IGNORE INTO settings (k, v) VALUES ('orgs_enabled', '0')",
+        ],
     ];
+}
+
+/**
+ * Gibt Boards und Aktivitäten, deren Kurzwort inzwischen reserviert ist, ein neues automatisches Wort.
+ * Liefert die Liste der Änderungen («alt -> neu»); sie steht zusätzlich in settings.reserved_renamed.
+ */
+function db_fix_reserved_slugs(): array {
+    $reserved = wb_reserved_slugs();
+    $in = implode(',', array_fill(0, count($reserved), '?'));
+    $changed = [];
+    foreach (db_all("SELECT id, slug FROM boards WHERE slug IN ($in)", $reserved) as $r) {
+        $new = board_free_slug();
+        db_exec('UPDATE boards SET slug = ? WHERE id = ?', [$new, (int)$r['id']]);
+        $changed[] = 'Board ' . $r['slug'] . ' -> ' . $new;
+    }
+    foreach (db_all("SELECT id, slug FROM activities WHERE slug IN ($in)", $reserved) as $r) {
+        $new = activity_free_slug();
+        db_exec('UPDATE activities SET slug = ? WHERE id = ?', [$new, (int)$r['id']]);
+        $changed[] = 'Aktivität ' . $r['slug'] . ' -> ' . $new;
+    }
+    if ($changed) setting_set('reserved_renamed', implode('; ', $changed));
+    return $changed;
 }
 
 function db_migrate(): int {
@@ -303,6 +330,11 @@ function db_migrate(): int {
         }
         if ($version === 3) {
             db_ensure_superadmin();
+        }
+        if ($version === 14) {
+            foreach (db_fix_reserved_slugs() as $line) {
+                if (PHP_SAPI === 'cli') fwrite(STDERR, "Reserviertes Kurzwort ersetzt: $line\n");
+            }
         }
         setting_set('schema_version', (string)$version);
         $applied++;

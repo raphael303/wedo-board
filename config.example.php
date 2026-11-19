@@ -31,4 +31,11 @@ return [
     'default_lang' => 'de',
     // Zeitzone für Zeitangaben.
     'timezone' => 'Europe/Zurich',
+    // Nur Testinstanz und Sandbox (seit 0.21.0): 'test' oder 'sandbox'. Fehlt die Zeile, gilt die Installation
+    // als Produktion. Ausserhalb der Produktion: Band «Testumgebung», noindex, keine Gästebilder, nur der
+    // Fake-Anbieter, und tools/seed.php darf den Testbestand laden.
+    // 'instance' => 'test',
+    // Nur Testinstanz und Sandbox: Zugangsdaten des Besitzers, die tools/seed.php setzt (sonst zufällig bzw. fest
+    // in der Sandbox).
+    // 'test_logins' => ['owner_password' => '…', 'api_token' => '…'],
 ];

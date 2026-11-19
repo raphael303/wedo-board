@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rauchtest für Tafula auf dem Raspberry Pi (Workspace /srv/workspaces/wedo-board).
-# Startet eine Wegwerf-MariaDB 10.6 in Docker (127.0.0.1:3307) und den eingebauten PHP-Server
+# Startet eine Wegwerf-MariaDB 11.4 (wie auf cyon) in Docker (127.0.0.1:3307) und den eingebauten PHP-Server
 # (127.0.0.1:8090), installiert frisch und prüft Startseite, Schnittstelle, Gäste-Aufrufe,
 # Connector und Migrationen auf der Kommandozeile. Danach wird alles wieder entfernt.
 #
@@ -42,7 +42,7 @@ echo '2. Datenbank und Server'
 docker rm -f "$DB" >/dev/null 2>&1 || true
 docker run -d --rm --name "$DB" -p 127.0.0.1:3307:3306 --tmpfs /var/lib/mysql \
   -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=wedoboard -e MARIADB_USER=wedo -e MARIADB_PASSWORD=wedo \
-  mariadb:10.6 >/dev/null
+  mariadb:11.4 >/dev/null
 for i in $(seq 60); do
   docker exec "$DB" mariadb -uwedo -pwedo -e 'SELECT 1' wedoboard >/dev/null 2>&1 && break
   sleep 1
@@ -60,10 +60,10 @@ return [
     'timezone' => 'Europe/Zurich',
 ];
 PHP
-PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:$PORT dev-router.php >"$TMP/server.log" 2>&1 &
+PHP_CLI_SERVER_WORKERS=4 php -d opcache.enable=0 -d opcache.enable_cli=0 -S 127.0.0.1:$PORT dev-router.php >"$TMP/server.log" 2>&1 &
 SRV=$!
 for i in $(seq 20); do curl -s -o /dev/null "$BASE/" && break; sleep 0.5; done
-ok 'MariaDB 10.6 und PHP-Server laufen'
+ok 'MariaDB 11.4 und PHP-Server laufen'
 
 echo '3. Installation'
 TOKEN=$(curl -s -d 'password=testpass123&password2=testpass123' "$BASE/install.php" | grep -oE '[0-9a-f]{48}' | head -1 || true)
@@ -443,7 +443,7 @@ grep -q 'id="ausgaben"' "$TMP/page.html" && grep -q 'name="student_pdf"' "$TMP/p
 
 echo '10. Migration 13 von Schema 12'
 OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
-[ "$OUT" = "1 13 3" ] && ok 'Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
+[ "$OUT" = "2 14 3" ] && ok 'Migrationen 13 und 14 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
 
 echo '11. Sicherheit: Kopfzeilen, Sperren, Login-Bremse'
 curl -sI "$BASE/" > "$TMP/hdr"
@@ -470,6 +470,56 @@ R=$(curl -s -o /dev/null -w '%{http_code}' -b 'wb_known=9999999999.0000000000000
 php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM rate_limits");'
 R=$(curl -s -o /dev/null -w '%{http_code}' -c "$TMP/lj2" -d 'password=testpass123' "$LG")
 [ "$R" = 302 ] && grep -q wb_known "$TMP/lj2" && ok 'ohne Fehlversuche: Anmeldung 302 und Cookie wb_known' || bad "Anmeldung nach Zurücksetzen: $R"
+
+echo '12. Nutzerverwaltung U0: Schalter, reservierte Wörter, Instanz, Testbestand'
+php -r 'require "lib/bootstrap.php"; echo wb_registration_mode(), " ", wb_orgs_enabled() ? 1 : 0, " ", wb_instance(), " ", wb_test_helpers_enabled() ? 1 : 0;' > "$TMP/u0" 2>&1
+[ "$(cat "$TMP/u0")" = 'off 0 production 0' ] && ok 'Vorgaben: Registrierung aus, Organisationen aus, Produktion, keine Testhilfen' || bad "Vorgaben: $(cat "$TMP/u0")"
+OUT=$(php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM settings WHERE k IN (\"registration_mode\",\"orgs_enabled\")"); $b = board_create(["name" => "Altes Konto-Board"]); db_exec("UPDATE boards SET slug = \"konto\" WHERE id = ?", [$b["id"]]); setting_set("schema_version", "13"); echo db_migrate(), " ", setting_get("schema_version"), " ", setting_get("registration_mode"), " ", setting_get("orgs_enabled"), " ", board_by_id($b["id"])["slug"] === "konto" ? "alt" : "neu", " ", setting_get("reserved_renamed") ? "vermerkt" : "-";' 2>/dev/null)
+[ "$OUT" = '1 14 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
+for w in konto login oauth test datenschutz k; do
+  R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"name":"Reserviert","slug":"'"$w"'","note":"Test","tags":"test"}' "$BASE/api/boards")
+  echo "$R" | jq -e '.board' >/dev/null && bad "reserviertes Wort $w angenommen"
+done
+ok 'reservierte Wörter als Kurzwort abgelehnt'
+curl -s "$BASE/" > "$TMP/home.html"
+! grep -q 'wb-instance-band' "$TMP/home.html" && ! curl -sI "$BASE/" | grep -qi '^x-robots-tag' && ok 'Produktion: kein Band, kein noindex' || bad 'Produktion zeigt Testband oder noindex'
+# Ab hier als Testinstanz (config.php erhält instance = test).
+cp config.php "$TMP/config.prod.php"
+sed -i "s/'timezone' => 'Europe\/Zurich',/'timezone' => 'Europe\/Zurich', 'instance' => 'test',/" config.php
+grep -q "'instance' => 'test'" config.php || bad 'config.php nicht umgestellt'
+# Der PHP-Server sieht die geänderte config.php nicht immer sofort; kurz warten, bis sie wirkt.
+for i in $(seq 20); do curl -s "$BASE/" | grep -q wb-instance-band && break; sleep 0.5; done
+for u in "/" "/b/$KEY" "/a/$EKEY" "/lehrerzimmer/login.php"; do
+  curl -s "$BASE$u" > "$TMP/band.html"
+  grep -q 'class="wb-instance-band" data-instance="test"' "$TMP/band.html" || bad "Band fehlt auf $u: $(head -c 200 "$TMP/band.html" | tr '\n' ' ')"
+done
+curl -sI "$BASE/" | grep -qi '^x-robots-tag: noindex' && ok 'Testinstanz: Band auf Start, Board, Aktivität, Bibliothek; noindex gesetzt' || bad 'noindex fehlt'
+curl -s "$BASE/api/b/$KEY" | head -c 300 | grep -q 'wb-instance-band' && bad 'Band in JSON-Antwort' || ok 'JSON-Antworten ohne Band'
+php -r '$i = imagecreatetruecolor(4, 4); imagepng($i, "'"$TMP"'/p.png");'
+IMGB=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"name":"Bildtest","type":"wall","settings":{"images":true},"note":"Test","tags":"test"}' "$BASE/api/boards" | jq -r '.board.key')
+R=$(curl -s -b "$TMP/imgj" -c "$TMP/imgj" -H 'X-Tafula: 1' -F 'body=Bild' -F "image=@$TMP/p.png" "$BASE/api/b/$IMGB/posts")
+echo "$R" | grep -q 'Testumgebung laden Gäste keine Bilder' && ok 'Testinstanz: Gäste laden keine Bilder hoch' || bad "Gästebild auf Testinstanz: $R"
+OUT=$(php -r 'require "lib/bootstrap.php"; try { ai_credential_save("anthropic", "sk-test", "m"); echo "angenommen"; } catch (Throwable $e) { echo "abgelehnt"; } echo " "; try { ai_structured(["provider" => "anthropic", "api_key" => "x", "model" => "m"], "s", "u", ["type" => "object"]); echo "lief"; } catch (AiException $e) { echo $e->kind; }' 2>/dev/null)
+[ "$OUT" = 'abgelehnt invalid_key' ] && ok 'Testinstanz: nur der Fake-Anbieter (Speichern und Aufruf)' || bad "KI auf Testinstanz: $OUT"
+R=0; php tools/seed.php test >/dev/null 2>"$TMP/seed.err" || R=$?
+[ $R = 2 ] && grep -q 'keinen Marker' "$TMP/seed.err" && ok 'seed verweigert Datenbank mit Inhalten ohne Marker' || bad "seed ohne Marker: $R $(cat "$TMP/seed.err")"
+[ "$(php -r 'require "lib/bootstrap.php"; echo wb_test_helpers_enabled() ? 1 : 0;')" = 0 ] && ok 'Testhilfen ohne Marker aus' || bad 'Testhilfen ohne Marker an'
+docker exec "$DB" mariadb -uroot -proot -e "CREATE DATABASE seedtest CHARACTER SET utf8mb4; GRANT ALL ON seedtest.* TO 'wedo'@'%';" 2>/dev/null || bad 'zweite Datenbank nicht angelegt'
+sed -i "s/'name' => 'wedoboard'/'name' => 'seedtest'/" config.php
+sleep 1
+R=0; php tools/seed.php test > "$TMP/seed.out" 2>&1 || R=$?
+[ $R = 0 ] && grep -q "Satz 'test' geladen (test)" "$TMP/seed.out" && ok "seed test auf leerer Datenbank: $(tail -1 "$TMP/seed.out" | sed 's/^Satz .test. geladen (test): //')" || bad "seed test: $R $(cat "$TMP/seed.out")"
+grep -qiE 'warning|notice|deprecated' "$TMP/seed.out" && bad "seed meldet Warnungen: $(grep -iE 'warning|notice' "$TMP/seed.out" | head -3)"
+php -r 'require "lib/bootstrap.php"; echo wb_test_helpers_enabled() ? 1 : 0, wb_registration_mode(), wb_orgs_enabled() ? 1 : 0;' | grep -q '^1open1$' && ok 'mit Marker: Testhilfen an, Registrierung offen, Organisationen an' || bad 'Marker/Schalter nach seed'
+for s in test-spalten test-wand test-ziel test-wolke test-sammeln test-laeuft test-ergebnis; do [ "$(code -L "$BASE/$s")" = 200 ] || bad "Seite $s"; done
+ok 'Seiten des Testbestands antworten mit 200'
+R=0; php tools/seed.php test >/dev/null 2>&1 || R=$?; [ $R = 3 ] && ok 'zweiter Lauf ohne --reset verweigert' || bad 'zweiter Lauf ohne --reset'
+php tools/seed.php demo --reset > "$TMP/seed.out" 2>&1 && grep -q "Satz 'demo' geladen" "$TMP/seed.out" && [ "$(php -r 'require "lib/bootstrap.php"; echo db_row("SELECT COUNT(*) AS n FROM boards WHERE name LIKE \"Test:%\"")["n"];')" = 0 ] && ok 'demo --reset ersetzt den Testbestand' || bad "demo --reset: $(cat "$TMP/seed.out")"
+sed -i "s/'instance' => 'test'/'instance' => 'sandbox'/" config.php
+R=0; php tools/seed.php test --reset >/dev/null 2>"$TMP/seed.err" || R=$?; [ $R = 2 ] && grep -q "Marker 'test'" "$TMP/seed.err" && ok 'fremder Marker (test statt sandbox) verweigert' || bad "fremder Marker: $(cat "$TMP/seed.err")"
+sed -i "s/'instance' => 'sandbox'/'instance' => 'Test'/" config.php
+R=0; php tools/seed.php test --reset >/dev/null 2>"$TMP/seed.err" || R=$?; [ $R = 2 ] && grep -q 'nicht als' "$TMP/seed.err" && ok "Tippfehler in instance gilt als Produktion: seed verweigert" || bad "instance-Tippfehler: $(cat "$TMP/seed.err")"
+cp "$TMP/config.prod.php" config.php
 
 if grep -qiE 'fatal|parse error' "$TMP/server.log"; then bad 'PHP-Fehler im Serverprotokoll'; grep -iE 'fatal|parse error' "$TMP/server.log" | head -5; fi
 echo

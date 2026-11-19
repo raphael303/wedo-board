@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             switch ($action) {
                 case 'ai_save':
                     $provider = (string)($_POST['provider'] ?? 'anthropic');
-                    if ($provider === 'fake' && !wb_config('ai_allow_fake', false)) throw new InvalidArgumentException('Der Fake-Anbieter ist nur für lokale Tests freigeschaltet.');
+                    if ($provider === 'fake' && !wb_config('ai_allow_fake', false) && !wb_ai_fake_only()) throw new InvalidArgumentException('Der Fake-Anbieter ist nur für lokale Tests freigeschaltet.');
                     $model = trim((string)($_POST['model'] ?? ''));
                     if ($model === '__other' || $model === '') $model = trim((string)($_POST['model_other'] ?? ''));
                     $hadCredential = ai_credential_default() !== null;
@@ -84,7 +84,8 @@ $aiSecretLine = ai_secret_missing_line();
 $aiCred = ai_credential_default();
 $aiCredPublic = $aiCred ? ai_credential_row_public($aiCred) : null;
 $aiProviders = AI_PROVIDERS;
-if (!wb_config('ai_allow_fake', false) && (!$aiCred || $aiCred['provider'] !== 'fake')) unset($aiProviders['fake']);
+if (!wb_config('ai_allow_fake', false) && !wb_ai_fake_only() && (!$aiCred || $aiCred['provider'] !== 'fake')) unset($aiProviders['fake']);
+if (wb_ai_fake_only()) $aiProviders = array_intersect_key($aiProviders, ['fake' => 1]);
 $aiModels = $aiCred ? ai_models_cached($aiCred['provider']) : [];
 $aiModelKnown = $aiCred && in_array($aiCred['model'], array_column($aiModels, 'id'), true);
 $aiUsage = ai_usage_summary();

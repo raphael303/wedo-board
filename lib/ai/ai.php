@@ -40,6 +40,9 @@ function ai_structured(array $credential, string $system, string $user, array $s
     if (!isset(AI_PROVIDERS[$provider]) || !function_exists($fn)) {
         throw new AiException('invalid_response', 'Unbekannter KI-Anbieter: ' . $provider);
     }
+    if ($provider !== 'fake' && wb_ai_fake_only()) {
+        throw new AiException('invalid_key', 'Ausserhalb der Produktion ist nur der Fake-Anbieter erlaubt.');
+    }
     $options += ['tool_name' => 'ergebnis', 'tool_description' => 'Strukturiertes Ergebnis.', 'max_tokens' => 4096, 'timeout' => 55];
     $start = hrtime(true);
     $result = $fn($credential, $system, $user, $schema, $options);
@@ -160,6 +163,7 @@ function ai_credential_default(?int $userId = null): ?array {
 /** Speichert oder ersetzt den Zugang eines Anbieters; ein leerer Schlüssel behält den gespeicherten. */
 function ai_credential_save(string $provider, ?string $apiKey, ?string $model, ?string $label = null, ?int $userId = null): array {
     if (!isset(AI_PROVIDERS[$provider])) throw new InvalidArgumentException('Unbekannter Anbieter.');
+    if ($provider !== 'fake' && wb_ai_fake_only()) throw new InvalidArgumentException('Ausserhalb der Produktion ist nur der Fake-Anbieter erlaubt.');
     $userId = $userId ?? (int)(wb_current_user()['id'] ?? 1);
     $now = wb_now();
     $existing = db_row('SELECT * FROM ai_credentials WHERE user_id = ? AND provider = ? ORDER BY id DESC LIMIT 1', [$userId, $provider]);

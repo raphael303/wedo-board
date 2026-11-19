@@ -87,8 +87,7 @@ function ui_header(string $title, string $active = ''): void {
   <span class="nav-right nav-account">
     <?php if (count($spaces) > 1): ?>
     <form method="post" action="/account/workspace" class="inline ws-form"><?= ui_csrf_field() ?>
-      <label class="sr-only" for="ws-select"><?= e(tx('Arbeitsbereich')) ?></label>
-      <select id="ws-select" name="org" onchange="this.form.submit()" title="<?= e(tx('Arbeitsbereich')) ?>">
+      <select id="ws-select" name="org" onchange="this.form.submit()" title="<?= e(tx('Arbeitsbereich')) ?>" aria-label="<?= e(tx('Arbeitsbereich')) ?>">
         <?php foreach ($spaces as $w): ?><option value="<?= $w['org_id'] ?? 0 ?>" <?= $w['org_id'] === wb_workspace_org_id() ? 'selected' : '' ?>><?= e($w['name']) ?></option><?php endforeach; ?>
       </select><noscript><button type="submit" class="btn-ghost"><?= e(tx('Wechseln')) ?></button></noscript>
     </form>

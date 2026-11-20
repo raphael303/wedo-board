@@ -163,6 +163,34 @@ php tools/rescue.php set-email notfall@tafula.test notfall2@tafula.test > "$TMP/
 [ "$(P 'echo user_by_email("notfall2@tafula.test")["disabled_at"] === null ? "frei" : "gesperrt", brake_count("login-acct|notfall@tafula.test", 15), " ", db_row("SELECT to_addr FROM mail_queue WHERE subject LIKE \"%Notfall-Skript%\" ORDER BY id DESC LIMIT 1")["to_addr"];')" = 'frei0 notfall@tafula.test' ] && grep -q benachrichtigt "$TMP/r2.out" \
   && ok 'rescue.php unlock gibt das Konto frei und hebt die Bremsen auf; set-email benachrichtigt die alte Adresse' || bad "Notfall-Skript: $(cat "$TMP/r1.out" "$TMP/r2.out")"
 
+echo '13n. U1c-2: Sicherung (tools/backup.php, tools/backup-decrypt.php) und tools/config-set.php'
+BK="$TMP/bk"; mkdir -p "$BK/site/uploads" "$BK/bin" "$BK/out" && echo bild > "$BK/site/uploads/probe.webp"
+read -r BKPUB BKSEC < <(php -r '$k = sodium_crypto_box_keypair(); echo base64_encode(sodium_crypto_box_publickey($k)), " ", base64_encode(sodium_crypto_box_secretkey($k)), "\n";')
+php -r 'file_put_contents($argv[1], "<?php\n// Testkonfiguration\nreturn " . var_export(["db" => ["host" => "127.0.0.1", "name" => "wedoboard", "user" => "wedo", "pass" => "wedo"], "backup_public_key" => $argv[2]], true) . ";\n");' "$BK/site/config.php" "$BKPUB"
+# Auf dem Pi gibt es mariadb-dump nur im Container der Testdatenbank.
+printf '#!/bin/sh\nexec docker exec %s mariadb-dump -uwedo -pwedo --single-transaction --no-tablespaces --routines wedoboard\n' "$DB" > "$BK/bin/mysqldump" && chmod +x "$BK/bin/mysqldump"
+touch "$BK/out/tafula-prod-20200101-000000.tfbk"
+HOME="$BK" PATH="$BK/bin:$PATH" php tools/backup.php --site="$BK/site" --out="$BK/out" --quiet > "$BK/run.out" 2>&1 || true
+ARCH=$(ls "$BK/out"/tafula-prod-2*.tfbk 2>/dev/null | grep -v 20200101 | head -1)
+TAFULA_BACKUP_SECRET="$BKSEC" php tools/backup-decrypt.php "$ARCH" "$BK/a.tar.gz" >/dev/null 2>&1 || true
+LIST=$(tar -tzf "$BK/a.tar.gz" 2>/dev/null | sort | tr '\n' ' ')
+META=$(tar -xzOf "$BK/a.tar.gz" meta.json 2>/dev/null | php -r '$m = json_decode(stream_get_contents(STDIN)); echo $m->kind ?? "", " ", $m->schema_version ?? "";')
+[ "$LIST" = 'config.php db.sql meta.json uploads/ uploads/probe.webp ' ] && [ "$META" = "prod $(P 'echo WB_SCHEMA_VERSION;')" ] && [ ! -e "$BK/out/tafula-prod-20200101-000000.tfbk" ] && grep -q ' ok tafula-prod-' "$BK/backups_pi/nightly/backup.log" \
+  && [ "$(stat -c %a "$ARCH")" = 600 ] && ! grep -q 'CREATE TABLE' "$ARCH" \
+  && ok 'tools/backup.php: Datenbank, uploads und config.php verschlüsselt, Schema im Archiv, alte Archive entfernt, Protokoll' || bad "Sicherung: $LIST / $META / $(cat "$BK/run.out")"
+cp "$ARCH" "$BK/bad.tfbk" && printf 'X' | dd of="$BK/bad.tfbk" bs=1 seek=300 conv=notrunc 2>/dev/null
+OTHER=$(php -r 'echo base64_encode(sodium_crypto_box_secretkey(sodium_crypto_box_keypair()));')
+head -c 200 "$ARCH" > "$BK/cut.tfbk"
+! TAFULA_BACKUP_SECRET="$BKSEC" php tools/backup-decrypt.php "$BK/bad.tfbk" "$BK/b.tar.gz" >/dev/null 2>&1 && [ ! -e "$BK/b.tar.gz" ] \
+  && ! TAFULA_BACKUP_SECRET="$OTHER" php tools/backup-decrypt.php "$ARCH" "$BK/c.tar.gz" >/dev/null 2>&1 \
+  && ! TAFULA_BACKUP_SECRET="$BKSEC" php tools/backup-decrypt.php "$BK/cut.tfbk" "$BK/d.tar.gz" >/dev/null 2>&1 && [ ! -e "$BK/d.tar.gz" ] \
+  && ok 'tools/backup-decrypt.php weist veränderte, abgeschnittene und fremd verschlüsselte Archive ab' || bad 'Entschlüsseln prüft nicht'
+printf "<?php\n// Kopf\nreturn [\n    // Pfad\n    'admin_path' => 'alt-pfad',\n    'smtp' => [\n        'host' => 'x',\n    ],\n];\n" > "$BK/cfg.php"
+php tools/config-set.php "$BK/cfg.php" mail_bounces true admin_path '"__random_path__"' >/dev/null 2>&1 || true
+CFG=$(php -r '$c = require $argv[1]; echo var_export($c["mail_bounces"] ?? null, true), " ", preg_match("/^b-[0-9a-f]{18}$/", $c["admin_path"]), " ", $c["smtp"]["host"];' "$BK/cfg.php")
+[ "$CFG" = 'true 1 x' ] && grep -q '// Pfad' "$BK/cfg.php" && ! php tools/config-set.php "$BK/cfg.php" smtp '"y"' >/dev/null 2>&1 \
+  && ok 'tools/config-set.php ändert nur einzelne Zeilen, behält Kommentare und weist mehrzeilige Werte ab' || bad "config-set: $CFG"
+
 kill "$SMTPPID" 2>/dev/null || true
 P 'db_exec("DELETE FROM rate_limits");'
 set -o pipefail

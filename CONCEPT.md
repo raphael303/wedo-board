@@ -12,7 +12,7 @@ Die Anwendung ist in PHP 8 mit MySQL geschrieben, ohne Framework und ohne Build-
 
 ## 3. Rollen
 
-Seit 0.22.0 (Etappe U1a der Nutzerverwaltung, vorerst nur auf der Testinstanz) gilt Abschnitt 10b; die folgenden Absätze beschreiben den Stand der Produktion bis zur Umstellung in U1c.
+Seit 0.22.0 (Etappe U1a der Nutzerverwaltung) gilt Abschnitt 10b, seit der Umstellung am 20.11.2026 (U1c) auch in der Produktion; die folgenden Absätze beschreiben den früheren Stand bis 0.21.0 und bleiben als Geschichte stehen.
 
 Der Besitzer meldet sich mit einem Passwort in der Bibliothek an und hat alle Rechte. Die Schnittstelle (API) wird mit einem geheimen Token authentifiziert, den nur der Besitzer und Claude kennen. Gäste sind alle, die einen Board-Link besitzen; sie können Beiträge, Kommentare und Reaktionen anlegen und ihre eigenen Beiträge und Kommentare bearbeiten oder löschen, solange das Board offen ist und sie nicht gesperrt sind (siehe «Gäste sperren» in Abschnitt 4).
 
@@ -180,7 +180,7 @@ Reservierte Kurzwörter: Seit 0.21.0 sind zusätzlich alle Wörter reserviert, d
 
 ## 10b. Konten, Anmeldung und Rechte (seit 0.22.0, Etappe U1a der Nutzerverwaltung)
 
-Seit 0.22.0 kennt Tafula Konten statt einer einzigen Besitzerin. Die Etappe läuft bis zur Umstellung in U1c nur auf der Testinstanz; die Produktion folgt in dieser Zeit dem Zweig `stable`. Abschnitt 3 beschreibt den Stand davor.
+Seit 0.22.0 kennt Tafula Konten statt einer einzigen Besitzerin. Die Etappe lief bis zur Umstellung in U1c am 20.11.2026 nur auf der Testinstanz, während die Produktion dem Zweig `stable` folgte; seither folgen beide Instanzen `main`, und `stable` ist gelöscht. Abschnitt 3 beschreibt den Stand davor.
 
 Konten und Rollen: Ein Konto (`users`) hat genau eine E-Mail-Adresse als Benutzernamen, Vor- und Nachnamen, eine Sprache und ein Passwort als Hash. Die Spalten `role` und `display_name` gibt es nicht mehr; Rollen stehen in `memberships` (`user_id`, `scope_type` `system`, `org` oder `class`, `scope_id`, `role`). U1a benutzt die Systemrollen `superadmin`, `admin`, `license_manager` und `presenter` und für die Attrappe einer Schule im Testbestand die Rolle `teacher` an einer Organisation (`orgs`). Jedes Board und jede Aktivität gehört einer Person (`owner_user_id`, ohne Vorgabe) und liegt in einem Arbeitsbereich (`org_id`; leer bedeutet «Privat»); `identity_seed` ist ein fester Zufallswert des Objekts für die abgeleiteten Teilnehmerschlüssel ab U2.
 

@@ -256,7 +256,8 @@ P 'setting_set("registration_mode", "off");'
 
 echo '11i. Migration 15 von einer Datenbank im Stand 0.21.0'
 docker exec "$DB" mariadb -uroot -proot -e "CREATE DATABASE migtest CHARACTER SET utf8mb4; GRANT ALL ON migtest.* TO 'wedo'@'%';" 2>/dev/null || bad 'Datenbank migtest nicht angelegt'
-git show origin/stable:lib/db.php | python3 -c 'import sys; c = sys.stdin.read(); a = c.index("function db_schema(): array {"); b = c.index("function setting_get"); print("<?php\n" + c[a:b].replace("function db_schema()", "function old_db_schema()"))' > "$TMP/oldschema.php"
+# f68ee3d ist der letzte Stand des früheren Zweigs stable (Schema 14), ein Vorfahre von main.
+git show f68ee3d:lib/db.php | python3 -c 'import sys; c = sys.stdin.read(); a = c.index("function db_schema(): array {"); b = c.index("function setting_get"); print("<?php\n" + c[a:b].replace("function db_schema()", "function old_db_schema()"))' > "$TMP/oldschema.php"
 cp config.php "$TMP/config.main.php"
 sed -i "s/'name' => 'wedoboard'/'name' => 'migtest'/" config.php
 php -r 'require "lib/bootstrap.php"; require $argv[1]; foreach (old_db_schema() as $sql) db()->exec($sql);

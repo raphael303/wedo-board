@@ -12,8 +12,26 @@ $error = null;
 /* ---------- Links aus Mails (ohne Anmeldung benutzbar) ---------- */
 
 if ($sub === 'email') {
-    $ok = account_email_change_confirm((string)($_GET['t'] ?? ''));
-    ui_redirect($u ? '/account' : '/login', $ok ? tx('Die neue Adresse ist bestätigt.') : tx('Dieser Link ist nicht mehr gültig.'));
+    // Bestätigt nur mit Knopf und nur in einer Sitzung desselben Kontos (S1, N5): Ein Mailscanner, der den Link
+    // öffnet, bestätigt damit nichts.
+    $token = (string)($_POST['t'] ?? $_GET['t'] ?? '');
+    if (!$u) ui_redirect('/login?next=' . urlencode('/account/email?t=' . rawurlencode($token)), tx('Melde dich an, um die neue Adresse zu bestätigen.'));
+    $pending = login_token_find($token, 'email_change');
+    if (!$pending || (int)$pending['user_id'] !== (int)$u['id']) ui_redirect('/account', tx('Dieser Link ist nicht mehr gültig.'));
+    if ($post) {
+        $ok = account_email_change_confirm($token, (int)$u['id']);
+        ui_redirect('/account', $ok ? tx('Die neue Adresse ist bestätigt.') : tx('Dieser Link ist nicht mehr gültig.'));
+    }
+    ui_header(tx('Neue Adresse bestätigen'), 'account');
+    ?>
+<section class="card narrow">
+  <h1><?= e(tx('Neue Adresse bestätigen')) ?></h1>
+  <p><?= e(tx('Soll {new} die neue Adresse deines Kontos werden? Deine bisherige Adresse {old} erhält danach einen Link, mit dem sich die Änderung sieben Tage lang rückgängig machen lässt.', ['new' => (string)($pending['payload']['new'] ?? ''), 'old' => (string)$u['email']])) ?></p>
+  <form method="post" class="form"><?= ui_csrf_field() ?><input type="hidden" name="t" value="<?= e($token) ?>"><div class="actions"><button class="btn" type="submit"><?= e(tx('Adresse bestätigen')) ?></button> <a class="btn-ghost" href="/account"><?= e(tx('Abbrechen')) ?></a></div></form>
+</section>
+<?php
+    ui_footer();
+    exit;
 }
 if ($sub === 'keep-totp') {
     $token = (string)($_POST['t'] ?? $_GET['t'] ?? '');

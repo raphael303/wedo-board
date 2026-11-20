@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__) . '/lib/bootstrap.php';
+// Persönliche Tokens gelten nur hier (S1, N2); ohne diesen Ort wertet wb_auth() keinen Token aus.
+$GLOBALS['wb_token_context'] = ['api', null];
 require WB_ROOT . '/lib/images.php';
 require WB_ROOT . '/lib/qr.php';
 require __DIR__ . '/activities.php';
@@ -119,6 +121,8 @@ function guest_api(string $method, array $p): never {
     $part = $board ? wb_participation($board, $uid) : null;
     if (!$board || !$part['see']) wb_error('Board nicht gefunden.', 404);
     $owner = wb_can('board.manage', $board);
+    // Schreibt die Besitzerin mit ihrer Sitzung über die Gäste-Routen, gilt dasselbe wie an /api/boards (S1, N4).
+    if ($owner && $method !== 'GET') wb_check_csrf_header();
     $lang = wb_resolve_lang($board['lang']);
     $blocked = !$owner && $part['blocked'];
     $sub = $p[2] ?? '';

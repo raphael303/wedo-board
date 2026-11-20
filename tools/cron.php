@@ -37,7 +37,8 @@ try {
         $r = accounts_cleanup();
         $say("Aufgeräumt: {$r['unverified']} unbestätigte Konten gelöscht, {$r['totp_removed']} Entfernungen der zweiten Stufe wirksam.");
         $say('Papierkorb: ' . board_purge_deleted(30) . ' Elemente endgültig entfernt.');
-        db_exec('DELETE FROM mail_queue WHERE created_at < ?', [wb_utc(time() - 90 * 86400)]);
+        $m = mail_cleanup();
+        $say("Mails: {$m['suppressions']} Unterdrückungen verfallen, {$m['bodies']} Texte entfernt.");
     }
     setting_set('cron_last_at', (string)time());
 } catch (Throwable $e) {

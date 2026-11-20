@@ -63,8 +63,10 @@ grep -q 'eingeladen@tafula.test' "$TMP/sink.html" && grep -q 'Einladung zu Taful
   && ok 'Sammelpostfach: jede Mail der Testinstanz landet dort, nichts geht hinaus; ohne Zugangscode nicht lesbar' || bad 'Sammelpostfach'
 # Gewöhnliche Anmeldung des Test-Admins mit seiner App-Stufe
 cp "$TMP/gate" "$TMP/adam"
-[ "$(login_as "$TMP/adam" adam.admin@tafula.test tafula-test-passwort KRQWM5LMMFKGK43UIFSG22LO)" = 302 ] && [ "$(code -b "$TMP/adam" "$BASE/manage/system")" = 200 ] && ! curl -s -b "$TMP/adam" "$BASE/manage/system" | grep -q 'id="schalter"\|id="einladungen"' && curl -s -b "$TMP/adam" "$BASE/manage/system" | grep -q 'id="protokoll"' \
-  && ok 'Admin mit Passwort und App-Code: Verwaltung ohne Schalter und Einladungen' || bad "Anmeldung des Test-Admins: $(login_as "$TMP/adam9" adam.admin@tafula.test tafula-test-passwort KRQWM5LMMFKGK43UIFSG22LO) $(code -b "$TMP/adam" "$BASE/manage/system") $(curl -s -o /dev/null -w '%{redirect_url}' -b "$TMP/adam" "$BASE/manage/system") $(grep -c tafula "$TMP/adam")"
+# Seit U1c (S1, M4) melden sich Testkonten mit Systemrolle nur über /test mit dem zweiten Code an.
+curl -s -o /dev/null -b "$TMP/adam" -c "$TMP/adam" --data-urlencode "csrf=$CSG" -d 'action=gate2&code=zweiter-code-drei' "$BASE/test"
+[ "$(curl -s -o /dev/null -w '%{redirect_url}' -b "$TMP/adam" -c "$TMP/adam" --data-urlencode "csrf=$CSG" -d "action=login&user_id=$(uid_of adam.admin)" "$BASE/test")" = "$BASE/manage/system" ] && [ "$(code -b "$TMP/adam" "$BASE/manage/system")" = 200 ] && ! curl -s -b "$TMP/adam" "$BASE/manage/system" | grep -q 'id="schalter"\|id="einladungen"' && curl -s -b "$TMP/adam" "$BASE/manage/system" | grep -q 'id="protokoll"' \
+  && ok 'Test-Admin über /test mit dem zweiten Code: Verwaltung ohne Schalter und Einladungen' || bad "Anmeldung des Test-Admins: $(login_as "$TMP/adam9" adam.admin@tafula.test tafula-test-passwort KRQWM5LMMFKGK43UIFSG22LO) $(code -b "$TMP/adam" "$BASE/manage/system") $(curl -s -o /dev/null -w '%{redirect_url}' -b "$TMP/adam" "$BASE/manage/system") $(grep -c tafula "$TMP/adam")"
 # Zeitverschiebung: nur fachliche Fristen
 sed -i "s/'instance' => 'test',/'instance' => 'test', 'clock_offset' => 2764800,/" config.php
 php tools/cron.php --all >/dev/null 2>&1

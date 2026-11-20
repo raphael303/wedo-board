@@ -21,6 +21,7 @@ bad()  { echo "  FEHLER $*"; FAIL=1; }
 
 cleanup() {
   [ -n "${SRV:-}" ] && kill "$SRV" 2>/dev/null || true
+  [ -n "${SMTPPID:-}" ] && kill "$SMTPPID" 2>/dev/null || true
   rm -f "$ROOT/uploads/.schema"
   docker rm -f "$DB" >/dev/null 2>&1 || true
   rm -f "$ROOT/config.php"
@@ -476,7 +477,7 @@ grep -q 'id="ausgaben"' "$TMP/page.html" && grep -q 'name="student_pdf"' "$TMP/p
 
 echo '10. Migration 13 von Schema 12'
 OUT=$(php -r 'require "lib/bootstrap.php"; foreach (["exam_questions","exam_attempts","activity_guest_names"] as $t) db()->exec("DROP TABLE $t"); setting_set("schema_version","12"); echo db_migrate(), " ", setting_get("schema_version"), " ", (int)db_row("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (\"exam_questions\",\"exam_attempts\",\"activity_guest_names\")")["n"];')
-[ "$OUT" = "4 16 3" ] && ok 'Migrationen 13 bis 16 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
+[ "$OUT" = "5 17 3" ] && ok 'Migrationen 13 bis 17 von Schema 12 aus, Migration 13 legt die drei Tabellen an' || bad "Migration 13: $OUT"
 
 echo '11. Sicherheit: Kopfzeilen, Sperren, Login-Bremse'
 curl -sI "$BASE/" > "$TMP/hdr"
@@ -489,12 +490,13 @@ DR=$(grep -E '^(Strict-Transport-Security|Referrer-Policy|X-Frame-Options|X-Cont
 [ "$(code "$BASE/dev-router.php")" = 404 ] && grep -q 'dev-router\\.php' .htaccess && ok 'dev-router.php gesperrt (lokal 404, Regel in .htaccess)' || bad 'dev-router.php nicht gesperrt'
 . tools/test_u1a.sh
 . tools/test_u1b.sh
+. tools/test_u1c.sh
 
 echo '12. Nutzerverwaltung U0: Schalter, reservierte Wörter, Instanz, Testbestand'
 php -r 'require "lib/bootstrap.php"; echo wb_registration_mode(), " ", wb_orgs_enabled() ? 1 : 0, " ", wb_instance(), " ", wb_test_helpers_enabled() ? 1 : 0;' > "$TMP/u0" 2>&1
 [ "$(cat "$TMP/u0")" = 'off 0 production 0' ] && ok 'Vorgaben: Registrierung aus, Organisationen aus, Produktion, keine Testhilfen' || bad "Vorgaben: $(cat "$TMP/u0")"
 OUT=$(php -r 'require "lib/bootstrap.php"; db_exec("DELETE FROM settings WHERE k IN (\"registration_mode\",\"orgs_enabled\")"); wb_auth_cli(1); $b = board_create(["name" => "Altes Konto-Board"]); db_exec("UPDATE boards SET slug = \"konto\" WHERE id = ?", [$b["id"]]); setting_set("schema_version", "13"); echo db_migrate(), " ", setting_get("schema_version"), " ", setting_get("registration_mode"), " ", setting_get("orgs_enabled"), " ", board_by_id($b["id"])["slug"] === "konto" ? "alt" : "neu", " ", setting_get("reserved_renamed") ? "vermerkt" : "-";' 2>/dev/null)
-[ "$OUT" = '3 16 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
+[ "$OUT" = '4 17 off 0 neu vermerkt' ] && ok 'Migration 14: Schalter gesetzt, reserviertes Kurzwort ersetzt und vermerkt' || bad "Migration 14: $OUT"
 for w in konto login oauth test datenschutz k; do
   R=$(curl -s "${AUTH[@]}" "${JH[@]}" -d '{"name":"Reserviert","slug":"'"$w"'","note":"Test","tags":"test"}' "$BASE/api/boards")
   echo "$R" | jq -e '.board' >/dev/null && bad "reserviertes Wort $w angenommen"
@@ -533,6 +535,7 @@ php -r 'require "lib/bootstrap.php"; echo wb_test_helpers_enabled() ? 1 : 0, wb_
 for s in test-spalten test-wand test-ziel test-wolke test-sammeln test-laeuft test-ergebnis; do [ "$(code -L "$BASE/$s")" = 200 ] || bad "Seite $s"; done
 ok 'Seiten des Testbestands antworten mit 200'
 . tools/test_u1a_seed.sh
+. tools/test_u1c_seed.sh
 R=0; php tools/seed.php test >/dev/null 2>&1 || R=$?; [ $R = 3 ] && ok 'zweiter Lauf ohne --reset verweigert' || bad 'zweiter Lauf ohne --reset'
 php tools/seed.php demo --reset > "$TMP/seed.out" 2>&1 && grep -q "Satz 'demo' geladen" "$TMP/seed.out" && [ "$(php -r 'require "lib/bootstrap.php"; echo db_row("SELECT COUNT(*) AS n FROM boards WHERE name LIKE \"Test:%\"")["n"];')" = 0 ] && ok 'demo --reset ersetzt den Testbestand' || bad "demo --reset: $(cat "$TMP/seed.out")"
 sed -i "s/'instance' => 'test'/'instance' => 'sandbox'/" config.php

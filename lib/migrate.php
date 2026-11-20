@@ -286,6 +286,11 @@ function db_migrations(): array {
         15 => array_merge(db_schema_u1a(), db_migration_15_alter()),
         // 16 (0.23.0, U1b der Nutzerverwaltung): OAuth-Clients, Verbindungen, Tokens; siehe lib/schema_u1b.php.
         16 => db_schema_u1b(),
+        // 17 (0.24.0, U1c-1): Ein Token kennt den Erneuerungstoken, aus dem sein Paar entstand (Sicherheitsprüfung S1, N1).
+        17 => [
+            "ALTER TABLE oauth_tokens ADD COLUMN parent_id INT UNSIGNED NULL AFTER grant_id",
+            "ALTER TABLE oauth_tokens ADD KEY ix_parent (parent_id)",
+        ],
     ];
 }
 

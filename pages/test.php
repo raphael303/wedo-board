@@ -32,10 +32,11 @@ if (!gate_ok(1)) {
 
 if ($sub === 'mail') {
     $id = (int)($_GET['id'] ?? 0);
-    $one = $id > 0 ? db_row('SELECT * FROM mail_queue WHERE id = ?', [$id]) : null;
+    // Nur Mails, die nie hinausgingen (S1, M4): echte Mails an Adressen der mail_allowlist bleiben unsichtbar.
+    $one = $id > 0 ? db_row("SELECT * FROM mail_queue WHERE id = ? AND status = 'sink'", [$id]) : null;
     ui_header(tx('Postfach der Testumgebung'));
     ?>
-<div class="page-head"><div><h1><?= e(tx('Postfach der Testumgebung')) ?></h1><p class="muted"><?= e(tx('Hier landet jede Mail, die diese Installation verschicken würde. Echte Mails gehen nur an Adressen der mail_allowlist.')) ?> <a href="/test"><?= e(tx('Zu den Testrollen')) ?></a></p></div></div>
+<div class="page-head"><div><h1><?= e(tx('Postfach der Testumgebung')) ?></h1><p class="muted"><?= e(tx('Hier landet jede Mail, die diese Installation verschicken würde. Echte Mails gehen nur an Adressen der mail_allowlist und erscheinen hier nicht.')) ?> <a href="/test"><?= e(tx('Zu den Testrollen')) ?></a></p></div></div>
 <?php if ($one): ?>
 <section class="card"><p><a href="/test/mail">← <?= e(tx('Alle Mails')) ?></a></p>
   <dl class="fb-ctx"><dt><?= e(tx('An')) ?></dt><dd><?= e((string)$one['to_addr']) ?></dd><dt><?= e(tx('Betreff')) ?></dt><dd><?= e((string)$one['subject']) ?></dd>

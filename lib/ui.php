@@ -32,7 +32,9 @@ function ui_csrf_field(): string {
 /** Nur lokale Pfade als Rücksprungziel («/…», nie «//…» oder eine fremde Adresse). */
 function ui_safe_next(?string $next, string $default): string {
     $next = (string)$next;
-    return preg_match('~^/(?![/\\\\])[^\r\n]*$~', $next) ? $next : $default;
+    // Nur ein Pfad dieser Website aus einem festen Zeichenvorrat (S1, M1): keine Steuerzeichen (Chrome und Safari
+    // entfernen einen Tabulator und machen aus «/<Tab>/host» eine fremde Adresse), kein Backslash, kein «//» am Anfang.
+    return strlen($next) <= 2000 && preg_match('~^/(?![/\\\\])[A-Za-z0-9\-._\~!$&\'()*+,;=:@%/?#]*$~D', $next) ? $next : $default;
 }
 
 function ui_redirect(string $to, ?string $flash = null): never {

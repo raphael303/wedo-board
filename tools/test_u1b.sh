@@ -70,9 +70,13 @@ R=$(curl -s -D "$TMP/hbad" -o "$TMP/bad.html" -w '%{http_code}' "${O[@]}" "$BASE
 [ "$R" = 400 ] && ! grep -qi '^Location:' "$TMP/hbad" && ! grep -q 'http-equiv="refresh"' "$TMP/bad.html" && ! grep -q 'evil.example' "$TMP/bad.html" \
   && [ "$(code "${O[@]}" "$BASE/oauth/authorize?${QS/client.example%2Fcb/client.example%2Fcb%2Fmore}")" = 400 ] && [ "$(code "${O[@]}" "$BASE/oauth/authorize?${QS/$CID/tc_unbekannt}")" = 400 ] \
   && ok 'fremde oder verlängerte Rücksprungadresse und unbekannter Client: Fehlerseite ohne Weiterleitung' || bad "falsche Rücksprungadresse: $R"
-curl -s "${O[@]}" "$BASE/oauth/authorize?response_type=code&client_id=$CID&redirect_uri=https%3A%2F%2Fclient.example%2Fcb&state=s2" | grep -q 'url=https://client.example/cb?error=invalid_request' \
+# Seit U1c (S1, M2): Fehler vor dem Entscheid führen nie selbsttätig zurück, auch nicht ohne Anmeldung.
+R=$(curl -s -D "$TMP/hm2" -o "$TMP/m2.html" -w '%{http_code}' "$BASE/oauth/authorize?response_type=token&client_id=$CID&redirect_uri=https%3A%2F%2Fclient.example%2Fcb&state=s2")
+[ "$R" = 400 ] && ! grep -qi '^Location:' "$TMP/hm2" && ! grep -q 'http-equiv="refresh"' "$TMP/m2.html" && grep -q '<strong>client.example</strong>' "$TMP/m2.html" && grep -q 'href="https://client.example/cb?error=unsupported_response_type' "$TMP/m2.html" \
+  && curl -s "${O[@]}" "$BASE/oauth/authorize?response_type=code&client_id=$CID&redirect_uri=https%3A%2F%2Fclient.example%2Fcb&state=s2" | grep -q 'href="https://client.example/cb?error=invalid_request' \
+  && ! curl -s "${O[@]}" "$BASE/oauth/authorize?response_type=code&client_id=$CID&redirect_uri=https%3A%2F%2Fclient.example%2Fcb&state=s2" | grep -q 'http-equiv="refresh"' \
   && curl -s "${O[@]}" "$BASE/oauth/authorize?$QS&resource=https%3A%2F%2Fanderswo.example%2Fmcp" | grep -q 'error=invalid_target' \
-  && ok 'ohne PKCE oder mit fremder resource: Fehler geht an die geprüfte Rücksprungadresse' || bad 'Fehler an den Client'
+  && ok 'falscher response_type, ohne PKCE oder fremde resource: Fehlerseite (400) mit Hostnamen, Rückkehr erst auf Klick (S1 M2)' || bad "Fehler an den Client: $R $(grep -o 'href="https://client[^"]*' "$TMP/m2.html" | head -1)"
 CSO=$(csrf_of "$TMP/osc" /account)
 FORM=(--data-urlencode "response_type=code" --data-urlencode "client_id=$CID" --data-urlencode "redirect_uri=https://client.example/cb" --data-urlencode "state=st-123" --data-urlencode "code_challenge=$CH" --data-urlencode "code_challenge_method=S256" --data-urlencode "resource=$BASE/mcp/private")
 [ "$(code "${O[@]}" "${FORM[@]}" -d 'decision=allow' "$BASE/oauth/authorize")" = 400 ] && ok 'Zustimmung ohne CSRF-Feld: 400' || bad 'Zustimmung ohne CSRF'

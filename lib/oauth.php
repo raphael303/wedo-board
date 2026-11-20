@@ -200,14 +200,17 @@ function oauth_grant_revoke(int $grantId, string $reason): bool {
     return $n > 0;
 }
 
-/** Gibt ein neues Paar aus Zugriffs- und Erneuerungstoken aus (Antwort des Token-Endpunkts). */
-function oauth_issue_tokens(int $grantId): array {
+/**
+ * Gibt ein neues Paar aus Zugriffs- und Erneuerungstoken aus (Antwort des Token-Endpunkts). $parentId ist der
+ * Erneuerungstoken, aus dem das Paar entsteht (Migration 17).
+ */
+function oauth_issue_tokens(int $grantId, ?int $parentId = null): array {
     $access = 'tfa_' . wb_random_token(32);
     $refresh = 'tfr_' . wb_random_token(32);
     $ttl = max(60, wb_setting_int('oauth_access_minutes', 60) * 60);
     $now = wb_now();
-    db_exec("INSERT INTO oauth_tokens (grant_id, kind, token_hash, created_at, expires_at) VALUES (?, 'access', ?, ?, ?), (?, 'refresh', ?, ?, ?)",
-        [$grantId, wb_token_hash($access), $now, wb_utc(time() + $ttl), $grantId, wb_token_hash($refresh), $now, wb_utc(time() + max(1, wb_setting_int('oauth_refresh_days', 60)) * 86400)]);
+    db_exec("INSERT INTO oauth_tokens (grant_id, parent_id, kind, token_hash, created_at, expires_at) VALUES (?, ?, 'access', ?, ?, ?), (?, ?, 'refresh', ?, ?, ?)",
+        [$grantId, $parentId, wb_token_hash($access), $now, wb_utc(time() + $ttl), $grantId, $parentId, wb_token_hash($refresh), $now, wb_utc(time() + max(1, wb_setting_int('oauth_refresh_days', 60)) * 86400)]);
     db_exec('UPDATE oauth_grants SET last_used_at = ? WHERE id = ?', [$now, $grantId]);
     return ['access_token' => $access, 'token_type' => 'Bearer', 'expires_in' => $ttl, 'refresh_token' => $refresh, 'scope' => OAUTH_SCOPE];
 }
@@ -256,7 +259,14 @@ function oauth_token_from_code(array $p): array {
     return oauth_issue_tokens($grantId);
 }
 
-/** grant_type=refresh_token: tauscht den Erneuerungstoken aus. */
+/**
+ * grant_type=refresh_token: tauscht den Erneuerungstoken aus.
+ *
+ * Nachfrist (S1, N1): Wird ein Erneuerungstoken innerhalb von OAUTH_REFRESH_GRACE Sekunden ein zweites Mal
+ * eingelöst (ein Programm wiederholt eine Anfrage, deren Antwort verloren ging), widerruft Tafula das beim ersten
+ * Einlösen ausgegebene Paar und gibt ein neues aus. So überlebt höchstens eine Kette. Taucht ein so widerrufener
+ * Token später wieder auf, haben zwei Stellen dieselbe Verbindung benutzt, und die ganze Verbindung endet.
+ */
 function oauth_token_refresh(array $p): array {
     $str = fn(string $k): string => is_string($p[$k] ?? null) ? (string)$p[$k] : '';
     $raw = $str('refresh_token');
@@ -267,7 +277,13 @@ function oauth_token_refresh(array $p): array {
         $client = oauth_client_find($str('client_id'));
         if (!$client || $client['id'] !== (int)$t['g_client']) throw new OAuthError('invalid_grant', 'Der Erneuerungstoken gehört nicht zu diesem Client.');
     }
-    if ($t['g_revoked'] !== null || $t['revoked_at'] !== null) throw new OAuthError('invalid_grant', 'Die Verbindung wurde widerrufen.');
+    if ($t['g_revoked'] !== null) throw new OAuthError('invalid_grant', 'Die Verbindung wurde widerrufen.');
+    if ($t['revoked_at'] !== null) {
+        // Einzeln widerrufen heisst: In der Nachfrist hat eine andere Stelle denselben Vorgänger eingelöst.
+        oauth_grant_revoke($grantId, 'refresh_conflict');
+        audit_log('oauth.revoke', 'oauth_grant', $grantId, ['by' => 'system', 'reason' => 'refresh_conflict'], $t['org_id'] !== null ? (int)$t['org_id'] : null, null, 'system');
+        throw new OAuthError('invalid_grant', 'Die Verbindung wurde von zwei Stellen benutzt und ist widerrufen.');
+    }
     if (wb_ts((string)$t['expires_at']) < time()) throw new OAuthError('invalid_grant', 'Der Erneuerungstoken ist abgelaufen.');
     if ($t['used_at'] !== null && wb_ts((string)$t['used_at']) < time() - OAUTH_REFRESH_GRACE) {
         // Ein schon ausgetauschter Token taucht wieder auf: Er wurde kopiert. Die ganze Verbindung endet.
@@ -280,9 +296,26 @@ function oauth_token_refresh(array $p): array {
         oauth_grant_revoke($grantId, 'subject');
         throw new OAuthError('invalid_grant', 'Das Konto kann diese Verbindung nicht mehr benutzen.');
     }
-    db_exec('UPDATE oauth_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL', [wb_now(), (int)$t['id']]);
+    // Unter einer Zeilensperre, damit zwei gleichzeitige Einlösungen nacheinander laufen und die zweite das Paar
+    // der ersten sieht und widerruft.
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $row = db_row('SELECT used_at, revoked_at FROM oauth_tokens WHERE id = ? FOR UPDATE', [(int)$t['id']]);
+        if (!$row || $row['revoked_at'] !== null) throw new OAuthError('invalid_grant', 'Die Verbindung wurde widerrufen.');
+        if ($row['used_at'] !== null) {
+            db_exec('UPDATE oauth_tokens SET revoked_at = ? WHERE parent_id = ? AND revoked_at IS NULL', [wb_now(), (int)$t['id']]);
+        } else {
+            db_exec('UPDATE oauth_tokens SET used_at = ? WHERE id = ?', [wb_now(), (int)$t['id']]);
+        }
+        $out = oauth_issue_tokens($grantId, (int)$t['id']);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
     oauth_client_touch((int)$t['g_client']);
-    return oauth_issue_tokens($grantId);
+    return $out;
 }
 
 /** RFC 7009: widerruft die Verbindung, zu der der Token gehört. Unbekannte Tokens sind kein Fehler. */

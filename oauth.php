@@ -152,7 +152,17 @@ try {
     oauth_page(tx('Verbindung nicht möglich'), '<h1>' . e(tx('Verbindung nicht möglich')) . '</h1><p class="error" role="alert">' . e($e->getMessage()) . '</p>', 400);
 }
 if ($req['error'] !== null) {
-    oauth_leave(oauth_redirect_with($req['redirect_uri'], ['error' => $req['error']->error, 'error_description' => $req['error']->getMessage(), 'state' => $req['state']]), tx('Die Anfrage des Programms ist unvollständig.'));
+    // Vor Anmeldung und Entscheid leitet Tafula nie selbsttätig weiter (S1, M2): Sonst könnte jeder mit einem
+    // selbst registrierten Client und einer fehlerhaften Anfrage über tafula.top auf eine beliebige Adresse
+    // weiterleiten. Die Seite nennt den Hostnamen, und erst ein Klick führt mit der Fehlermeldung zurück.
+    $GLOBALS['wb_ui_lang'] = wb_current_user()['locale'] ?? 'de';
+    $back = oauth_redirect_with($req['redirect_uri'], ['error' => $req['error']->error, 'error_description' => $req['error']->getMessage(), 'state' => $req['state']]);
+    $host = oauth_redirect_host($req['redirect_uri']);
+    oauth_page(tx('Verbindung nicht möglich'), '<h1>' . e(tx('Verbindung nicht möglich')) . '</h1>'
+        . '<p class="error" role="alert">' . e(tx('Die Anfrage des Programms ist unvollständig oder fehlerhaft:')) . ' ' . e($req['error']->getMessage()) . '</p>'
+        . '<p>' . e(tx('Das Programm erwartet die Antwort unter dieser Adresse:')) . ' <strong>' . e($host) . '</strong></p>'
+        . '<p class="muted">' . e(tx('Kehre nur dorthin zurück, wenn du die Verbindung eben selbst in diesem Programm begonnen hast.')) . '</p>'
+        . '<p><a class="btn-ghost" rel="noreferrer" href="' . e($back) . '">' . e(tx('Zurück zu {host}', ['host' => $host])) . '</a></p>', 400);
 }
 
 // Auf der Testinstanz liegt die Anmeldung hinter dem Zugangscode; /login leitet dafür selbst nach /test.

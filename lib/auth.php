@@ -194,15 +194,18 @@ function wb_auth(): ?array {
 
 /**
  * Die einzige Stelle, die Tokens prüft (seit 0.23.0 gegen die Tabellen oauth_tokens und api_tokens, nur Hashes).
- * Welche Art gilt, bestimmt der Ort des Aufrufs in $GLOBALS['wb_token_context'] = [Ort, Adresse des Connectors]:
- *   «api»    (Vorgabe) persönliche Tokens (tfp_…),
+ * Welche Art gilt, bestimmt der Ort des Aufrufs in $GLOBALS['wb_token_context'] = [Ort, Adresse des Connectors].
+ * Ohne Ort (Vorgabe seit U1c, S1 N2) gilt kein Token: Seiten wie /<kurzwort>, /b/<schlüssel>/export oder
+ * /a/<schlüssel>/print kennen nur die Sitzung. Die Orte setzen api/index.php und mcp/index.php selbst:
+ *   «api»    persönliche Tokens (tfp_…),
  *   «mcp»    Zugriffstokens einer OAuth-Verbindung (tfa_…), nur am Connector, für den sie erteilt wurden,
  *   «legacy» der frühere api_token an der alten Connector-Adresse /mcp/<token>.
  * Das Ergebnis hat immer kind «token» (nie Systemrechte, nie Rückmeldungen), dazu via = oauth|personal|legacy.
  * Konto und Zugehörigkeit zum Arbeitsbereich werden bei jedem Aufruf neu geprüft (lib/oauth.php).
  */
 function wb_auth_from_token(string $token): ?array {
-    [$place, $resource] = $GLOBALS['wb_token_context'] ?? ['api', null];
+    [$place, $resource] = $GLOBALS['wb_token_context'] ?? [null, null];
+    if ($place === null) return null;
     try {
         if (str_starts_with($token, 'tfr_') || str_starts_with($token, 'tfc_')) return null;
         if (str_starts_with($token, 'tfa_')) return $place === 'mcp' && is_string($resource) ? oauth_access_auth($token, $resource) : null;

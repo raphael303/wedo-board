@@ -174,8 +174,11 @@ INV=(-b "$TMP/i" -c "$TMP/i" --data-urlencode "csrf=$CSI" --data-urlencode "t=$I
 N1=(-b "$TMP/n1" -c "$TMP/n1"); CSN=$(csrf_of "$TMP/n1" /account)
 [ "$(code "${N1[@]}" --data-urlencode "csrf=$CSN" -d "action=email&email=neue.adresse@example.org" "$BASE/account")" = 302 ] || bad 'Adresse ändern anfordern'
 ET=$(maillink neue.adresse@example.org verify)
-[ "$(P 'echo db_row("SELECT email FROM users WHERE email IN (?, \"neue.adresse@example.org\")", [$argv[1]])["email"];' "$NEW")" = "$NEW" ] && curl -s -o /dev/null "${N1[@]}" "$BASE/account/email?t=$ET" \
-  && [ "$(P 'echo (int)db_row("SELECT COUNT(*) AS n FROM users WHERE email = \"neue.adresse@example.org\"")["n"];')" = 1 ] && ok 'neue Adresse gilt erst nach dem Link in der Mail an die neue Adresse' || bad 'Adresse ändern'
+[ "$(P 'echo db_row("SELECT email FROM users WHERE email IN (?, \"neue.adresse@example.org\")", [$argv[1]])["email"];' "$NEW")" = "$NEW" ] && curl -s "${N1[@]}" "$BASE/account/email?t=$ET" | grep -q 'Adresse bestätigen' \
+  && [ "$(P 'echo (int)db_row("SELECT COUNT(*) AS n FROM users WHERE email = \"neue.adresse@example.org\"")["n"];')" = 0 ] \
+  && [ "$(curl -s -o /dev/null -w '%{redirect_url}' "$BASE/account/email?t=$ET")" = "$BASE/login?next=%2Faccount%2Femail%3Ft%3D$ET" ] \
+  && [ "$(code "${N1[@]}" --data-urlencode "csrf=$CSN" --data-urlencode "t=$ET" "$BASE/account/email")" = 302 ] \
+  && [ "$(P 'echo (int)db_row("SELECT COUNT(*) AS n FROM users WHERE email = \"neue.adresse@example.org\"")["n"];')" = 1 ] && ok 'neue Adresse gilt erst nach Link und Knopf in einer Sitzung desselben Kontos (S1 N5: GET und Aufruf ohne Sitzung ändern nichts)' || bad 'Adresse ändern'
 VT2=$(P '$m = db_row("SELECT body FROM mail_queue WHERE to_addr = ? AND body LIKE \"%email-revert%\" ORDER BY id DESC LIMIT 1", [$argv[1]]); preg_match("~email-revert\\?t=(\\S+)~", (string)$m["body"], $x); echo $x[1] ?? "";' "$NEW")
 CSE=$(csrf_of "$TMP/e" "/account/email-revert?t=$VT2")
 [ -n "$VT2" ] && [ "$(code -b "$TMP/e" --data-urlencode "csrf=$CSE" --data-urlencode "t=$VT2" --data-urlencode "password=$NEWPW" --data-urlencode "password2=$NEWPW" "$BASE/account/email-revert")" = 302 ] \
@@ -219,7 +222,7 @@ php tools/rescue.php status > "$TMP/resc.out" 2>&1 && grep -q "$OWNER · bestät
 P 'setting_set("schema_version", "14");'; rm -f uploads/.schema
 R=$(curl -s -w ' %{http_code}' "${AUTH[@]}" "$BASE/api/me"); H=$(code "$BASE/"); M=$(code -H "Authorization: Bearer $ATOK" "$BASE/mcp/private")
 P 'setting_set("schema_version", (string)WB_SCHEMA_VERSION);'; rm -f uploads/.schema
-echo "$R" | grep -q '"code":"maintenance".* 503$' && [ "$H" = 503 ] && [ "$M" = 503 ] && [ "$(code "${AUTH[@]}" "$BASE/api/me")" = 200 ] && [ "$(cat uploads/.schema)" = 16 ] \
+echo "$R" | grep -q '"code":"maintenance".* 503$' && [ "$H" = 503 ] && [ "$M" = 503 ] && [ "$(code "${AUTH[@]}" "$BASE/api/me")" = 200 ] && [ "$(cat uploads/.schema)" = 17 ] \
   && ok 'veraltetes Schema: Wartungshinweis (503) statt Migration aus dem Web; danach wieder erreichbar' || bad "Wartung: $R / $H / $M"
 [ "$(curl -s "$BASE/install.php" -o /dev/null -w '%{http_code}')" = 403 ] && ok 'install.php nach der Installation gesperrt' || bad 'install.php offen'
 
@@ -271,9 +274,9 @@ OUT=$(php -r 'require "lib/bootstrap.php"; echo db_migrate(), " ", setting_get("
   $b = db_all("SELECT owner_user_id, org_id, identity_seed FROM boards UNION ALL SELECT owner_user_id, org_id, identity_seed FROM activities"); echo count($b), count(array_unique(array_column($b, "identity_seed"))), array_sum(array_column($b, "owner_user_id")), " ", preg_match("/^[0-9a-f]{32}$/", $b[0]["identity_seed"]), " ";
   echo user_setting_get(1, "ai_enabled"), user_setting_get(1, "ai_auto_prompt"), user_setting_get(1, "ai_organize_prefs"), setting_get("ai_enabled") ?? "-", " ", setting_get("teacher_approval"), " ";
   wb_auth_cli(1); echo count(boards_list(wb_scope())), " "; try { db_exec("INSERT INTO boards (bkey, name, created_at, updated_at, last_activity_at) VALUES (\"dddddddddddddddd\", \"x\", ?, ?, ?)", array_fill(0, 3, wb_now())); echo "vorgabe"; } catch (PDOException $e) { echo "keine-vorgabe"; }' 2>&1)
-[ "$OUT" = '2 16 raphael@example.org pw bestätigt superadmin ohne-role hash-weg kein-token 333 1 1Meine Anweisung{}- manual 2 keine-vorgabe' ] \
+[ "$OUT" = '3 17 raphael@example.org pw bestätigt superadmin ohne-role hash-weg kein-token 333 1 1Meine Anweisung{}- manual 2 keine-vorgabe' ] \
   && [ "$(php -r 'require "lib/bootstrap.php"; $t = db_row("SELECT * FROM api_tokens"); echo $t["purpose"], " ", $t["user_id"], " ", $t["token_hash"] === hash("sha256", str_repeat("ab", 24)) ? "hash" : "klartext", " ", $t["expires_at"] !== null ? "ablauf" : "ewig";')" = 'legacy_connector 1 hash ablauf' ] \
-  && ok 'Migrationen 15 und 16: Benutzer 1 mit Adresse, bisherigem Passwort und Rolle; der alte Token wird ein Hash mit Ablauf; Boards behalten ihre Besitzerin und erhalten Zufallswerte; Vorgabe DEFAULT 1 entfernt' || bad "Migration 15: $OUT"
+  && ok 'Migrationen 15 bis 17: Benutzer 1 mit Adresse, bisherigem Passwort und Rolle; der alte Token wird ein Hash mit Ablauf; Boards behalten ihre Besitzerin und erhalten Zufallswerte; Vorgabe DEFAULT 1 entfernt' || bad "Migration 15: $OUT"
 [ "$(php -r 'require "lib/bootstrap.php"; echo db_migrate();')" = 0 ] && ok 'Migration ein zweites Mal: nichts zu tun' || bad 'Migration 15 nicht idempotent'
 cp "$TMP/config.main.php" config.php; rm -f uploads/.schema; sleep 1
 set -o pipefail

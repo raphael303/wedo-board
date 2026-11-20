@@ -103,8 +103,22 @@ function guest_block_public(array $b): array {
     ];
 }
 
-/** Sperren, die eine Person gesetzt hat. */
+/**
+ * Sperren, die eine Person gesetzt hat, im Arbeitsbereich des Aufrufs (S1, N3): Sperren eines Boards nur, wenn
+ * das Board in diesem Arbeitsbereich liegt; Sperren «auf allen Boards» haben kein Board, wirken für alle Boards
+ * der Person und erscheinen deshalb in jedem Arbeitsbereich (bis U2 sie an die Benutzernummer bindet).
+ */
 function guest_blocks_list(int $userId, bool $activeOnly = true, int $limit = 200): array {
-    $rows = db_all('SELECT * FROM guest_blocks WHERE user_id = ?' . ($activeOnly ? ' AND lifted_at IS NULL' : '') . ' ORDER BY lifted_at IS NULL DESC, id DESC LIMIT ' . max(1, min(500, $limit)), [$userId]);
+    $rows = db_all('SELECT g.* FROM guest_blocks g LEFT JOIN boards b ON b.id = g.board_id WHERE g.user_id = ? AND (g.board_id IS NULL OR b.org_id <=> ?)'
+        . ($activeOnly ? ' AND g.lifted_at IS NULL' : '') . ' ORDER BY g.lifted_at IS NULL DESC, g.id DESC LIMIT ' . max(1, min(500, $limit)), [$userId, wb_workspace_org_id()]);
     return array_map('guest_block_public', $rows);
+}
+
+/** Liegt die Sperre im Arbeitsbereich des Aufrufs? (Regel wie in guest_blocks_list) */
+function guest_block_in_workspace(array $block): bool {
+    if ($block['board_id'] === null) return true;
+    $b = db_row('SELECT org_id FROM boards WHERE id = ?', [(int)$block['board_id']]);
+    if (!$b) return false;
+    $org = wb_workspace_org_id();
+    return $b['org_id'] === null ? $org === null : $org !== null && (int)$b['org_id'] === $org;
 }

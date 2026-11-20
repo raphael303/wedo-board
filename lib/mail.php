@@ -13,12 +13,23 @@ declare(strict_types=1);
  *
  * Regeln: nie an Kennungen unter k.tafula.top, nie an eine Adresse in mail_suppressions, höchstens
  * MAIL_HOURLY_LIMIT Mails pro Stunde (cyon erlaubt 100 pro Stunde und Adresse).
+ *
+ * Seit U1c (Sicherheitsprüfung S1): Eine Zustellmeldung unterdrückt eine Adresse nur, wenn sie die Message-ID
+ * einer Mail nennt, die Tafula in den letzten mail_bounce_days Tagen an genau diese Adresse verschickt hat (H1);
+ * Unterdrückungen verfallen nach mail_suppression_days Tagen, und tools/rescue.php unsuppress hebt eine auf.
+ * Der Text einer Mail bleibt nur stehen, solange sie in der Warteschlange wartet oder im Sammelpostfach liegt
+ * (Status «sink»); danach ersetzt ihn MAIL_BODY_GONE, damit Links und Codes nicht in Abzügen landen (M3).
+ * «Passwort vergessen» und Bestätigungen gehen erst nach der Antwort hinaus, damit die Antwortzeit nicht
+ * verrät, ob es ein Konto gibt (M6).
  */
 
 const MAIL_HOURLY_LIMIT = 90;
 const MAIL_MAX_ATTEMPTS = 5;
 /** Arten, die sofort hinausgehen, weil jemand an der Tastatur darauf wartet. */
-const MAIL_URGENT = ['login_code', 'verify', 'reset', 'invite', 'gate'];
+const MAIL_URGENT = ['login_code', 'invite', 'gate'];
+/** Arten, die erst nach der Antwort hinausgehen (oder mit dem Cronjob), weil ihr Versand sonst Konten verrät. */
+const MAIL_AFTER_RESPONSE = ['verify', 'reset'];
+const MAIL_BODY_GONE = '(Inhalt nach dem Versand entfernt)';
 
 function mail_config(): ?array {
     $c = wb_config('smtp');
@@ -42,14 +53,76 @@ function mail_enqueue(string $to, string $kind, string $subject, string $body, ?
     if ($to === null || wb_email_is_card($to)) return 0;
     $body = rtrim($body) . "\n\n-- \n" . wb_app_name() . ' · ' . wb_base_url() . "\n" . tx('Diese Nachricht wurde automatisch verschickt. Antworten werden nicht gelesen.') . "\n";
     $status = 'queued';
-    if (db_row('SELECT id FROM mail_suppressions WHERE email = ?', [$to])) $status = 'suppressed';
+    if (mail_suppressed($to)) $status = 'suppressed';
     elseif (!mail_goes_out($to)) $status = wb_is_production() ? 'failed' : 'sink';
     $now = wb_now();
     $id = db_insert('INSERT INTO mail_queue (to_addr, to_user_id, kind, subject, body, status, next_attempt_at, last_error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [$to, $userId, mb_substr($kind, 0, 32), mb_substr($subject, 0, 250), $body, $status, $status === 'queued' ? $now : null,
+        [$to, $userId, mb_substr($kind, 0, 32), mb_substr($subject, 0, 250), $status === 'suppressed' ? MAIL_BODY_GONE : $body, $status, $status === 'queued' ? $now : null,
          $status === 'failed' ? 'Kein SMTP-Zugang in config.php.' : null, $now]);
     if ($status === 'queued' && in_array($kind, MAIL_URGENT, true)) mail_send_one($id);
+    if ($status === 'queued' && in_array($kind, MAIL_AFTER_RESPONSE, true)) mail_send_after_response($id);
     return $id;
+}
+
+/**
+ * Verschickt eine Mail erst, nachdem die Antwort an den Browser abgeschlossen ist. Ohne eine Funktion dafür
+ * (Kommandozeile, eingebauter Server) bleibt sie in der Warteschlange, und der Cronjob verschickt sie.
+ */
+function mail_send_after_response(int $id): void {
+    static $ids = null;
+    if ($ids === null) {
+        $ids = [];
+        register_shutdown_function(function () use (&$ids): void {
+            if (function_exists('fastcgi_finish_request')) fastcgi_finish_request();
+            elseif (function_exists('litespeed_finish_request')) litespeed_finish_request();
+            else return;
+            foreach ($ids as $i) {
+                try { mail_send_one($i); } catch (Throwable $e) { error_log(wb_app_name() . ' mail: ' . $e->getMessage()); }
+            }
+        });
+    }
+    $ids[] = $id;
+}
+
+/** Ist diese Adresse zurzeit unterdrückt? Einträge verfallen nach mail_suppression_days Tagen. */
+function mail_suppressed(string $email): bool {
+    return db_row('SELECT id FROM mail_suppressions WHERE email = ? AND created_at > ?', [$email, wb_utc(time() - mail_suppression_days() * 86400)]) !== null;
+}
+
+function mail_suppression_days(): int {
+    return max(1, wb_setting_int('mail_suppression_days', 30));
+}
+
+function mail_suppress(string $email, string $reason, string $detail): void {
+    db_exec('INSERT INTO mail_suppressions (email, reason, detail, created_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE reason = VALUES(reason), detail = VALUES(detail), created_at = VALUES(created_at)',
+        [$email, mb_substr($reason, 0, 32), mb_substr($detail, 0, 500), wb_now()]);
+}
+
+/** Hebt eine Unterdrückung auf (tools/rescue.php unsuppress). true, wenn es eine gab. */
+function mail_unsuppress(string $email): bool {
+    $email = wb_email_normalize($email);
+    return $email !== null && db_exec('DELETE FROM mail_suppressions WHERE email = ?', [$email]) > 0;
+}
+
+/**
+ * Gehört eine Zustellmeldung zu einer Mail von Tafula? Nummer in mail_queue, wenn die Message-ID zu einer Mail
+ * passt, die in den letzten mail_bounce_days Tagen an genau diese Adresse ging; sonst null.
+ */
+function mail_bounce_match(?string $messageId, string $email): ?int {
+    if ($messageId === null || $messageId === '') return null;
+    $r = db_row("SELECT id FROM mail_queue WHERE message_id = ? AND to_addr = ? AND status IN ('sent', 'bounced') AND sent_at > ?",
+        [$messageId, $email, wb_utc(time() - max(1, wb_setting_int('mail_bounce_days', 7)) * 86400)]);
+    return $r ? (int)$r['id'] : null;
+}
+
+/** Stündlich vom Cronjob: abgelaufene Unterdrückungen und alte Texte entfernen. */
+function mail_cleanup(): array {
+    $out = ['suppressions' => db_exec('DELETE FROM mail_suppressions WHERE created_at < ?', [wb_utc(time() - mail_suppression_days() * 86400)])];
+    // Verschickte, zurückgekommene und unterdrückte Mails sofort; endgültig fehlgeschlagene nach einem Tag.
+    $out['bodies'] = db_exec("UPDATE mail_queue SET body = ? WHERE body <> ? AND (status IN ('sent', 'bounced', 'suppressed') OR (status = 'failed' AND created_at < ?))",
+        [MAIL_BODY_GONE, MAIL_BODY_GONE, wb_utc(time() - 86400)]);
+    db_exec('DELETE FROM mail_queue WHERE created_at < ?', [wb_utc(time() - 90 * 86400)]);
+    return $out;
 }
 
 function mail_sent_last_hour(): int {
@@ -69,15 +142,15 @@ function mail_send_one(int $id): bool {
     $messageId = bin2hex(random_bytes(12)) . '@' . wb_email_domain((string)$cfg['from']);
     try {
         smtp_send($cfg, (string)$m['to_addr'], (string)$m['subject'], (string)$m['body'], $messageId);
-        db_exec("UPDATE mail_queue SET status = 'sent', sent_at = ?, message_id = ?, last_error = NULL, next_attempt_at = NULL WHERE id = ?", [wb_now(), $messageId, $id]);
+        db_exec("UPDATE mail_queue SET status = 'sent', sent_at = ?, message_id = ?, last_error = NULL, next_attempt_at = NULL, body = ? WHERE id = ?", [wb_now(), $messageId, MAIL_BODY_GONE, $id]);
         return true;
     } catch (Throwable $e) {
         $err = mb_substr($e->getMessage(), 0, 500);
         // 5xx des Servers ist endgültig, alles andere wird später noch einmal versucht.
         $final = $attempts >= MAIL_MAX_ATTEMPTS || preg_match('/^SMTP 5\d\d/', $err);
         // Der Server lehnt die Empfängerin endgültig ab: wie ein Rückläufer behandeln.
-        if (preg_match('/^SMTP 5\d\d bei RCPT TO/', $err)) db_exec('INSERT IGNORE INTO mail_suppressions (email, reason, detail, created_at) VALUES (?, ?, ?, ?)', [(string)$m['to_addr'], 'rejected', $err, wb_now()]);
-        db_exec('UPDATE mail_queue SET status = ?, last_error = ? WHERE id = ?', [$final ? 'failed' : 'queued', $err, $id]);
+        if (preg_match('/^SMTP 5\d\d bei RCPT TO/', $err)) mail_suppress((string)$m['to_addr'], 'rejected', $err);
+        db_exec('UPDATE mail_queue SET status = ?, last_error = ?' . ($final ? ', body = ' . db()->quote(MAIL_BODY_GONE) : '') . ' WHERE id = ?', [$final ? 'failed' : 'queued', $err, $id]);
         error_log(wb_app_name() . ' mail: ' . $err);
         return false;
     }
@@ -156,9 +229,11 @@ function smtp_send(array $cfg, string $to, string $subject, string $body, string
 /* ---------- Rückläufer ---------- */
 
 /**
- * Liest ungelesene Nachrichten im Postfach des Absenders über IMAP. Eine Zustellmeldung (DSN) mit dauerhaftem
- * Fehler (5.x.x) trägt die Adresse in mail_suppressions ein und setzt die Mail auf «bounced»; erkannte Meldungen
- * werden im Postfach gelöscht, alles andere bleibt als gelesen liegen. Gibt die Anzahl erkannter Rückläufer zurück.
+ * Liest ungelesene Nachrichten im Postfach des Absenders über IMAP. Eine Zustellmeldung (DSN), die eine Mail von
+ * Tafula an genau diese Adresse nennt (mail_bounce_match), setzt die Mail auf «bounced» und trägt die Adresse bei
+ * dauerhaftem Fehler (5.x.x) in mail_suppressions ein; solche Meldungen werden im Postfach gelöscht. Alles andere,
+ * auch eine Meldung ohne passende Message-ID, bleibt als gelesen liegen und bewirkt nichts.
+ * Gibt die Anzahl erkannter Rückläufer zurück.
  */
 function mail_read_bounces(int $max = 30): int {
     $cfg = mail_config();
@@ -199,16 +274,8 @@ function mail_read_bounces(int $max = 30): int {
         }
         foreach (array_slice(array_values($ids), 0, $max) as $uid) {
             $raw = implode('', $cmd('UID FETCH ' . $uid . ' (BODY.PEEK[]<0.40000>)'));
-            $b = mail_parse_bounce($raw);
+            $b = mail_bounce_apply(mail_parse_bounce($raw));
             if ($b === null) { $cmd('UID STORE ' . $uid . ' +FLAGS (\Seen)'); continue; }
-            if ($b['permanent']) {
-                db_exec('INSERT IGNORE INTO mail_suppressions (email, reason, detail, created_at) VALUES (?, ?, ?, ?)', [$b['email'], 'bounce', mb_substr($b['detail'], 0, 500), wb_now()]);
-            }
-            if ($b['message_id'] !== null) {
-                db_exec("UPDATE mail_queue SET status = 'bounced', last_error = ? WHERE message_id = ? AND status = 'sent'", [mb_substr($b['detail'], 0, 500), $b['message_id']]);
-            } elseif ($b['permanent']) {
-                db_exec("UPDATE mail_queue SET status = 'bounced', last_error = ? WHERE to_addr = ? AND status = 'sent' AND sent_at > ?", [mb_substr($b['detail'], 0, 500), $b['email'], wb_utc(time() - 3 * 86400)]);
-            }
             $cmd('UID STORE ' . $uid . ' +FLAGS (\Seen \Deleted)');
             $n++;
         }
@@ -242,7 +309,20 @@ function mail_parse_bounce(string $raw): ?array {
     return ['email' => $email, 'permanent' => $status === '5', 'detail' => $diag !== '' ? $diag : 'Zustellmeldung ohne Diagnose', 'message_id' => $mid];
 }
 
-/** Sammelpostfach der Testumgebung: alle Mails, neueste zuerst. */
+/**
+ * Wendet eine erkannte Zustellmeldung an. Ohne passende Mail von Tafula (gefälscht, zu alt, fremde Adresse)
+ * geschieht nichts, und das Ergebnis ist null.
+ */
+function mail_bounce_apply(?array $b): ?array {
+    if ($b === null) return null;
+    $id = mail_bounce_match($b['message_id'], $b['email']);
+    if ($id === null) return null;
+    db_exec("UPDATE mail_queue SET status = 'bounced', last_error = ? WHERE id = ?", [mb_substr($b['detail'], 0, 500), $id]);
+    if ($b['permanent']) mail_suppress($b['email'], 'bounce', $b['detail']);
+    return $b + ['mail_id' => $id];
+}
+
+/** Sammelpostfach der Testumgebung: nur Mails, die nie hinausgingen (Status «sink»), neueste zuerst (M4). */
 function mail_sink_list(int $limit = 100): array {
-    return db_all('SELECT id, to_addr, kind, subject, status, created_at, last_error FROM mail_queue ORDER BY id DESC LIMIT ' . max(1, min(500, $limit)));
+    return db_all("SELECT id, to_addr, kind, subject, status, created_at, last_error FROM mail_queue WHERE status = 'sink' ORDER BY id DESC LIMIT " . max(1, min(500, $limit)));
 }

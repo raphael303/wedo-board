@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 const ACC_IP_FAILS = 20;          // Fehlversuche pro IP-Adresse in ACC_WINDOW Minuten, danach 429
 const ACC_ACCOUNT_FAILS = 5;      // Fehlversuche pro Konto in ACC_WINDOW Minuten, danach ein Versuch pro Minute
+const ACC_DEVICE_FAILS = 10;      // dasselbe für ein bekanntes Gerät, gezählt pro Konto und Gerät (S1, M5)
 const ACC_WINDOW = 15;
 const ACC_CODE_TTL = 600;         // Mailcode und Zwischenstand der Anmeldung: zehn Minuten
 const ACC_CODE_TRIES = 5;
@@ -86,6 +87,12 @@ function account_link(string $path, string $token): string {
 
 /* ---------- Bekannte Geräte ---------- */
 
+/** Kennung des bekannten Geräts für die Bremse (Hash des Cookies) oder ''. */
+function known_device_key(): string {
+    $c = wb_cookie_get(WB_DEVICE_COOKIE);
+    return $c === '' || strlen($c) > 100 ? '' : wb_token_hash($c);
+}
+
 /** Konto, dem dieses Gerät als bekannt gilt, oder 0. */
 function known_device_user(): int {
     $c = wb_cookie_get(WB_DEVICE_COOKIE);
@@ -111,13 +118,20 @@ function known_device_mark(int $userId): void {
 /**
  * Erste Stufe: Adresse und Passwort. Ergebnis: ['state' => 'ok', 'user' => Konto] oder 'fail' (falsch,
  * unbekannt, unbestätigt oder gesperrt, ohne Unterschied) oder 'wait' (Bremse, mit 'seconds').
+ *
+ * Ein bekanntes Gerät erspart den Mailcode, aber nicht die Bremse (S1, M5): Seine Fehlversuche zählen pro Konto
+ * und Gerät mit einer höheren Schwelle und weder auf die IP-Adresse noch auf das Konto, damit sie niemanden
+ * sonst aussperren. Danach bleibt ein Versuch pro Minute.
  */
 function login_check_password(string $email, string $password): array {
     $ip = wb_client_ip();
     $norm = wb_email_normalize($email) ?? 'ungueltig';
     $user = user_by_email($email);
     $known = $user !== null && known_device_user() === (int)$user['id'];
-    if (!$known) {
+    $devBrake = $known ? 'login-dev|' . $norm . '|' . known_device_key() : '';
+    if ($known) {
+        if (brake_count($devBrake, ACC_WINDOW) >= ACC_DEVICE_FAILS && brake_count('login-try|' . $norm, 1) >= 1) return ['state' => 'wait', 'seconds' => 60];
+    } else {
         if ($ip !== '' && brake_count('login-ip|' . $ip, ACC_WINDOW) >= ACC_IP_FAILS) return ['state' => 'wait', 'seconds' => ACC_WINDOW * 60];
         // Verlangsamen, nie aussperren: nach einigen Fehlversuchen noch ein Versuch pro Minute und Konto.
         if (brake_count('login-acct|' . $norm, ACC_WINDOW) >= ACC_ACCOUNT_FAILS && brake_count('login-try|' . $norm, 1) >= 1) return ['state' => 'wait', 'seconds' => 60];
@@ -126,9 +140,16 @@ function login_check_password(string $email, string $password): array {
     // Auch ohne Konto wird ein Hash geprüft, damit die Antwortzeit nichts verrät.
     $hash = $user['password_hash'] ?? '$2y$10$CwTycUXWue0Thq9StjUM0uJ8Zf5aSsZL1T8ZSyv7nO3Xv2aQhG2bK';
     $ok = password_verify($password, (string)$hash);
+    // Testinstanz (S1, M4): Testkonten mit Systemrolle melden sich nur über /test mit dem zweiten Code an,
+    // weil ihr Passwort und das App-Geheimnis des Test-Admins öffentlich in tools/seed.php stehen.
+    if ($ok && $user !== null && gate_required() && str_ends_with((string)$user['email'], '@' . WB_TEST_DOMAIN) && user_system_roles((int)$user['id']) !== []) $ok = false;
     if (!$ok || $user === null || !user_is_active($user)) {
-        brake_hit('login-acct|' . $norm);
-        if ($ip !== '') brake_hit('login-ip|' . $ip);
+        if ($known) {
+            brake_hit($devBrake);
+        } else {
+            brake_hit('login-acct|' . $norm);
+            if ($ip !== '') brake_hit('login-ip|' . $ip);
+        }
         return ['state' => 'fail'];
     }
     if (password_needs_rehash((string)$user['password_hash'], PASSWORD_DEFAULT)) user_set_password((int)$user['id'], $password);
@@ -230,6 +251,8 @@ function account_signup(array $in): ?string {
 
     $existing = user_by_email($email);
     if ($existing && $existing['email_verified_at'] !== null) {
+        // Gleich viel rechnen wie beim Anlegen eines Kontos, damit die Antwortzeit nichts verrät (S1, M6).
+        password_hash($pw, PASSWORD_DEFAULT);
         mail_enqueue($email, 'notice', tx('Registrierung bei {app}', ['app' => wb_app_name()]),
             tx("Hallo {name}\n\nJemand hat versucht, sich mit deiner Adresse bei {app} zu registrieren. Du hast schon ein Konto. Wenn du das warst, melde dich einfach an:\n\n{url}\n\nHast du dein Passwort vergessen, kannst du es dort zurücksetzen. Wenn du das nicht warst, musst du nichts tun.",
                 ['name' => user_name($existing), 'app' => wb_app_name(), 'url' => wb_base_url() . '/login']), (int)$existing['id']);
@@ -394,9 +417,13 @@ function account_email_change_request(array $u, string $new): ?string {
     return null;
 }
 
-/** Bestätigt die neue Adresse; die alte erhält einen Link, der die Änderung sieben Tage lang rückgängig macht. */
-function account_email_change_confirm(string $rawToken): bool {
+/**
+ * Bestätigt die neue Adresse; die alte erhält einen Link, der die Änderung sieben Tage lang rückgängig macht.
+ * $userId ist das angemeldete Konto; der Link gilt nur für dieses (S1, N5).
+ */
+function account_email_change_confirm(string $rawToken, int $userId): bool {
     $t = login_token_find($rawToken, 'email_change');
+    if ($t && (int)$t['user_id'] !== $userId) return false;
     $u = $t ? user_reload((int)$t['user_id']) : null;
     $new = wb_email_normalize((string)($t['payload']['new'] ?? ''));
     if (!$u || !user_is_active($u) || $new === null) return false;

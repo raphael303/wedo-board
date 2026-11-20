@@ -8,10 +8,14 @@ declare(strict_types=1);
  *   php tools/rescue.php reset-password <adresse>     schickt einen Link zum Zurücksetzen an die Adresse des Kontos
  *   php tools/rescue.php remove-totp <adresse>        entfernt die zweite Stufe sofort und beendet alle Sitzungen
  *   php tools/rescue.php set-email <alt> <neu>        ändert die Adresse (wenn das Postfach nicht mehr erreichbar ist)
+ *                                                     und benachrichtigt die alte Adresse
+ *   php tools/rescue.php unlock <adresse>             hebt die Sperre des Kontos und die Bremsen der Anmeldung auf
+ *   php tools/rescue.php unsuppress <adresse>         hebt die Unterdrückung einer Adresse im Mailversand auf
+ *                                                     (für jede Adresse, nicht nur für Super-Admins)
  *   php tools/rescue.php gate-code                    (nur Testinstanz) neuer Zugangscode, per Mail an owner_email
  *
- * Das Skript wirkt nur auf Konten mit der Rolle Super-Admin und gibt nie ein Passwort oder einen Code aus:
- * Das Passwort setzt die Person über den Link in der Mail selbst.
+ * Das Skript wirkt (ausser unsuppress) nur auf Konten mit der Rolle Super-Admin und gibt nie ein Passwort oder
+ * einen Code aus: Das Passwort setzt die Person über den Link in der Mail selbst.
  */
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 require dirname(__DIR__) . '/lib/bootstrap.php';
@@ -31,7 +35,8 @@ switch ($cmd) {
     case 'status':
         foreach (db_all("SELECT u.* FROM users u JOIN memberships m ON m.user_id = u.id AND m.scope_type = 'system' AND m.role = 'superadmin' ORDER BY u.id") as $u) {
             echo $u['id'], ' ', $u['email'], ' · ', $u['email_verified_at'] ? 'bestätigt' : 'UNBESTÄTIGT', ' · App-Stufe ', $u['totp_secret_enc'] ? 'eingerichtet' : 'fehlt',
-                $u['disabled_at'] ? ' · GESPERRT' : '', ' · letzte Anmeldung ', $u['last_login_at'] ?? '–', "\n";
+                $u['disabled_at'] ? ' · GESPERRT' : '', mail_suppressed((string)$u['email']) ? ' · MAILS UNTERDRÜCKT (unsuppress)' : '',
+                ' · letzte Anmeldung ', $u['last_login_at'] ?? '–', "\n";
         }
         break;
     case 'reset-password':
@@ -58,10 +63,30 @@ switch ($cmd) {
         if ($new === null || wb_email_is_card($new)) rescue_fail('Die neue Adresse ist ungültig.');
         $taken = user_by_email($new);
         if ($taken && (int)$taken['id'] !== (int)$u['id']) rescue_fail('Die neue Adresse gehört schon einem Konto.');
+        $old = (string)$u['email'];
         db_exec('UPDATE users SET email = ? WHERE id = ?', [$new, (int)$u['id']]);
         wb_sessions_revoke_user((int)$u['id']);
         audit_log('rescue.set_email', 'user', (int)$u['id']);
-        echo "Adresse geändert, alle Sitzungen beendet.\n";
+        // Die alte Adresse erfährt davon (N10): Hat jemand anderes das Skript benutzt, merkt sie es.
+        mail_enqueue($old, 'notice', 'Die Adresse deines Kontos bei ' . wb_app_name() . ' wurde geändert (Notfall-Skript)',
+            'Hallo ' . user_name($u) . "\n\nÜber das Notfall-Skript wurde die Adresse deines Kontos bei " . wb_app_name() . " von $old auf $new geändert, und alle Sitzungen wurden beendet.\n\nWenn du das nicht veranlasst hast, wende dich sofort an die Betreiberin oder den Betreiber.", (int)$u['id']);
+        echo "Adresse geändert, alle Sitzungen beendet, die alte Adresse ist benachrichtigt.\n";
+        break;
+    case 'unlock':
+        $u = rescue_superadmin((string)($argv[2] ?? ''));
+        db_exec('UPDATE users SET disabled_at = NULL WHERE id = ?', [(int)$u['id']]);
+        $norm = (string)$u['email'];
+        $keys = array_map('brake_key', ['login-acct|' . $norm, 'login-try|' . $norm, 'second|' . $u['id'], 'mailcode|' . $u['id'], 'reset-acct|' . $norm]);
+        db_exec('DELETE FROM rate_limits WHERE author_key IN (' . implode(',', array_fill(0, count($keys), '?')) . ')', $keys);
+        audit_log('rescue.unlock', 'user', (int)$u['id']);
+        echo "Konto freigegeben und Bremsen der Anmeldung für dieses Konto aufgehoben.\n";
+        break;
+    case 'unsuppress':
+        $email = wb_email_normalize((string)($argv[2] ?? ''));
+        if ($email === null) rescue_fail('Die Adresse ist ungültig.');
+        $had = mail_unsuppress($email);
+        audit_log('rescue.unsuppress', 'mail', null, ['email' => $email, 'had' => $had]);
+        echo $had ? "Unterdrückung aufgehoben; Mails an diese Adresse gehen wieder hinaus.\n" : "Diese Adresse war nicht unterdrückt.\n";
         break;
     case 'gate-code':
         if (wb_instance() !== 'test') rescue_fail('Nur auf der Testinstanz.');
@@ -80,5 +105,5 @@ switch ($cmd) {
         if (($st['status'] ?? '') !== 'sent') db_exec("UPDATE mail_queue SET body = '(Zugangscode, nicht zugestellt)' WHERE id = ?", [$id]);
         break;
     default:
-        rescue_fail("Aufruf: php tools/rescue.php status | reset-password <adresse> | remove-totp <adresse> | set-email <alt> <neu> | gate-code", 2);
+        rescue_fail("Aufruf: php tools/rescue.php status | reset-password <adresse> | remove-totp <adresse> | set-email <alt> <neu> | unlock <adresse> | unsuppress <adresse> | gate-code", 2);
 }

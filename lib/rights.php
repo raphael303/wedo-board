@@ -58,7 +58,8 @@ function wb_can(string $ability, ?array $object = null): bool {
             // aber nur in einer Sitzung, nie über ein Token. Der Plan wird ab U3 geprüft.
             return $auth['kind'] === 'session';
         case 'block.lift':
-            return $object !== null && isset($object['user_id']) && (int)$object['user_id'] === $uid;
+            // Nur eigene Sperren im Arbeitsbereich des Aufrufs (S1, N3).
+            return $object !== null && isset($object['user_id']) && (int)$object['user_id'] === $uid && guest_block_in_workspace($object);
         case 'ai.credential.manage':
             return $object === null || (int)($object['user_id'] ?? 0) === $uid;
     }

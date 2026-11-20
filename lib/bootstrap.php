@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 define('WB_ROOT', dirname(__DIR__));
-define('WB_VERSION', '0.23.0');
-define('WB_SCHEMA_VERSION', 16);
+define('WB_VERSION', '0.24.0');
+define('WB_SCHEMA_VERSION', 17);
 
 $configFile = WB_ROOT . '/config.php';
 if (!file_exists($configFile)) {

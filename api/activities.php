@@ -10,6 +10,8 @@ function activity_guest_api(string $method, array $p): never {
     $uid = wb_client_uid();
     if (!$a || !wb_can_participate($a)) wb_error('Nicht gefunden.', 404);
     $owner = wb_can('activity.manage', $a);
+    // Wie bei den Boards (S1, N4): Schreiben mit der Sitzung der Besitzerin verlangt den Header X-CSRF.
+    if ($owner && $method !== 'GET') wb_check_csrf_header();
     $lang = wb_resolve_lang($a['lang']);
     $sub = $p[2] ?? '';
 

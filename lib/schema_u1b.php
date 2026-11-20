@@ -56,6 +56,7 @@ function db_schema_u1b(): array {
         "CREATE TABLE IF NOT EXISTS oauth_tokens (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             grant_id INT UNSIGNED NOT NULL,
+            parent_id INT UNSIGNED NULL,
             kind ENUM('access','refresh') NOT NULL,
             token_hash CHAR(64) NOT NULL,
             created_at DATETIME(6) NOT NULL,
@@ -64,6 +65,7 @@ function db_schema_u1b(): array {
             revoked_at DATETIME(6) NULL,
             UNIQUE KEY uk_token (token_hash),
             KEY ix_grant (grant_id, kind),
+            KEY ix_parent (parent_id),
             KEY ix_expires (expires_at)
         ) $t",
         "CREATE TABLE IF NOT EXISTS api_tokens (

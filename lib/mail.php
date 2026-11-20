@@ -24,6 +24,8 @@ declare(strict_types=1);
  */
 
 const MAIL_HOURLY_LIMIT = 90;
+/** So viele Mails pro Stunde bleiben für Anmeldecodes reserviert (S1, N8). */
+const MAIL_RESERVED_CODES = 15;
 const MAIL_MAX_ATTEMPTS = 5;
 /** Arten, die sofort hinausgehen, weil jemand an der Tastatur darauf wartet. */
 const MAIL_URGENT = ['login_code', 'invite', 'gate'];
@@ -133,7 +135,8 @@ function mail_sent_last_hour(): int {
 function mail_send_one(int $id): bool {
     $m = db_row("SELECT * FROM mail_queue WHERE id = ? AND status = 'queued'", [$id]);
     if (!$m) return false;
-    if (mail_sent_last_hour() >= MAIL_HOURLY_LIMIT) return false; // bleibt in der Warteschlange
+    $limit = $m['kind'] === 'login_code' ? MAIL_HOURLY_LIMIT : MAIL_HOURLY_LIMIT - MAIL_RESERVED_CODES;
+    if (mail_sent_last_hour() >= $limit) return false; // bleibt in der Warteschlange
     // Vormerken, damit ein gleichzeitiger Lauf dieselbe Mail nicht noch einmal nimmt.
     $attempts = (int)$m['attempts'] + 1;
     if (db_exec("UPDATE mail_queue SET attempts = ?, next_attempt_at = ? WHERE id = ? AND status = 'queued' AND attempts = ?",

@@ -183,6 +183,6 @@ admin_header('Einstellungen', 'settings');
     <?php endif; ?>
   </div>
   <p class="muted">Anzeigename «<?= e(wb_app_name()) ?>» und Adresse <code><?= e(wb_base_url()) ?></code> stammen aus <code>config.php</code><?php $lh = (array)wb_config('legacy_hosts', []); ?><?= $lh ? '; frühere Domains, die dorthin umleiten: ' . e(implode(', ', $lh)) : '' ?>. Die Checkliste für einen Domainwechsel steht in <code>DEVELOPMENT.md</code>.</p>
-  <p class="muted">Version <?= WB_VERSION ?> · PHP <?= PHP_VERSION ?></p>
+  <p class="muted">Version <?= WB_VERSION ?><?php if (user_system_roles(wb_user_id()) !== []): ?> · PHP <?= PHP_VERSION ?><?php endif; ?></p>
 </section>
 <?php admin_footer();

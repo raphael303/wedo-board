@@ -74,7 +74,7 @@ function feedback_create(array $in, string $uid, string $ip): array {
         $email = mb_substr($email, 0, 200);
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('feedback_email_invalid');
     }
-    feedback_ip_limit($ip);
+    feedback_ip_limit(wb_ip_net($ip));
     $context = feedback_clean_context($in['context'] ?? []);
     $boardId = null;
     $activityId = null;

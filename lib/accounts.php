@@ -124,7 +124,7 @@ function known_device_mark(int $userId): void {
  * sonst aussperren. Danach bleibt ein Versuch pro Minute.
  */
 function login_check_password(string $email, string $password): array {
-    $ip = wb_client_ip();
+    $ip = wb_client_net();
     $norm = wb_email_normalize($email) ?? 'ungueltig';
     $user = user_by_email($email);
     $known = $user !== null && known_device_user() === (int)$user['id'];
@@ -247,7 +247,9 @@ function account_signup(array $in): ?string {
     $pw = (string)($in['password'] ?? '');
     if (($p = wb_password_problem($pw, [$email, strstr($email, '@', true), $first, $last])) !== null) return $p;
     if ($pw !== (string)($in['password2'] ?? '')) return tx('Die Passwörter stimmen nicht überein.');
-    if (brake_exceeded('signup-ip|' . wb_client_ip(), 5, 60)) return tx('Von diesem Anschluss kamen zu viele Registrierungen. Bitte später wieder versuchen.');
+    if (brake_exceeded('signup-ip|' . wb_client_net(), 5, 60)) return tx('Von diesem Anschluss kamen zu viele Registrierungen. Bitte später wieder versuchen.');
+    // Gesamtgrenze für Mails an fremde Adressen aus dem öffentlichen Formular (S1, N8).
+    if (brake_exceeded('signup-all', wb_setting_int('signup_mails_per_hour', 30), 60)) return tx('Zurzeit kommen zu viele Registrierungen. Bitte später wieder versuchen.');
 
     $existing = user_by_email($email);
     if ($existing && $existing['email_verified_at'] !== null) {
@@ -269,7 +271,7 @@ function account_signup(array $in): ?string {
 function account_send_verification(array $u): void {
     $token = login_token_create((int)$u['id'], 'verify_email', 3 * 86400);
     mail_enqueue((string)$u['email'], 'verify', tx('Bitte bestätige deine Adresse für {app}', ['app' => wb_app_name()]),
-        tx("Hallo {name}\n\nMit diesem Link bestätigst du deine Adresse und schliesst die Registrierung bei {app} ab. Du brauchst dazu das Passwort, das du bei der Registrierung gewählt hast:\n\n{url}\n\nDer Link gilt drei Tage. Wenn du dich nicht registriert hast, musst du nichts tun; ohne Bestätigung wird das Konto gelöscht.",
+        tx("Guten Tag\n\nMit diesem Link bestätigst du deine Adresse und schliesst die Registrierung bei {app} ab. Du brauchst dazu das Passwort, das du bei der Registrierung gewählt hast:\n\n{url}\n\nDer Link gilt drei Tage. Wenn du dich nicht registriert hast, musst du nichts tun; ohne Bestätigung wird das Konto gelöscht.",
             ['name' => user_name($u), 'app' => wb_app_name(), 'url' => account_link('/signup/verify', $token)]), (int)$u['id']);
 }
 
@@ -370,7 +372,7 @@ function invitation_accept_new(array $inv, array $in): array {
 /** Antwortet nie mit einem Unterschied: Die Seite zeigt immer denselben Satz. */
 function account_reset_request(string $email): void {
     $norm = wb_email_normalize($email) ?? 'ungueltig';
-    if (brake_exceeded('reset-ip|' . wb_client_ip(), 5, 60) || brake_exceeded('reset-acct|' . $norm, 3, 60)) return;
+    if (brake_exceeded('reset-ip|' . wb_client_net(), 5, 60) || brake_exceeded('reset-acct|' . $norm, 3, 60)) return;
     $u = user_by_email($email);
     if (!$u || !user_is_active($u)) return;
     $token = login_token_create((int)$u['id'], 'reset_password', 3600);
@@ -540,8 +542,8 @@ function gate_ok(int $level = 1): bool {
 
 function gate_enter(int $level, string $code): bool {
     $hash = (string)setting_get('test_gate' . $level . '_hash', '');
-    if ($hash === '' || brake_count('gate|' . wb_client_ip(), 15) >= 10) return false;
-    if (!password_verify(trim($code), $hash)) { brake_hit('gate|' . wb_client_ip()); return false; }
+    if ($hash === '' || brake_count('gate|' . wb_client_net(), 15) >= 10) return false;
+    if (!password_verify(trim($code), $hash)) { brake_hit('gate|' . wb_client_net()); return false; }
     // An den Hash gebunden: Ein neuer Code macht alle gemerkten Zugänge ungültig.
     wb_cookie_set('tafula_g' . $level, wb_signed_make('gate', 'gate' . $level . '|' . substr($hash, -12), 30 * 86400), time() + 30 * 86400);
     return true;

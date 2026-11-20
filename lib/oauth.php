@@ -108,11 +108,19 @@ function oauth_redirect_host(string $uri): string {
 
 /* ---------- Clients (selbständige Registrierung, RFC 7591) ---------- */
 
+/**
+ * Bremse der Registrierung (S1, M7). Claude registriert von wechselnden Adressen eines Bereichs (auf der
+ * Testinstanz vier Registrierungen aus 160.79.106.0/24 von vier Adressen); gezählt wird deshalb IPv4 pro Adresse
+ * und IPv6 pro /64 (dazu pro /48), nicht pro Bereich. Statt einer Tagesgrenze zählt, wie viele unbenutzte Clients
+ * gleichzeitig bestehen; sie verfallen nach einer Stunde.
+ */
 function oauth_client_register(array $in): array {
     $ip = wb_client_ip();
-    if (brake_exceeded('oauth-reg|' . $ip, wb_setting_int('oauth_register_per_ip_hour', 10), 60)) throw new OAuthError('too_many_requests', 'Zu viele Registrierungen. Bitte später wieder versuchen.', 429);
-    $day = (int)(db_row('SELECT COUNT(*) AS n FROM oauth_clients WHERE created_at > ?', [wb_utc(time() - 86400)])['n'] ?? 0);
-    if ($day >= wb_setting_int('oauth_register_per_day', 200)) throw new OAuthError('too_many_requests', 'Zu viele Registrierungen. Bitte später wieder versuchen.', 429);
+    $tooMany = fn() => new OAuthError('too_many_requests', 'Zu viele Registrierungen. Bitte später wieder versuchen.', 429);
+    if (brake_exceeded('oauth-reg|' . wb_ip_net($ip), wb_setting_int('oauth_register_per_ip_hour', 30), 60)) throw $tooMany();
+    if (str_contains($ip, ':') && brake_exceeded('oauth-reg48|' . wb_ip_net($ip, 48), wb_setting_int('oauth_register_per_net_hour', 60), 60)) throw $tooMany();
+    $open = (int)(db_row('SELECT COUNT(*) AS n FROM oauth_clients c WHERE c.expires_at > ? AND c.last_used_at IS NULL AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id)', [wb_now()])['n'] ?? 0);
+    if ($open >= wb_setting_int('oauth_register_open_max', 500)) throw $tooMany();
 
     $uris = $in['redirect_uris'] ?? null;
     if (!is_array($uris) || !$uris || count($uris) > 5) throw new OAuthError('invalid_redirect_uri', 'redirect_uris: eine bis fünf Adressen.');
@@ -129,15 +137,25 @@ function oauth_client_register(array $in): array {
     foreach ((array)($in['response_types'] ?? []) as $r) {
         if ($r !== 'code') throw new OAuthError('invalid_client_metadata', 'Unterstützt wird nur der response_type code.');
     }
-    $name = wb_clean_text(is_string($in['client_name'] ?? null) ? $in['client_name'] : '', 80);
-    $name = trim(preg_replace('/[\x00-\x1f\x7f<>]/u', '', $name) ?? '');
+    $name = oauth_client_name_clean(is_string($in['client_name'] ?? null) ? $in['client_name'] : '');
     $clientId = 'tc_' . wb_random_token(18);
     $now = wb_now();
     db_insert('INSERT INTO oauth_clients (client_id, name, redirect_uris_json, created_ip, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [$clientId, $name, json_encode(array_values($clean), JSON_UNESCAPED_SLASHES), $ip, $now, wb_utc(time() + wb_setting_int('oauth_client_unused_hours', 24) * 3600)]);
+        [$clientId, $name, json_encode(array_values($clean), JSON_UNESCAPED_SLASHES), $ip, $now, wb_utc(time() + wb_setting_int('oauth_client_unused_hours', 1) * 3600)]);
     // Öffentlicher Client: kein Geheimnis, die Sicherheit kommt aus PKCE und der gebundenen Rücksprungadresse.
     return ['client_id' => $clientId, 'client_id_issued_at' => time(), 'client_name' => $name, 'redirect_uris' => array_values($clean),
         'token_endpoint_auth_method' => 'none', 'grant_types' => ['authorization_code', 'refresh_token'], 'response_types' => ['code'], 'scope' => OAUTH_SCOPE];
+}
+
+/**
+ * Name, den ein Programm selbst angibt (S1, N6): höchstens vierzig Zeichen, ohne Steuer- und Formatzeichen,
+ * ohne <, >, Anführungszeichen « » ‹ › " und ohne «://», damit er keine Adresse und keine Anweisung vortäuscht.
+ */
+function oauth_client_name_clean(string $name): string {
+    $name = wb_clean_text($name, 200);
+    $name = preg_replace('/[\x00-\x1f\x7f<>«»‹›"„“”]|\p{Cf}/u', '', $name) ?? '';
+    $name = str_replace('://', ' ', $name);
+    return trim(mb_substr(trim(preg_replace('/\s+/u', ' ', $name) ?? ''), 0, 40));
 }
 
 function oauth_client_find(string $clientId): ?array {
@@ -145,6 +163,7 @@ function oauth_client_find(string $clientId): ?array {
     $c = db_row('SELECT * FROM oauth_clients WHERE client_id = ? AND disabled_at IS NULL AND expires_at > ?', [$clientId, wb_now()]);
     if (!$c) return null;
     $c['id'] = (int)$c['id'];
+    $c['name'] = oauth_client_name_clean((string)$c['name']);
     $c['redirect_uris'] = array_values(array_filter((array)json_decode((string)$c['redirect_uris_json'], true), 'is_string'));
     return $c;
 }
@@ -254,8 +273,8 @@ function oauth_token_from_code(array $p): array {
     oauth_client_touch($client['id']);
     audit_log('oauth.grant', 'oauth_grant', $grantId, ['client' => $client['name'], 'redirect' => oauth_redirect_host((string)$code['redirect_uri'])], $org, (int)$u['id'], 'self');
     account_notify($u, tx('Neue Verbindung zu deinem Konto bei {app}', ['app' => wb_app_name()]),
-        tx("Das Programm «{client}» wurde soeben mit deinem Konto verbunden (Arbeitsbereich: {ws}). Es kann deine eigenen Boards und Aktivitäten in diesem Arbeitsbereich lesen und ändern.\n\nWenn du das nicht warst, widerrufe die Verbindung sofort und ändere dein Passwort:\n\n{url}",
-            ['client' => $client['name'] !== '' ? $client['name'] : tx('ohne Namen'), 'ws' => $org === null ? tx('Privat') : mcp_workspace_label($org), 'url' => wb_base_url() . '/account#verbindungen']));
+        tx("Ein Programm wurde soeben mit deinem Konto verbunden (Arbeitsbereich: {ws}). Es nennt sich selbst «{client}» und erhält den Zugang über die Adresse {host}. Es kann deine eigenen Boards und Aktivitäten in diesem Arbeitsbereich lesen und ändern.\n\nWenn du das nicht warst, widerrufe die Verbindung sofort und ändere dein Passwort:\n\n{url}",
+            ['client' => $client['name'] !== '' ? $client['name'] : tx('ohne Namen'), 'host' => oauth_redirect_host((string)$code['redirect_uri']), 'ws' => $org === null ? tx('Privat') : mcp_workspace_label($org), 'url' => wb_base_url() . '/account#verbindungen']));
     return oauth_issue_tokens($grantId);
 }
 
@@ -276,6 +295,11 @@ function oauth_token_refresh(array $p): array {
     if ($str('client_id') !== '') {
         $client = oauth_client_find($str('client_id'));
         if (!$client || $client['id'] !== (int)$t['g_client']) throw new OAuthError('invalid_grant', 'Der Erneuerungstoken gehört nicht zu diesem Client.');
+    } else {
+        // S1, N9: OAuth 2.1 verlangt client_id auch beim Erneuern. Bevor Tafula das durchsetzt, zählt es hier,
+        // ob ein Programm (Claude) ohne erneuert; ohne Zählerstand kann U1c-2 die Pflicht einschalten.
+        if (wb_setting_int('oauth_refresh_require_client_id', 0) === 1) throw new OAuthError('invalid_request', 'client_id fehlt.');
+        setting_set('oauth_refresh_without_client_id', (string)(wb_setting_int('oauth_refresh_without_client_id', 0) + 1));
     }
     if ($t['g_revoked'] !== null) throw new OAuthError('invalid_grant', 'Die Verbindung wurde widerrufen.');
     if ($t['revoked_at'] !== null) {

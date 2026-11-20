@@ -32,6 +32,12 @@ $system = [
     'feedback.manage' => ['SA', 'AD'], 'audit.read' => ['SA', 'AD'], 'account.find' => ['SA', 'AD', 'LV'],
     'account.totp_removal' => ['SA', 'AD'], 'teacher.decide' => ['SA', 'AD', 'LV'], 'maintenance.purge' => ['SA'], 'test.helpers' => ['SA', 'AD'],
 ];
+// Seit U1c (S1, N7) verlangen Systemrechte ausser der Stufe der Sitzung auch eine eingerichtete App im Konto.
+// Für die Tabelle erhalten alle Personen vorübergehend eine App; die Probe ohne App steht nach der Schleife.
+$tmpTotp = [];
+foreach ($people as $uid) {
+    if (!user_has_totp(user_by_id($uid))) { totp_enable($uid, totp_new_secret(), 0); $tmpTotp[] = $uid; }
+}
 foreach ($system as $ability => $allowed) {
     if (!isset(WB_SYSTEM_ABILITIES[$ability])) { $fails++; echo "ABWEICHUNG: Fähigkeit $ability fehlt im Code\n"; continue; }
     foreach ($people as $role => $uid) {
@@ -48,6 +54,13 @@ foreach ($system as $ability => $allowed) {
     $as(null);
     $check("$ability für Gast", wb_can($ability), false);
 }
+foreach ($tmpTotp as $uid) { db_exec('UPDATE users SET totp_secret_enc = NULL, totp_last_step = 0, recovery_codes_json = NULL WHERE id = ?', [$uid]); user_reload($uid); }
+foreach ($tmpTotp as $uid) {
+    if (user_system_roles($uid) === []) continue;
+    $as($uid);
+    $check('Systemrechte mit Sitzung «totp», aber ohne App im Konto (Person ' . $uid . ')', wb_can('audit.read') || wb_can('account.find'), false);
+}
+$as(null);
 foreach (array_keys(WB_SYSTEM_ABILITIES) as $ability) {
     if (!isset($system[$ability])) { $fails++; echo "ABWEICHUNG: Fähigkeit $ability steht im Code, aber nicht in dieser Prüfung\n"; }
 }

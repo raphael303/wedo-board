@@ -67,6 +67,8 @@ function wb_can(string $ability, ?array $object = null): bool {
         // Nie über einen Token, und nur mit App-Stufe (Testrollen der Testinstanz sind davon ausgenommen).
         if ($auth['kind'] === 'token') return false;
         if ($auth['kind'] === 'session' && $auth['session']['mfa_level'] !== 'totp' && $auth['session']['kind'] !== 'test') return false;
+        // S1, N7: Die Stufe der Sitzung allein genügt nicht; das Konto muss die App auch jetzt noch haben.
+        if ($auth['kind'] === 'session' && $auth['session']['kind'] !== 'test' && !user_has_totp(user_reload((int)$auth['user']['id']))) return false;
         if ($ability === 'test.helpers' && !wb_test_helpers_enabled()) return false;
         return array_intersect(WB_SYSTEM_ABILITIES[$ability], user_system_roles($uid)) !== [];
     }

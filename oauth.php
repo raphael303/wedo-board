@@ -90,7 +90,7 @@ switch ($route) {
     case 'token':
         oauth_cors('POST');
         if ($method !== 'POST') oauth_json(['error' => 'invalid_request', 'error_description' => 'Nur POST.'], 405);
-        $ip = wb_client_ip();
+        $ip = wb_client_net();
         if (brake_count('oauth-token|' . $ip, 15) >= wb_setting_int('oauth_token_fails_per_ip', 200)) oauth_json(['error' => 'slow_down', 'error_description' => 'Zu viele Fehlversuche.'], 429);
         try {
             $grant = is_string($_POST['grant_type'] ?? null) ? $_POST['grant_type'] : '';

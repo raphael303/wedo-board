@@ -141,8 +141,9 @@ function mcp_handle(array $msg): ?array {
     } catch (InvalidArgumentException $e) {
         return ['jsonrpc' => '2.0', 'id' => $id, 'result' => mcp_text($e->getMessage(), true)];
     } catch (Throwable $e) {
+        // Der Text der Ausnahme bleibt im Protokoll des Servers (S1, N9).
         error_log(wb_app_name() . ' mcp: ' . $e->getMessage());
-        return mcp_rpc_error($id, -32603, 'Serverfehler: ' . $e->getMessage());
+        return mcp_rpc_error($id, -32603, 'Serverfehler. Bitte später noch einmal versuchen.');
     }
 }
 

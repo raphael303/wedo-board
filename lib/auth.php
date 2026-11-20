@@ -36,6 +36,23 @@ function wb_client_ip(): string {
     return (string)($_SERVER['REMOTE_ADDR'] ?? '');
 }
 
+/**
+ * Netz einer Adresse für die Bremsen (S1, M7): IPv4 wie sie ist, IPv6 als Präfix (Vorgabe /64), weil ein
+ * Anschluss mit IPv6 meist ein ganzes /64 oder mehr erhält und sonst jede Bremse umgehen könnte.
+ */
+function wb_ip_net(string $ip, int $v6prefix = 64): string {
+    $bin = $ip !== '' ? @inet_pton($ip) : false;
+    if ($bin === false || strlen($bin) !== 16) return $ip;
+    if (str_starts_with($bin, str_repeat("\0", 10) . "\xff\xff")) return (string)inet_ntop(substr($bin, 12)); // IPv4 in IPv6
+    $bytes = intdiv($v6prefix, 8);
+    $masked = substr($bin, 0, $bytes) . str_repeat("\0", 16 - $bytes);
+    return inet_ntop($masked) . '/' . $v6prefix;
+}
+
+function wb_client_net(): string {
+    return wb_ip_net(wb_client_ip());
+}
+
 function wb_user_agent(): string {
     return mb_substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
 }

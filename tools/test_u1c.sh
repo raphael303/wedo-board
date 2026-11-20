@@ -107,6 +107,62 @@ OUT=$(P '$c = oauth_client_register(["client_name" => "N1-Test", "redirect_uris"
   echo (int)db_row("SELECT COUNT(*) AS n FROM oauth_tokens WHERE grant_id = ? AND parent_id IS NOT NULL", [$g])["n"];' 2>&1)
 [ "$OUT" = '-+ + invalid_grant - refresh_conflict 6' ] && ok 'zweites Einlösen in der Nachfrist widerruft das erste Paar; taucht dessen Token wieder auf, endet die Verbindung' || bad "Nachfrist: $OUT"
 
+echo '13i. U1c, M7: Bremse der Registrierung von Clients'
+[ "$(P 'echo wb_ip_net("2001:db8:1:2:3:4:5:6"), " ", wb_ip_net("2001:db8:1:2:3:4:5:6", 48), " ", wb_ip_net("160.79.106.165"), " ", wb_ip_net("::ffff:1.2.3.4");')" = '2001:db8:1:2::/64 2001:db8:1::/48 160.79.106.165 1.2.3.4' ] \
+  && ok 'Adressen für Bremsen: IPv4 einzeln, IPv6 pro /64 (und /48), IPv4 in IPv6 als IPv4' || bad "wb_ip_net: $(P 'echo wb_ip_net("2001:db8:1:2:3:4:5:6");')"
+OUT=$(P 'db_exec("DELETE FROM rate_limits"); $n = 0; $r = ["redirect_uris" => ["https://m7.example/cb"], "client_name" => "M7"];
+  for ($i = 1; $i <= 31; $i++) { $_SERVER["REMOTE_ADDR"] = "2001:db8:7:7::" . dechex($i); try { oauth_client_register($r); $n++; } catch (OAuthError $e) { echo $e->status, " "; } }
+  $_SERVER["REMOTE_ADDR"] = "2001:db8:7:8::1"; oauth_client_register($r); echo $n, " ";
+  $_SERVER["REMOTE_ADDR"] = "160.79.106.1"; $c = oauth_client_register($r); $e = wb_ts(db_row("SELECT expires_at FROM oauth_clients WHERE client_id = ?", [$c["client_id"]])["expires_at"]) - time(); echo $e > 3500 && $e <= 3600 ? "1h" : $e, " ";
+  setting_set("oauth_register_open_max", "1"); $_SERVER["REMOTE_ADDR"] = "160.79.106.2"; try { oauth_client_register($r); echo "offen"; } catch (OAuthError $e) { echo $e->status; }
+  db_exec("DELETE FROM settings WHERE k = \"oauth_register_open_max\""); db_exec("DELETE FROM rate_limits");' 2>&1)
+[ "$OUT" = '429 30 1h 429' ] && ok 'dreissig pro Stunde und /64, ein anderes /64 kommt durch; unbenutzte Clients verfallen nach einer Stunde; Grenze für gleichzeitig offene Clients' || bad "Bremse der Registrierung: $OUT"
+
+echo '13j. U1c, N6 und N9: Name des Programms, Mail «Neue Verbindung», Erneuern ohne client_id'
+OUT=$(P 'echo oauth_client_name_clean("Claude ». Konto gesperrt? https://tafula-top.example/entsperren «b \u{202E}x");')
+! echo "$OUT" | grep -q '«\|»\|://' && [ "$(echo -n "$OUT" | wc -m)" -le 40 ] && ok "Programmname gekürzt und entschärft: «$OUT»" || bad "Programmname: $OUT"
+OUT=$(P '$c = oauth_client_register(["client_name" => "N6 «Test»", "redirect_uris" => ["https://n6.example/cb"]]); $cl = oauth_client_find($c["client_id"]);
+  $v = str_repeat("v", 50); $ch = rtrim(strtr(base64_encode(hash("sha256", $v, true)), "+/", "-_"), "=");
+  $code = oauth_code_create($cl, 1, null, mcp_resource_url(null), "https://n6.example/cb", $ch);
+  $t = oauth_token_from_code(["client_id" => $c["client_id"], "code" => $code, "code_verifier" => $v]);
+  $m = db_row("SELECT body FROM mail_queue WHERE kind = \"notice\" AND to_user_id = 1 ORDER BY id DESC LIMIT 1")["body"];
+  echo str_contains($m, "n6.example") ? "host" : "-", " ", str_contains($m, "«N6 Test»") ? "name" : "-", " ";
+  $before = wb_setting_int("oauth_refresh_without_client_id", 0);
+  $t2 = oauth_token_refresh(["refresh_token" => $t["refresh_token"]]); echo wb_setting_int("oauth_refresh_without_client_id", 0) - $before, " ";
+  setting_set("oauth_refresh_require_client_id", "1"); try { oauth_token_refresh(["refresh_token" => $t2["refresh_token"]]); echo "angenommen"; } catch (OAuthError $e) { echo $e->error; }
+  echo " ", isset(oauth_token_refresh(["refresh_token" => $t2["refresh_token"], "client_id" => $c["client_id"]])["access_token"]) ? "mit" : "-";
+  db_exec("DELETE FROM settings WHERE k IN (\"oauth_refresh_require_client_id\", \"oauth_refresh_without_client_id\")");' 2>&1)
+[ "$OUT" = 'host name 1 invalid_request mit' ] && ok 'Mail «Neue Verbindung» nennt den Hostnamen; Erneuern ohne client_id wird gezählt und lässt sich mit oauth_refresh_require_client_id verbieten' || bad "N6/N9: $OUT"
+! grep -q "'Serverfehler: ' . \$e->getMessage()" mcp/index.php && ! curl -s -b "$TMP/mia" "$BASE/lehrerzimmer/settings.php" | grep -q 'PHP 8' && ok 'Connector gibt keinen Ausnahmetext weiter; Einstellungen zeigen die PHP-Version nur Systemrollen' || bad 'N9: Ausnahmetext oder PHP-Version'
+
+echo '13k. U1c, N7: zweite Stufe ausschalten senkt die Stufe der Sitzungen'
+OUT=$(P '$u = user_create(["email" => "sven@tafula.test", "password" => "svens-passwort-123", "first_name" => "Sven", "last_name" => "Test", "verified" => true, "age_confirmed" => true]);
+  $id = (int)$u["id"]; membership_add($id, "system", 0, "admin", 1); totp_enable($id, totp_new_secret(), 0);
+  $s = wb_session_create($id, "totp"); $sess = db_row("SELECT * FROM sessions WHERE id = ?", [(int)$s["id"]]);
+  $GLOBALS["wb_auth_cache"] = ["kind" => "session", "user" => user_reload($id), "session" => $sess, "org_id" => null]; echo wb_can("audit.read") ? 1 : 0;
+  totp_disable($id); echo db_row("SELECT mfa_level FROM sessions WHERE id = ?", [(int)$s["id"]])["mfa_level"], " ";
+  $GLOBALS["wb_auth_cache"] = ["kind" => "session", "user" => user_reload($id), "session" => $sess, "org_id" => null]; echo wb_can("audit.read") ? 1 : 0;' 2>&1)
+[ "$OUT" = '1mail 0' ] && ok 'App ausgeschaltet: Sitzungen fallen auf «mail», und Systemrechte verlangen ein Konto mit App, auch bei einer alten Sitzung mit Stufe «totp»' || bad "N7: $OUT"
+
+echo '13l. U1c, N8: Mails an unbestätigte Adressen und Reserve für Anmeldecodes'
+OUT=$(S '$u = user_create(["email" => "mallory@example.org", "password" => "mallorys-passwort-1", "first_name" => "Besuch bei", "last_name" => "https://boese.example", "age_confirmed" => true]);
+  account_send_verification($u); $b = db_row("SELECT body FROM mail_queue WHERE to_addr = ? ORDER BY id DESC LIMIT 1", ["mallory@example.org"])["body"];
+  echo str_contains($b, "boese.example") || str_contains($b, "Besuch bei") ? "name" : "ohne", " ";
+  for ($i = 0; $i < MAIL_HOURLY_LIMIT - MAIL_RESERVED_CODES; $i++) db_exec("INSERT INTO mail_queue (to_addr, kind, subject, body, status, created_at, sent_at) VALUES (\"fuell@example.org\", \"notice\", \"f\", \"f\", \"sent\", ?, ?)", [wb_now(), wb_now()]);
+  $a = mail_enqueue("warte2@example.org", "invite", "x", "y"); $c = mail_enqueue("code@example.org", "login_code", "x", "123456");
+  echo db_row("SELECT status FROM mail_queue WHERE id = ?", [$a])["status"], " ", db_row("SELECT status FROM mail_queue WHERE id = ?", [$c])["status"], " ";
+  db_exec("DELETE FROM mail_queue WHERE to_addr = \"fuell@example.org\"");
+  setting_set("signup_mails_per_hour", "0"); echo account_signup(["email" => "neu@example.org", "first_name" => "A", "last_name" => "B", "age" => 1, "terms" => 1, "password" => "ein-langes-passwort-9", "password2" => "ein-langes-passwort-9"]) ?? "angenommen";
+  db_exec("DELETE FROM settings WHERE k = \"signup_mails_per_hour\""); db_exec("DELETE FROM rate_limits");' 2>&1)
+[ "$OUT" = 'ohne queued sent Zurzeit kommen zu viele Registrierungen. Bitte später wieder versuchen.' ] && ok 'Bestätigungsmail ohne frei gewählten Namen; 15 Mails pro Stunde bleiben für Anmeldecodes; Gesamtgrenze für Registrierungen' || bad "N8: $OUT"
+
+echo '13m. U1c, N10: Notfall-Skript'
+P '$u = user_create(["email" => "notfall@tafula.test", "password" => "notfall-passwort-12", "first_name" => "Not", "last_name" => "Fall", "verified" => true, "age_confirmed" => true]); membership_add((int)$u["id"], "system", 0, "superadmin", 1); db_exec("UPDATE users SET disabled_at = ? WHERE id = ?", [wb_now(), (int)$u["id"]]); brake_hit("login-acct|notfall@tafula.test");'
+php tools/rescue.php unlock notfall@tafula.test > "$TMP/r1.out" 2>&1
+php tools/rescue.php set-email notfall@tafula.test notfall2@tafula.test > "$TMP/r2.out" 2>&1
+[ "$(P 'echo user_by_email("notfall2@tafula.test")["disabled_at"] === null ? "frei" : "gesperrt", brake_count("login-acct|notfall@tafula.test", 15), " ", db_row("SELECT to_addr FROM mail_queue WHERE subject LIKE \"%Notfall-Skript%\" ORDER BY id DESC LIMIT 1")["to_addr"];')" = 'frei0 notfall@tafula.test' ] && grep -q benachrichtigt "$TMP/r2.out" \
+  && ok 'rescue.php unlock gibt das Konto frei und hebt die Bremsen auf; set-email benachrichtigt die alte Adresse' || bad "Notfall-Skript: $(cat "$TMP/r1.out" "$TMP/r2.out")"
+
 kill "$SMTPPID" 2>/dev/null || true
 P 'db_exec("DELETE FROM rate_limits");'
 set -o pipefail

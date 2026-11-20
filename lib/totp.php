@@ -83,6 +83,8 @@ function totp_enable(int $userId, string $secretB32, int $step): array {
 
 function totp_disable(int $userId): void {
     db_exec('UPDATE users SET totp_secret_enc = NULL, totp_last_step = 0, recovery_codes_json = NULL, totp_removal_at = NULL WHERE id = ?', [$userId]);
+    // Laufende Sitzungen behalten die Stufe nicht (S1, N7).
+    db_exec("UPDATE sessions SET mfa_level = 'mail' WHERE user_id = ? AND mfa_level = 'totp'", [$userId]);
     user_reload($userId);
 }
 
